@@ -338,6 +338,27 @@ exphttp --letsencrypt --domain example.com --email admin@example.com
 
 Сертификат сохраняется в `~/.exphttp/letsencrypt/` и переиспользуется при следующих запусках. Автоматически обновляется, если до истечения осталось менее 30 дней.
 
+#### Установка certbot
+
+```bash
+# Ubuntu / Debian
+sudo apt update && sudo apt install certbot
+
+# Fedora / RHEL / CentOS
+sudo dnf install certbot
+
+# Arch Linux
+sudo pacman -S certbot
+
+# macOS (Homebrew)
+brew install certbot
+
+# pip (любая ОС)
+pip install certbot
+```
+
+> Если certbot не установлен, сервер выведет предупреждение и автоматически переключится на самоподписный сертификат.
+
 ### cURL с самоподписным сертификатом
 
 ```bash
