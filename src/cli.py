@@ -122,6 +122,21 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="FILE",
         help="Путь к файлу приватного ключа (PEM)"
     )
+    tls.add_argument(
+        "--letsencrypt",
+        action="store_true",
+        help="Получить сертификат Let's Encrypt (требует certbot и открытый порт 80)"
+    )
+    tls.add_argument(
+        "--domain",
+        metavar="DOMAIN",
+        help="Домен для Let's Encrypt сертификата"
+    )
+    tls.add_argument(
+        "--email",
+        metavar="EMAIL",
+        help="Email для Let's Encrypt уведомлений (опционально)"
+    )
 
     # Аутентификация
     auth = parser.add_argument_group("Аутентификация")
@@ -139,6 +154,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
 
+    if args.letsencrypt and not args.domain:
+        parser.error("--letsencrypt требует --domain")
+
     # Собираем конфиг из аргументов
     config = {
         "host": args.host,
@@ -150,9 +168,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,
-        "tls": args.tls or bool(args.cert),
+        "tls": args.tls or bool(args.cert) or args.letsencrypt,
         "cert_file": args.cert,
         "key_file": args.key,
+        "letsencrypt": args.letsencrypt,
+        "domain": args.domain,
+        "email": args.email,
         "auth": args.auth,
         "open_browser": args.open,
     }

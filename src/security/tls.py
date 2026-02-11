@@ -130,6 +130,126 @@ def check_openssl_available() -> bool:
         return False
 
 
+def check_certbot_available() -> bool:
+    """Проверка доступности certbot."""
+    try:
+        result = subprocess.run(
+            ["certbot", "--version"],
+            capture_output=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def check_cert_needs_renewal(cert_path: str | Path, days: int = 30) -> bool:
+    """
+    Проверка, нужно ли обновлять сертификат.
+
+    Args:
+        cert_path: Путь к сертификату
+        days: За сколько дней до истечения обновлять
+
+    Returns:
+        True если сертификат не существует или истечёт в течение days дней
+    """
+    cert_path = Path(cert_path)
+    if not cert_path.exists():
+        return True
+
+    seconds = days * 86400
+    try:
+        result = subprocess.run(
+            ["openssl", "x509", "-in", str(cert_path), "-checkend", str(seconds)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        # returncode 0 = сертификат действителен ещё >= days дней
+        # returncode 1 = сертификат истечёт в течение days дней
+        return result.returncode != 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return True
+
+
+def obtain_letsencrypt_cert(
+    domain: str,
+    email: str | None = None,
+    config_dir: str | Path | None = None,
+) -> tuple[Path, Path]:
+    """
+    Получение сертификата Let's Encrypt через certbot standalone.
+
+    Args:
+        domain: Домен для сертификата
+        email: Email для уведомлений (None = без email)
+        config_dir: Директория для хранения сертификатов
+
+    Returns:
+        Кортеж (путь к fullchain.pem, путь к privkey.pem)
+
+    Raises:
+        RuntimeError: Если certbot не найден или произошла ошибка
+    """
+    if config_dir is None:
+        config_dir = Path.home() / ".exphttp" / "letsencrypt"
+    config_dir = Path(config_dir)
+
+    work_dir = config_dir / "work"
+    logs_dir = config_dir / "logs"
+
+    # Создаём директории
+    for d in (config_dir, work_dir, logs_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        "certbot", "certonly", "--standalone",
+        "-d", domain,
+        "--config-dir", str(config_dir),
+        "--work-dir", str(work_dir),
+        "--logs-dir", str(logs_dir),
+        "--non-interactive",
+        "--agree-tos",
+    ]
+
+    if email:
+        cmd.extend(["--email", email])
+    else:
+        cmd.append("--register-unsafely-without-email")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"certbot error (code {result.returncode}):\n{result.stderr}"
+            )
+
+    except FileNotFoundError:
+        raise RuntimeError(
+            "certbot not found. Install certbot: https://certbot.eff.org/"
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("certbot command timed out (120s)")
+
+    cert_path = config_dir / "live" / domain / "fullchain.pem"
+    key_path = config_dir / "live" / domain / "privkey.pem"
+
+    if not cert_path.exists() or not key_path.exists():
+        raise RuntimeError(
+            f"certbot succeeded but certificate files not found:\n"
+            f"  cert: {cert_path}\n  key: {key_path}"
+        )
+
+    return cert_path, key_path
+
+
 def get_cert_info(cert_path: str | Path) -> dict:
     """
     Получение информации о сертификате.

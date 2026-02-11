@@ -15,7 +15,13 @@ from pathlib import Path
 from .http import HTTPRequest, HTTPResponse
 from .handlers import HandlerMixin
 from .security.auth import BasicAuthenticator, generate_random_credentials
-from .security.tls import generate_self_signed_cert, check_openssl_available
+from .security.tls import (
+    generate_self_signed_cert,
+    check_openssl_available,
+    check_certbot_available,
+    check_cert_needs_renewal,
+    obtain_letsencrypt_cert,
+)
 from .config import (
     ServerConfig,
     HIDDEN_FILES,
@@ -48,6 +54,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         tls: bool = False,
         cert_file: str | None = None,
         key_file: str | None = None,
+        # Let's Encrypt
+        letsencrypt: bool = False,
+        domain: str | None = None,
+        email: str | None = None,
         # Auth options
         auth: str | None = None,  # "user:password" или "random"
         # Debug
@@ -71,6 +81,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.tls_enabled = tls
         self.cert_file = cert_file
         self.key_file = key_file
+        self.letsencrypt = letsencrypt
+        self.domain = domain
+        self.email = email
         self.ssl_context: ssl.SSLContext | None = None
         self._temp_cert_files: list[str] = []  # Для очистки временных файлов
 
@@ -172,6 +185,29 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not self.tls_enabled:
             return
 
+        # Let's Encrypt
+        if self.letsencrypt and self.domain:
+            if not check_certbot_available():
+                print("[WARNING] certbot не найден. Используется самоподписный сертификат.")
+                print("  Установите certbot: https://certbot.eff.org/")
+                # fallthrough к самоподписной логике ниже
+            else:
+                config_dir = Path.home() / ".exphttp" / "letsencrypt"
+                cert_path = config_dir / "live" / self.domain / "fullchain.pem"
+                key_path = config_dir / "live" / self.domain / "privkey.pem"
+
+                if not cert_path.exists() or check_cert_needs_renewal(cert_path):
+                    print(f"[TLS] Получение Let's Encrypt сертификата для {self.domain}...")
+                    cert_path, key_path = obtain_letsencrypt_cert(
+                        domain=self.domain, email=self.email, config_dir=config_dir,
+                    )
+                    print(f"[TLS] Сертификат получен: {cert_path}")
+                else:
+                    print(f"[TLS] Используется существующий Let's Encrypt сертификат для {self.domain}")
+
+                self.cert_file = str(cert_path)
+                self.key_file = str(key_path)
+
         # Если сертификат не указан, генерируем самоподписный
         if not self.cert_file or not self.key_file:
             if not check_openssl_available():
@@ -245,7 +281,12 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Методы: {', '.join(self.method_handlers.keys())}")
 
         if self.tls_enabled:
-            cert_info = "самоподписный" if self._temp_cert_files else self.cert_file
+            if self.letsencrypt and self.domain:
+                cert_info = f"Let's Encrypt ({self.domain})"
+            elif self._temp_cert_files:
+                cert_info = "самоподписный"
+            else:
+                cert_info = self.cert_file
             print(f"\n  [TLS]     сертификат: {cert_info}")
 
         if self.authenticator:

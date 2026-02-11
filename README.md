@@ -124,6 +124,9 @@ exphttp [опции]
 | `--tls` | Включить HTTPS (самоподписный сертификат) | выключен |
 | `--cert FILE` | Путь к сертификату (PEM) | - |
 | `--key FILE` | Путь к приватному ключу (PEM) | - |
+| `--letsencrypt` | Получить сертификат Let's Encrypt | выключен |
+| `--domain DOMAIN` | Домен для Let's Encrypt | - |
+| `--email EMAIL` | Email для Let's Encrypt уведомлений | - |
 | `--auth USER:PASS` | Включить Basic Auth | выключен |
 | `--auth random` | Сгенерировать случайные credentials | - |
 | `--help` | Показать справку | - |
@@ -320,6 +323,20 @@ exphttp --tls --cert /path/to/cert.pem --key /path/to/key.pem
 mkcert localhost 127.0.0.1
 exphttp --tls --cert localhost+1.pem --key localhost+1-key.pem
 ```
+
+### Let's Encrypt
+
+Автоматическое получение доверенных сертификатов (требует установленный [certbot](https://certbot.eff.org/) и открытый порт 80):
+
+```bash
+# Получить сертификат и запустить HTTPS
+exphttp --letsencrypt --domain example.com -p 443
+
+# С email для уведомлений об истечении
+exphttp --letsencrypt --domain example.com --email admin@example.com
+```
+
+Сертификат сохраняется в `~/.exphttp/letsencrypt/` и переиспользуется при следующих запусках. Автоматически обновляется, если до истечения осталось менее 30 дней.
 
 ### cURL с самоподписным сертификатом
 
