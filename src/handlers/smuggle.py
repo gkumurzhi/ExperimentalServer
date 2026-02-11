@@ -3,12 +3,15 @@
 """
 
 import json
+import logging
 import secrets
 
 from ..http import HTTPRequest, HTTPResponse, parse_query_string
 from ..utils.smuggling import generate_smuggling_html
 from ..utils.captcha import generate_password_captcha
 from .base import BaseHandler
+
+logger = logging.getLogger("httpserver")
 
 
 class SmuggleHandlersMixin(BaseHandler):
@@ -47,6 +50,8 @@ class SmuggleHandlersMixin(BaseHandler):
             password = ''.join(secrets.choice(alphabet) for _ in range(7))
             # Генерируем капчу с паролем
             password_captcha = generate_password_captcha(password)
+
+        logger.debug(f"SMUGGLE {file_path.name}, encrypt={encrypt}")
 
         # Читаем файл
         with open(file_path, "rb") as f:

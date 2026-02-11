@@ -21,6 +21,7 @@ from .config import (
     HIDDEN_FILES,
     OPSEC_METHOD_PREFIXES,
     OPSEC_METHOD_SUFFIXES,
+    __version__,
 )
 
 # Настройка логирования
@@ -49,6 +50,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         key_file: str | None = None,
         # Auth options
         auth: str | None = None,  # "user:password" или "random"
+        # Debug
+        debug: bool = False,
+        # Browser
+        open_browser: bool = False,
     ):
         self.host = host
         self.port = port
@@ -59,6 +64,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.max_upload_size = max_upload_size
         self.max_workers = max_workers
         self.running = False
+        self.debug = debug
+        self.open_browser = open_browser
 
         # TLS настройки
         self.tls_enabled = tls
@@ -88,6 +95,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.opsec_methods: dict[str, str] = {}
         if opsec_mode:
             self._generate_opsec_methods()
+            logger.debug(f"OPSEC methods generated: {self.opsec_methods}")
 
         # Регистрируем обработчики методов
         self.method_handlers = {
@@ -124,10 +132,12 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _setup_logging(self, quiet: bool) -> None:
         """Настройка логирования."""
-        level = logging.WARNING if quiet else logging.INFO
-        if self.opsec_mode:
-            # В OPSEC режиме минимум логов
+        if self.debug:
+            level = logging.DEBUG
+        elif self.opsec_mode:
             level = logging.ERROR if quiet else logging.WARNING
+        else:
+            level = logging.WARNING if quiet else logging.INFO
 
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter(
@@ -214,6 +224,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Настройка TLS
         self._setup_tls()
 
+        if self.debug:
+            logger.debug("Debug logging enabled")
+
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind((self.host, self.port))
@@ -221,37 +234,39 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.running = True
 
         protocol = "https" if self.tls_enabled else "http"
+        url = f"{protocol}://{self.host}:{self.port}"
+
         print("=" * 60)
-        print("Экспериментальный HTTP-сервер запущен")
-        print(f"Адрес: {protocol}://{self.host}:{self.port}")
-        print(f"Корневая директория: {self.root_dir}")
-        print(f"Макс. размер загрузки: {self.max_upload_size // (1024*1024)} MB")
-        print(f"Поддерживаемые методы: {', '.join(self.method_handlers.keys())}")
+        print(f"  exphttp v{__version__}")
+        print(f"  {url}")
+        print()
+        print(f"  Корневая директория: {self.root_dir}")
+        print(f"  Макс. загрузка: {self.max_upload_size // (1024*1024)} MB")
+        print(f"  Методы: {', '.join(self.method_handlers.keys())}")
 
         if self.tls_enabled:
-            print("\n[TLS ENABLED]")
-            print(f"  Certificate: {self.cert_file}")
-            print(f"  Private key: {self.key_file}")
-            if self._temp_cert_files:
-                print("  (self-signed, temporary)")
+            cert_info = "самоподписный" if self._temp_cert_files else self.cert_file
+            print(f"\n  [TLS]     сертификат: {cert_info}")
 
         if self.authenticator:
-            print("\n[BASIC AUTH ENABLED]")
+            print("  [AUTH]    Basic Auth включён")
 
         if self.sandbox_mode:
-            print("\n[SANDBOX MODE ENABLED]")
-            print(f"  Доступ ограничен папкой: {self.upload_dir}")
-            print("  Файлы загружаются и скачиваются только из uploads/")
+            print(f"  [SANDBOX] доступ ограничен uploads/")
 
         if self.opsec_mode:
-            print("\n[OPSEC MODE ENABLED]")
-            print(f"  Upload method:   {self.opsec_methods['upload']}")
-            print(f"  Download method: {self.opsec_methods['download']}")
-            print(f"  Info method:     {self.opsec_methods['info']}")
-            print(f"  Ping method:     {self.opsec_methods['ping']}")
-            print("  Config saved to: .opsec_config.json")
+            print(f"  [OPSEC]   случайные методы → .opsec_config.json")
+            print(f"            upload: {self.opsec_methods['upload']}, "
+                  f"download: {self.opsec_methods['download']}")
+            print(f"            info: {self.opsec_methods['info']}, "
+                  f"ping: {self.opsec_methods['ping']}")
 
+        print(f"\n  Ctrl+C для остановки")
         print("=" * 60)
+
+        if self.open_browser:
+            import webbrowser
+            webbrowser.open(url)
 
         try:
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -300,6 +315,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             if self.authenticator:
                 auth_header = request.headers.get("authorization")
                 if not self.authenticator.authenticate(auth_header):
+                    logger.warning(f"Auth rejected: {client_address[0]}")
                     response = HTTPResponse(401)
                     response.set_header(
                         "WWW-Authenticate",
@@ -333,6 +349,7 @@ class ExperimentalHTTPServer(HandlerMixin):
                 handler = self.method_handlers.get(request.method)
 
             if handler:
+                logger.debug(f"{client_address[0]} - {request.method} {request.path} -> {handler.__name__}")
                 response = handler(request)
             else:
                 if self.opsec_mode:
@@ -392,6 +409,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             except socket.timeout:
                 break
 
+        logger.debug(f"Received {len(data)} bytes")
         return data
 
     def _get_opsec_handler(self, request: HTTPRequest):

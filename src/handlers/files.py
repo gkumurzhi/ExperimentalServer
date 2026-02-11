@@ -3,6 +3,7 @@
 """
 
 import json
+import logging
 import mimetypes
 import re
 from datetime import datetime
@@ -11,6 +12,8 @@ from urllib.parse import unquote
 
 from ..http import HTTPRequest, HTTPResponse, sanitize_filename, make_unique_filename
 from .base import BaseHandler
+
+logger = logging.getLogger("httpserver")
 
 # Паттерн для удаления ссылки на телеграм в OPSEC режиме
 TELEGRAM_LINK_PATTERN = re.compile(
@@ -44,6 +47,7 @@ class FileHandlersMixin(BaseHandler):
     def handle_get(self, request: HTTPRequest) -> HTTPResponse:
         """Обработка GET-запроса - возвращает содержимое файла."""
         url_path = request.path.lstrip("/")
+        logger.debug(f"GET {request.path}")
 
         # Защита скрытых файлов
         if self._is_hidden_file(request.path):
@@ -100,6 +104,7 @@ class FileHandlersMixin(BaseHandler):
             try:
                 file_path.unlink()
                 self._temp_smuggle_files.discard(file_path_str)
+                logger.debug(f"Smuggle file cleaned up: {file_path.name}")
             except OSError:
                 pass  # Файл уже удалён или недоступен
 
@@ -114,6 +119,7 @@ class FileHandlersMixin(BaseHandler):
         response = HTTPResponse(204)
 
         requested_method = request.headers.get("access-control-request-method", "")
+        logger.debug(f"OPTIONS preflight: {requested_method}")
         if requested_method:
             if self.opsec_mode:
                 # В OPSEC режиме не раскрываем кастомные методы
@@ -150,6 +156,7 @@ class FileHandlersMixin(BaseHandler):
         content_type, _ = mimetypes.guess_type(str(file_path))
         content_type = content_type or "application/octet-stream"
 
+        logger.debug(f"FETCH {file_path.name} ({len(content)} bytes)")
         response.set_body(content, content_type)
         response.set_header("Content-Disposition", f'attachment; filename="{file_path.name}"')
         response.set_header("X-Fetch-Status", "success")
@@ -195,6 +202,7 @@ class FileHandlersMixin(BaseHandler):
             with open(file_path, "wb") as f:
                 f.write(request.body)
 
+            logger.debug(f"Upload: {safe_filename} ({len(request.body)} bytes)")
             response = HTTPResponse(201)
             response.set_header("X-Upload-Status", "success")
             response.set_header("X-File-Name", safe_filename)
@@ -215,6 +223,7 @@ class FileHandlersMixin(BaseHandler):
             return response
 
         except Exception as e:
+            logger.error(f"Upload failed: {e}")
             response = HTTPResponse(500)
             response.set_header("X-Upload-Status", "error")
             response.set_body(json.dumps({

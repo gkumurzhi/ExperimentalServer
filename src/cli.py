@@ -14,18 +14,21 @@ def create_parser() -> argparse.ArgumentParser:
     """Создание и настройка парсера аргументов."""
     parser = argparse.ArgumentParser(
         prog="exphttp",
-        description="Экспериментальный HTTP-сервер с кастомными методами, TLS и OPSEC режимом.",
+        description="HTTP-сервер с кастомными методами, TLS, Auth и OPSEC режимом.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Примеры:
-    exphttp                              # Запуск на localhost:8080
-    exphttp --tls --auth random          # HTTPS со случайными credentials
-    exphttp -H 0.0.0.0 -p 443 --tls      # Публичный HTTPS на порту 443
-    exphttp --opsec --sandbox            # OPSEC + Sandbox режимы
+Быстрый старт:
+    exphttp                    → http://127.0.0.1:8080
+    exphttp --open             → запуск + открыть браузер
+    exphttp --tls --auth random → HTTPS + случайный пароль
 
-Поддерживаемые HTTP методы:
-    GET, POST, PUT, OPTIONS              # Стандартные
-    FETCH, INFO, PING, NONE, SMUGGLE     # Кастомные
+Все параметры:
+    exphttp -H 0.0.0.0 -p 443 --tls    Публичный HTTPS
+    exphttp --opsec --sandbox           OPSEC + Sandbox
+    exphttp -d ./data -m 500            Своя директория, лимит 500 MB
+
+Кастомные HTTP методы:
+    FETCH, INFO, PING, NONE, SMUGGLE    (+ стандартные GET, POST, PUT, OPTIONS)
         """
     )
 
@@ -35,24 +38,22 @@ def create_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {__version__}"
     )
 
-    # Сетевые опции
-    network = parser.add_argument_group("Сетевые опции")
-    network.add_argument(
+    # Основные
+    basic = parser.add_argument_group("Основные")
+    basic.add_argument(
         "-H", "--host",
         default="127.0.0.1",
         metavar="HOST",
         help="Хост для привязки (по умолчанию: 127.0.0.1)"
     )
-    network.add_argument(
+    basic.add_argument(
         "-p", "--port",
         type=int,
         default=8080,
         metavar="PORT",
         help="Порт для прослушивания (по умолчанию: 8080)"
     )
-
-    # Директория
-    parser.add_argument(
+    basic.add_argument(
         "-d", "--dir",
         default=".",
         metavar="DIR",
@@ -75,6 +76,16 @@ def create_parser() -> argparse.ArgumentParser:
         "-q", "--quiet",
         action="store_true",
         help="Тихий режим (минимум логов)"
+    )
+    modes.add_argument(
+        "--debug",
+        action="store_true",
+        help="Debug режим (подробное логирование)"
+    )
+    modes.add_argument(
+        "--open",
+        action="store_true",
+        help="Открыть в браузере после запуска"
     )
 
     # Лимиты
@@ -138,10 +149,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         "max_upload_size": args.max_size * 1024 * 1024,
         "max_workers": args.workers,
         "quiet": args.quiet,
+        "debug": args.debug,
         "tls": args.tls or bool(args.cert),
         "cert_file": args.cert,
         "key_file": args.key,
         "auth": args.auth,
+        "open_browser": args.open,
     }
 
     try:

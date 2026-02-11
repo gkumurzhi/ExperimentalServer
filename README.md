@@ -29,63 +29,20 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 - OpenSSL (опционально, для генерации TLS сертификатов)
 - Typed package (PEP 561) — поддержка статической типизации
 
-## Разработка
-
-### Установка для разработки
-
-```bash
-# Базовая установка
-pip install -e .
-
-# С тестами
-pip install -e ".[dev]"
-
-# С линтерами
-pip install -e ".[lint]"
-
-# Всё вместе
-pip install -e ".[all]"
-```
-
-### Тестирование
-
-```bash
-# Запуск тестов
-pytest
-
-# С покрытием
-pytest --cov=src
-
-# Конкретный тест
-pytest tests/test_http/test_request.py
-```
-
-### Проверка кода
-
-```bash
-# Линтер
-ruff check src
-
-# Форматирование
-ruff format src
-
-# Статическая типизация
-mypy src
-```
-
 ## Быстрый старт
 
 ```bash
-# Установка
 pip install -e .
+exphttp --open
+```
 
-# Запуск
-python -m src
-# или после установки:
-exphttp
+Сервер запустится на `http://127.0.0.1:8080` и откроет браузер.
 
-# Открыть в браузере
-http://localhost:8080
+Полезные комбинации:
+```bash
+exphttp --tls --auth random    # HTTPS + авто-пароль
+exphttp --opsec --sandbox      # Скрытный + ограниченный режим
+exphttp -H 0.0.0.0 -p 443     # Публичный доступ
 ```
 
 ## Структура проекта
@@ -154,7 +111,7 @@ exphttp [опции]
 
 | Параметр | Описание | По умолчанию |
 |----------|----------|--------------|
-| `-h, --host HOST` | Хост для привязки | `127.0.0.1` |
+| `-H, --host HOST` | Хост для привязки | `127.0.0.1` |
 | `-p, --port PORT` | Порт для прослушивания | `8080` |
 | `-d, --dir DIR` | Корневая директория | `.` |
 | `-o, --opsec` | Включить OPSEC-режим | выключен |
@@ -162,6 +119,8 @@ exphttp [опции]
 | `-m, --max-size MB` | Макс. размер загрузки в MB | `100` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
+| `--debug` | Debug режим (подробное логирование) | выключен |
+| `--open` | Открыть в браузере после запуска | выключен |
 | `--tls` | Включить HTTPS (самоподписный сертификат) | выключен |
 | `--cert FILE` | Путь к сертификату (PEM) | - |
 | `--key FILE` | Путь к приватному ключу (PEM) | - |
@@ -188,7 +147,7 @@ exphttp --tls --auth admin:secretpassword
 exphttp --tls --cert cert.pem --key key.pem
 
 # Публичный доступ на порту 443
-exphttp -h 0.0.0.0 -p 443 --tls --auth admin:pass
+exphttp -H 0.0.0.0 -p 443 --tls --auth admin:pass
 
 # OPSEC-режим (случайные имена методов)
 exphttp --opsec
@@ -200,7 +159,7 @@ exphttp --sandbox
 exphttp --tls --auth random --opsec --sandbox
 
 # Комбинированный режим
-exphttp -h 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
+exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 ```
 
 ## HTTP-методы
@@ -669,6 +628,50 @@ XOR-шифрование используется для **обфускации*
 - **Max upload**: 100 MB (по умолчанию)
 - **TLS**: TLS 1.2+ с ECDHE+AESGCM шифрами
 - **Версия**: 2.0.0
+
+## Разработка
+
+### Установка для разработки
+
+```bash
+# Базовая установка
+pip install -e .
+
+# С тестами
+pip install -e ".[dev]"
+
+# С линтерами
+pip install -e ".[lint]"
+
+# Всё вместе
+pip install -e ".[all]"
+```
+
+### Тестирование
+
+```bash
+# Запуск тестов
+pytest
+
+# С покрытием
+pytest --cov=src
+
+# Конкретный тест
+pytest tests/test_http/test_request.py
+```
+
+### Проверка кода
+
+```bash
+# Линтер
+ruff check src
+
+# Форматирование
+ruff format src
+
+# Статическая типизация
+mypy src
+```
 
 ## Лицензия
 

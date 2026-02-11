@@ -3,12 +3,15 @@
 """
 
 import json
+import logging
 import mimetypes
 from datetime import datetime, timezone
 
 from ..http import HTTPRequest, HTTPResponse
 from ..config import __version__
 from .base import BaseHandler
+
+logger = logging.getLogger("httpserver")
 
 
 class InfoHandlersMixin(BaseHandler):
@@ -53,6 +56,9 @@ class InfoHandlersMixin(BaseHandler):
             response.set_body("Invalid path", "text/plain")
             return response
 
+        is_dir = file_path.is_dir() if file_path.exists() else False
+        logger.debug(f"INFO {request.path} -> {'directory' if is_dir else 'file'}")
+
         if not file_path.exists():
             response = HTTPResponse(404)
             response.set_body(
@@ -95,6 +101,7 @@ class InfoHandlersMixin(BaseHandler):
 
     def handle_ping(self, request: HTTPRequest) -> HTTPResponse:
         """Кастомный метод PING - проверка сервера."""
+        logger.debug("PING")
         response = HTTPResponse(200)
 
         if self.opsec_mode:

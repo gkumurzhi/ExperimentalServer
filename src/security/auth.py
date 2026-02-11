@@ -4,8 +4,11 @@ HTTP Basic Authentication.
 
 import base64
 import hashlib
+import logging
 import secrets
 from typing import Callable
+
+logger = logging.getLogger("httpserver")
 
 
 def parse_basic_auth(auth_header: str) -> tuple[str, str] | None:
@@ -129,17 +132,29 @@ class BasicAuthenticator:
             return False
 
         username, password = parsed
+        logger.debug(f"Auth attempt: user={username}")
 
         # Кастомный callback
         if self.auth_callback:
-            return self.auth_callback(username, password)
+            result = self.auth_callback(username, password)
+            if result:
+                logger.debug(f"Auth OK: user={username}")
+            else:
+                logger.warning(f"Auth failed: user={username}")
+            return result
 
         # Проверка по сохранённым credentials
         if username not in self._credentials:
+            logger.warning(f"Auth failed: user={username}")
             return False
 
         hashed, salt = self._credentials[username]
-        return verify_password(password, hashed, salt)
+        result = verify_password(password, hashed, salt)
+        if result:
+            logger.debug(f"Auth OK: user={username}")
+        else:
+            logger.warning(f"Auth failed: user={username}")
+        return result
 
     def get_www_authenticate_header(self) -> str:
         """Получение значения заголовка WWW-Authenticate."""

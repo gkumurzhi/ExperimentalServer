@@ -5,11 +5,14 @@
 import json
 import base64
 import hashlib
+import logging
 import secrets
 
 from ..http import HTTPRequest, HTTPResponse
 from ..security.crypto import xor_decrypt, verify_hmac
 from .base import BaseHandler
+
+logger = logging.getLogger("httpserver")
 
 
 class OpsecHandlersMixin(BaseHandler):
@@ -52,6 +55,7 @@ class OpsecHandlersMixin(BaseHandler):
         # Проверка HMAC если указан
         if hmac_value and decrypt_key:
             if not verify_hmac(file_data, decrypt_key, hmac_value):
+                logger.warning("OPSEC HMAC verification failed")
                 response = HTTPResponse(400)
                 response.set_body(
                     json.dumps({"ok": False, "err": "hmac"}),
@@ -80,6 +84,8 @@ class OpsecHandlersMixin(BaseHandler):
                 safe_filename = f"{safe_filename}_{secrets.token_hex(4)}"
             file_path = self.upload_dir / safe_filename
 
+        logger.debug(f"OPSEC upload: {safe_filename}, encrypted={bool(encryption)}, hmac={bool(hmac_value)}")
+
         try:
             with open(file_path, "wb") as f:
                 f.write(file_data)
@@ -93,7 +99,8 @@ class OpsecHandlersMixin(BaseHandler):
             response.set_body(json.dumps(result), "application/json")
             return response
 
-        except Exception:
+        except Exception as e:
+            logger.error(f"OPSEC write failed: {e}")
             response = HTTPResponse(500)
             response.set_body(json.dumps({"ok": False}), "application/json")
             return response
