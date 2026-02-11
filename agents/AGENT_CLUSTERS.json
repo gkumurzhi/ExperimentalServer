@@ -1,0 +1,820 @@
+{
+  "metadata": {
+    "generated": "2026-01-23",
+    "total_agents": 63,
+    "total_clusters": 17,
+    "version": "1.0"
+  },
+  "clusters": {
+    "architecture-system-design": {
+      "name": "Architecture & System Design",
+      "id": "architecture-system-design",
+      "when_to_use": [
+        "Designing new system architecture or evaluating scalability",
+        "Making decisions about design patterns or technology choices",
+        "Planning major architectural changes or refactoring structure"
+      ],
+      "typical_outcomes": [
+        "System design documents and architectural diagrams",
+        "Technology recommendations with trade-off analysis",
+        "Refactoring roadmaps for legacy systems"
+      ],
+      "agents": [
+        "architecture-advisor",
+        "architecture-designer",
+        "cloud-architect",
+        "orchestration-specialist"
+      ]
+    },
+    "infrastructure-devops": {
+      "name": "Infrastructure & DevOps",
+      "id": "infrastructure-devops",
+      "when_to_use": [
+        "Setting up or optimizing cloud infrastructure",
+        "Containerizing applications or managing Kubernetes",
+        "Building CI/CD pipelines or automation workflows"
+      ],
+      "typical_outcomes": [
+        "Terraform modules and infrastructure-as-code",
+        "Docker/Kubernetes configurations",
+        "Automated deployment pipelines"
+      ],
+      "agents": [
+        "terraform-infrastructure-architect",
+        "kubernetes-specialist",
+        "docker-containerization-expert",
+        "devops-deployer",
+        "cloud-cost-optimizer",
+        "automation-architect",
+        "workflow-orchestrator"
+      ]
+    },
+    "performance-optimization": {
+      "name": "Performance & Optimization",
+      "id": "performance-optimization",
+      "when_to_use": [
+        "Application is slow or experiencing latency issues",
+        "Database queries need optimization",
+        "Validating scalability before launch"
+      ],
+      "typical_outcomes": [
+        "Optimized queries and caching strategies",
+        "Performance profiling reports",
+        "Load test results with bottleneck identification"
+      ],
+      "agents": [
+        "perf-optimizer",
+        "database-optimizer",
+        "db-optimizer",
+        "load-test-architect"
+      ]
+    },
+    "reliability-operations": {
+      "name": "Reliability & Operations (SRE)",
+      "id": "reliability-operations",
+      "when_to_use": [
+        "Defining SLOs or implementing error budgets",
+        "Setting up monitoring, alerting, or dashboards",
+        "Managing production deployments and rollbacks"
+      ],
+      "typical_outcomes": [
+        "SLI/SLO definitions and monitoring configurations",
+        "Alerting rules and incident response runbooks",
+        "Zero-downtime deployment strategies"
+      ],
+      "agents": [
+        "sre-reliability-engineer",
+        "observability-specialist",
+        "release-manager"
+      ]
+    },
+    "security-compliance": {
+      "name": "Security & Compliance",
+      "id": "security-compliance",
+      "when_to_use": [
+        "Reviewing code for security vulnerabilities",
+        "Implementing authentication/authorization",
+        "Ensuring GDPR/CCPA or other regulatory compliance"
+      ],
+      "typical_outcomes": [
+        "Security audit reports with remediation steps",
+        "Secure authentication implementations",
+        "Privacy-compliant data handling workflows"
+      ],
+      "agents": [
+        "security-auditor",
+        "privacy-compliance-specialist"
+      ]
+    },
+    "frontend-development": {
+      "name": "Frontend Development",
+      "id": "frontend-development",
+      "when_to_use": [
+        "Building React, Next.js, or Vue applications",
+        "Designing TypeScript type systems",
+        "Implementing component architectures"
+      ],
+      "typical_outcomes": [
+        "Production-ready frontend components",
+        "Type-safe application architectures",
+        "Performance-optimized rendering patterns"
+      ],
+      "agents": [
+        "react-specialist",
+        "nextjs-expert",
+        "vue3-architect",
+        "typescript-type-architect"
+      ]
+    },
+    "ui-ux-design-quality": {
+      "name": "UI/UX Design & Quality",
+      "id": "ui-ux-design-quality",
+      "when_to_use": [
+        "Creating polished, premium interfaces",
+        "Improving user experience or reducing friction",
+        "Ensuring accessibility compliance"
+      ],
+      "typical_outcomes": [
+        "High-quality UI components with animations",
+        "UX audit reports with actionable fixes",
+        "WCAG-compliant accessible interfaces"
+      ],
+      "agents": [
+        "premium-ui-designer",
+        "design-systems-architect",
+        "ux-writer",
+        "ux-pain-point-fixer",
+        "ux-simplifier",
+        "a11y-specialist",
+        "mobile-web-expert"
+      ]
+    },
+    "backend-frameworks": {
+      "name": "Backend Frameworks",
+      "id": "backend-frameworks",
+      "when_to_use": [
+        "Building backend services in specific languages/frameworks",
+        "Implementing language-specific patterns and idioms",
+        "Optimizing framework-specific code"
+      ],
+      "typical_outcomes": [
+        "Idiomatic, production-ready backend code",
+        "Framework-specific best practices applied",
+        "Async/concurrent patterns implemented correctly"
+      ],
+      "agents": [
+        "python-expert",
+        "django-expert",
+        "laravel-specialist",
+        "spring-boot-engineer",
+        "java-enterprise-architect",
+        "go-concurrency-expert",
+        "rust-systems-expert",
+        "csharp-dotnet-architect"
+      ]
+    },
+    "api-integration": {
+      "name": "API & Integration",
+      "id": "api-integration",
+      "when_to_use": [
+        "Designing REST or GraphQL APIs",
+        "Integrating with third-party services",
+        "Implementing OAuth, webhooks, or API authentication"
+      ],
+      "typical_outcomes": [
+        "Well-documented, developer-friendly APIs",
+        "Reliable third-party integrations with error handling",
+        "Secure API authentication implementations"
+      ],
+      "agents": [
+        "api-architect",
+        "integration-specialist"
+      ]
+    },
+    "data-engineering": {
+      "name": "Data Engineering",
+      "id": "data-engineering",
+      "when_to_use": [
+        "Building ETL pipelines or data warehouses",
+        "Processing batch or streaming data",
+        "Setting up data infrastructure"
+      ],
+      "typical_outcomes": [
+        "Scalable data pipelines with error handling",
+        "Optimized data warehouse schemas",
+        "Real-time or batch data processing workflows"
+      ],
+      "agents": [
+        "data-engineer",
+        "ml-pipeline-engineer"
+      ]
+    },
+    "ai-llm-development": {
+      "name": "AI/LLM Development",
+      "id": "ai-llm-development",
+      "when_to_use": [
+        "Integrating AI/LLM features into applications",
+        "Building RAG systems or chatbots",
+        "Optimizing prompts for better results"
+      ],
+      "typical_outcomes": [
+        "Streaming chat interfaces with proper state management",
+        "RAG pipelines with vector search",
+        "Optimized prompts with consistent outputs"
+      ],
+      "agents": [
+        "llm-integration-specialist",
+        "langchain-architect",
+        "prompt-engineer"
+      ]
+    },
+    "testing-quality-assurance": {
+      "name": "Testing & Quality Assurance",
+      "id": "testing-quality-assurance",
+      "when_to_use": [
+        "Creating comprehensive test suites",
+        "Setting up E2E testing infrastructure",
+        "Debugging complex issues"
+      ],
+      "typical_outcomes": [
+        "Unit, integration, and E2E test coverage",
+        "CI-integrated testing pipelines",
+        "Root cause analysis for bugs"
+      ],
+      "agents": [
+        "test-suite-architect",
+        "playwright-e2e-expert",
+        "senior-code-reviewer",
+        "debug-detective"
+      ]
+    },
+    "refactoring-code-quality": {
+      "name": "Refactoring & Code Quality",
+      "id": "refactoring-code-quality",
+      "when_to_use": [
+        "Cleaning up technical debt",
+        "Improving code maintainability",
+        "Reviewing code for quality issues"
+      ],
+      "typical_outcomes": [
+        "Cleaner, more maintainable code",
+        "Extracted reusable patterns",
+        "Code quality improvements with rationale"
+      ],
+      "agents": [
+        "refactoring-specialist",
+        "senior-code-reviewer"
+      ]
+    },
+    "product-strategy": {
+      "name": "Product & Strategy",
+      "id": "product-strategy",
+      "when_to_use": [
+        "Making product roadmap decisions",
+        "Analyzing competitive positioning",
+        "Evaluating build vs. kill decisions"
+      ],
+      "typical_outcomes": [
+        "Product feature prioritization",
+        "Competitive analysis reports",
+        "Strategic recommendations with trade-offs"
+      ],
+      "agents": [
+        "product-strategy-analyst",
+        "competitive-analyst"
+      ]
+    },
+    "growth-marketing": {
+      "name": "Growth & Marketing",
+      "id": "growth-marketing",
+      "when_to_use": [
+        "Implementing viral/referral features",
+        "Optimizing SEO or conversion funnels",
+        "Building payment/subscription systems"
+      ],
+      "typical_outcomes": [
+        "Growth loops and referral systems",
+        "SEO-optimized pages with schema markup",
+        "Payment integrations and pricing tiers"
+      ],
+      "agents": [
+        "viral-growth-engineer",
+        "seo-optimizer",
+        "analytics-insights",
+        "monetization-architect",
+        "conversion-copywriter",
+        "email-campaign-architect"
+      ]
+    },
+    "community-support": {
+      "name": "Community & Support",
+      "id": "community-support",
+      "when_to_use": [
+        "Building community or social features",
+        "Creating self-service support systems",
+        "Implementing engagement mechanics"
+      ],
+      "typical_outcomes": [
+        "Forum/commenting systems",
+        "Help centers and FAQ systems",
+        "User engagement and retention features"
+      ],
+      "agents": [
+        "community-builder",
+        "self-service-support-architect"
+      ]
+    },
+    "documentation-research": {
+      "name": "Documentation & Research",
+      "id": "documentation-research",
+      "when_to_use": [
+        "Maintaining documentation accuracy",
+        "Exploring emerging technologies",
+        "Researching experimental solutions"
+      ],
+      "typical_outcomes": [
+        "Updated, accurate documentation",
+        "Technology evaluation reports",
+        "Proof-of-concept implementations"
+      ],
+      "agents": [
+        "docs-maintainer",
+        "innovation-explorer"
+      ]
+    }
+  },
+  "agents": {
+    "a11y-specialist": {
+      "id": "a11y-specialist",
+      "file": "a11y-specialist.md",
+      "summary": "Accessibility audits, WCAG compliance, screen reader support",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["accessibility", "wcag", "aria", "screen-reader"]
+    },
+    "analytics-insights": {
+      "id": "analytics-insights",
+      "file": "analytics-insights.md",
+      "summary": "User analytics, funnel tracking, event implementation",
+      "clusters": ["growth-marketing"],
+      "tags": ["analytics", "funnels", "tracking", "metrics"]
+    },
+    "api-architect": {
+      "id": "api-architect",
+      "file": "api-architect.md",
+      "summary": "REST/GraphQL API design, authentication, documentation",
+      "clusters": ["api-integration"],
+      "tags": ["api", "rest", "graphql", "authentication"]
+    },
+    "architecture-advisor": {
+      "id": "architecture-advisor",
+      "file": "architecture-advisor.md",
+      "summary": "System architecture decisions, pattern evaluation",
+      "clusters": ["architecture-system-design"],
+      "tags": ["architecture", "patterns", "scalability"]
+    },
+    "architecture-designer": {
+      "id": "architecture-designer",
+      "file": "architecture-designer.md",
+      "summary": "Codebase structure, maintainability design",
+      "clusters": ["architecture-system-design"],
+      "tags": ["architecture", "structure", "maintainability"]
+    },
+    "automation-architect": {
+      "id": "automation-architect",
+      "file": "automation-architect.md",
+      "summary": "CI/CD, scheduled jobs, workflow triggers",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["automation", "ci-cd", "cron", "workflows"]
+    },
+    "cloud-architect": {
+      "id": "cloud-architect",
+      "file": "cloud-architect.md",
+      "summary": "Cloud infrastructure design, scalability",
+      "clusters": ["architecture-system-design", "infrastructure-devops"],
+      "tags": ["cloud", "aws", "gcp", "azure", "infrastructure"]
+    },
+    "cloud-cost-optimizer": {
+      "id": "cloud-cost-optimizer",
+      "file": "cloud-cost-optimizer.md",
+      "summary": "AWS/cloud cost reduction, right-sizing",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["cost", "optimization", "aws", "cloud"]
+    },
+    "community-builder": {
+      "id": "community-builder",
+      "file": "community-builder.md",
+      "summary": "Social features, forums, engagement mechanics",
+      "clusters": ["community-support"],
+      "tags": ["community", "social", "engagement", "forums"]
+    },
+    "competitive-analyst": {
+      "id": "competitive-analyst",
+      "file": "competitive-analyst.md",
+      "summary": "Market positioning, competitor analysis",
+      "clusters": ["product-strategy"],
+      "tags": ["competitive", "analysis", "market", "positioning"]
+    },
+    "conversion-copywriter": {
+      "id": "conversion-copywriter",
+      "file": "conversion-copywriter.md",
+      "summary": "Landing page copy, CTAs, value propositions",
+      "clusters": ["growth-marketing"],
+      "tags": ["copywriting", "conversion", "landing-page", "cta"]
+    },
+    "csharp-dotnet-architect": {
+      "id": "csharp-dotnet-architect",
+      "file": "csharp-dotnet-architect.md",
+      "summary": "C#/.NET, Entity Framework, async patterns",
+      "clusters": ["backend-frameworks"],
+      "tags": ["csharp", "dotnet", "entity-framework", "async"]
+    },
+    "data-engineer": {
+      "id": "data-engineer",
+      "file": "data-engineer.md",
+      "summary": "ETL pipelines, data warehouses, Spark/Kafka",
+      "clusters": ["data-engineering"],
+      "tags": ["etl", "data-warehouse", "spark", "kafka", "pipelines"]
+    },
+    "database-optimizer": {
+      "id": "database-optimizer",
+      "file": "database-optimizer.md",
+      "summary": "Query optimization, schema design, indexing",
+      "clusters": ["performance-optimization"],
+      "tags": ["database", "optimization", "queries", "indexing"]
+    },
+    "db-optimizer": {
+      "id": "db-optimizer",
+      "file": "db-optimizer.md",
+      "summary": "Database performance, slow query analysis",
+      "clusters": ["performance-optimization"],
+      "tags": ["database", "performance", "queries", "optimization"]
+    },
+    "debug-detective": {
+      "id": "debug-detective",
+      "file": "debug-detective.md",
+      "summary": "Error investigation, root cause analysis",
+      "clusters": ["testing-quality-assurance"],
+      "tags": ["debugging", "errors", "investigation", "root-cause"]
+    },
+    "design-systems-architect": {
+      "id": "design-systems-architect",
+      "file": "design-systems-architect.md",
+      "summary": "Component libraries, design tokens",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["design-system", "components", "tokens", "ui-library"]
+    },
+    "devops-deployer": {
+      "id": "devops-deployer",
+      "file": "devops-deployer.md",
+      "summary": "CI/CD pipeline setup, GitHub Actions",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["ci-cd", "deployment", "github-actions", "pipelines"]
+    },
+    "django-expert": {
+      "id": "django-expert",
+      "file": "django-expert.md",
+      "summary": "Django ORM, DRF, admin, migrations",
+      "clusters": ["backend-frameworks"],
+      "tags": ["django", "python", "orm", "drf"]
+    },
+    "docker-containerization-expert": {
+      "id": "docker-containerization-expert",
+      "file": "docker-containerization-expert.md",
+      "summary": "Dockerfiles, compose, multi-stage builds",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["docker", "containers", "compose", "multi-stage"]
+    },
+    "docs-maintainer": {
+      "id": "docs-maintainer",
+      "file": "docs-maintainer.md",
+      "summary": "Documentation accuracy, staleness detection",
+      "clusters": ["documentation-research"],
+      "tags": ["documentation", "accuracy", "maintenance"]
+    },
+    "email-campaign-architect": {
+      "id": "email-campaign-architect",
+      "file": "email-campaign-architect.md",
+      "summary": "Email marketing flows, automation",
+      "clusters": ["growth-marketing"],
+      "tags": ["email", "marketing", "automation", "campaigns"]
+    },
+    "go-concurrency-expert": {
+      "id": "go-concurrency-expert",
+      "file": "go-concurrency-expert.md",
+      "summary": "Go goroutines, channels, worker pools",
+      "clusters": ["backend-frameworks"],
+      "tags": ["go", "golang", "concurrency", "goroutines", "channels"]
+    },
+    "innovation-explorer": {
+      "id": "innovation-explorer",
+      "file": "innovation-explorer.md",
+      "summary": "Emerging tech research, experimentation",
+      "clusters": ["documentation-research"],
+      "tags": ["innovation", "research", "emerging-tech", "experimentation"]
+    },
+    "integration-specialist": {
+      "id": "integration-specialist",
+      "file": "integration-specialist.md",
+      "summary": "Third-party API integration, OAuth, webhooks",
+      "clusters": ["api-integration"],
+      "tags": ["integration", "api", "oauth", "webhooks", "third-party"]
+    },
+    "java-enterprise-architect": {
+      "id": "java-enterprise-architect",
+      "file": "java-enterprise-architect.md",
+      "summary": "Enterprise Java, Spring, JVM optimization",
+      "clusters": ["backend-frameworks"],
+      "tags": ["java", "enterprise", "spring", "jvm"]
+    },
+    "kubernetes-specialist": {
+      "id": "kubernetes-specialist",
+      "file": "kubernetes-specialist.md",
+      "summary": "K8s deployments, Helm charts, RBAC",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["kubernetes", "k8s", "helm", "containers", "rbac"]
+    },
+    "langchain-architect": {
+      "id": "langchain-architect",
+      "file": "langchain-architect.md",
+      "summary": "LangChain, RAG, agents, memory systems",
+      "clusters": ["ai-llm-development"],
+      "tags": ["langchain", "rag", "agents", "llm", "memory"]
+    },
+    "laravel-specialist": {
+      "id": "laravel-specialist",
+      "file": "laravel-specialist.md",
+      "summary": "Laravel/PHP, Eloquent, queues, middleware",
+      "clusters": ["backend-frameworks"],
+      "tags": ["laravel", "php", "eloquent", "queues"]
+    },
+    "llm-integration-specialist": {
+      "id": "llm-integration-specialist",
+      "file": "llm-integration-specialist.md",
+      "summary": "AI/LLM API integration, streaming responses",
+      "clusters": ["ai-llm-development"],
+      "tags": ["llm", "ai", "streaming", "openai", "anthropic"]
+    },
+    "load-test-architect": {
+      "id": "load-test-architect",
+      "file": "load-test-architect.md",
+      "summary": "Load/stress testing, capacity validation",
+      "clusters": ["performance-optimization"],
+      "tags": ["load-testing", "stress-testing", "performance", "capacity"]
+    },
+    "ml-pipeline-engineer": {
+      "id": "ml-pipeline-engineer",
+      "file": "ml-pipeline-engineer.md",
+      "summary": "ML pipelines, model deployment, MLOps",
+      "clusters": ["data-engineering", "ai-llm-development"],
+      "tags": ["ml", "pipelines", "mlops", "model-deployment"]
+    },
+    "mobile-web-expert": {
+      "id": "mobile-web-expert",
+      "file": "mobile-web-expert.md",
+      "summary": "PWA, offline support, touch interactions",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["pwa", "mobile", "offline", "touch", "responsive"]
+    },
+    "monetization-architect": {
+      "id": "monetization-architect",
+      "file": "monetization-architect.md",
+      "summary": "Payment systems, subscriptions, pricing",
+      "clusters": ["growth-marketing"],
+      "tags": ["payments", "subscriptions", "monetization", "stripe"]
+    },
+    "nextjs-expert": {
+      "id": "nextjs-expert",
+      "file": "nextjs-expert.md",
+      "summary": "Next.js App Router, RSC, edge functions",
+      "clusters": ["frontend-development"],
+      "tags": ["nextjs", "react", "rsc", "edge", "app-router"]
+    },
+    "observability-specialist": {
+      "id": "observability-specialist",
+      "file": "observability-specialist.md",
+      "summary": "Monitoring, logging, alerting, APM",
+      "clusters": ["reliability-operations"],
+      "tags": ["monitoring", "logging", "alerting", "apm", "observability"]
+    },
+    "orchestration-specialist": {
+      "id": "orchestration-specialist",
+      "file": "orchestration-specialist.md",
+      "summary": "Multi-domain coordination, workflow synthesis",
+      "clusters": ["architecture-system-design"],
+      "tags": ["orchestration", "coordination", "multi-domain", "workflows"]
+    },
+    "perf-optimizer": {
+      "id": "perf-optimizer",
+      "file": "perf-optimizer.md",
+      "summary": "Application performance, caching, profiling",
+      "clusters": ["performance-optimization"],
+      "tags": ["performance", "caching", "profiling", "optimization"]
+    },
+    "playwright-e2e-expert": {
+      "id": "playwright-e2e-expert",
+      "file": "playwright-e2e-expert.md",
+      "summary": "Playwright E2E tests, cross-browser, CI",
+      "clusters": ["testing-quality-assurance"],
+      "tags": ["playwright", "e2e", "testing", "cross-browser"]
+    },
+    "premium-ui-designer": {
+      "id": "premium-ui-designer",
+      "file": "premium-ui-designer.md",
+      "summary": "Visual polish, animations, premium feel",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["ui", "design", "animations", "premium", "polish"]
+    },
+    "privacy-compliance-specialist": {
+      "id": "privacy-compliance-specialist",
+      "file": "privacy-compliance-specialist.md",
+      "summary": "GDPR/CCPA compliance, consent management",
+      "clusters": ["security-compliance"],
+      "tags": ["privacy", "gdpr", "ccpa", "compliance", "consent"]
+    },
+    "product-strategy-analyst": {
+      "id": "product-strategy-analyst",
+      "file": "product-strategy-analyst.md",
+      "summary": "Product roadmap, feature prioritization",
+      "clusters": ["product-strategy"],
+      "tags": ["product", "strategy", "roadmap", "prioritization"]
+    },
+    "prompt-engineer": {
+      "id": "prompt-engineer",
+      "file": "prompt-engineer.md",
+      "summary": "Prompt optimization, output formatting",
+      "clusters": ["ai-llm-development"],
+      "tags": ["prompts", "llm", "optimization", "few-shot"]
+    },
+    "python-expert": {
+      "id": "python-expert",
+      "file": "python-expert.md",
+      "summary": "Python idioms, async, decorators, type hints",
+      "clusters": ["backend-frameworks"],
+      "tags": ["python", "async", "decorators", "type-hints"]
+    },
+    "react-specialist": {
+      "id": "react-specialist",
+      "file": "react-specialist.md",
+      "summary": "React hooks, state management, optimization",
+      "clusters": ["frontend-development"],
+      "tags": ["react", "hooks", "state-management", "optimization"]
+    },
+    "refactoring-specialist": {
+      "id": "refactoring-specialist",
+      "file": "refactoring-specialist.md",
+      "summary": "Code cleanup, complexity reduction",
+      "clusters": ["refactoring-code-quality"],
+      "tags": ["refactoring", "cleanup", "complexity", "maintainability"]
+    },
+    "release-manager": {
+      "id": "release-manager",
+      "file": "release-manager.md",
+      "summary": "Deployment management, feature flags, rollbacks",
+      "clusters": ["reliability-operations"],
+      "tags": ["releases", "deployment", "feature-flags", "rollback"]
+    },
+    "rust-systems-expert": {
+      "id": "rust-systems-expert",
+      "file": "rust-systems-expert.md",
+      "summary": "Rust ownership, lifetimes, FFI, unsafe",
+      "clusters": ["backend-frameworks"],
+      "tags": ["rust", "ownership", "lifetimes", "ffi", "unsafe"]
+    },
+    "security-auditor": {
+      "id": "security-auditor",
+      "file": "security-auditor.md",
+      "summary": "Vulnerability detection, secure coding",
+      "clusters": ["security-compliance"],
+      "tags": ["security", "vulnerabilities", "audit", "owasp"]
+    },
+    "self-service-support-architect": {
+      "id": "self-service-support-architect",
+      "file": "self-service-support-architect.md",
+      "summary": "Help center, FAQ, ticket deflection",
+      "clusters": ["community-support"],
+      "tags": ["support", "help-center", "faq", "self-service"]
+    },
+    "senior-code-reviewer": {
+      "id": "senior-code-reviewer",
+      "file": "senior-code-reviewer.md",
+      "summary": "Code review, quality assurance",
+      "clusters": ["testing-quality-assurance", "refactoring-code-quality"],
+      "tags": ["code-review", "quality", "best-practices"]
+    },
+    "seo-optimizer": {
+      "id": "seo-optimizer",
+      "file": "seo-optimizer.md",
+      "summary": "SEO audits, meta tags, schema markup",
+      "clusters": ["growth-marketing"],
+      "tags": ["seo", "meta-tags", "schema", "search"]
+    },
+    "spring-boot-engineer": {
+      "id": "spring-boot-engineer",
+      "file": "spring-boot-engineer.md",
+      "summary": "Spring Boot, Security, microservices",
+      "clusters": ["backend-frameworks"],
+      "tags": ["spring-boot", "java", "security", "microservices"]
+    },
+    "sre-reliability-engineer": {
+      "id": "sre-reliability-engineer",
+      "file": "sre-reliability-engineer.md",
+      "summary": "SLOs, error budgets, incident response",
+      "clusters": ["reliability-operations"],
+      "tags": ["sre", "slo", "error-budget", "incident-response"]
+    },
+    "terraform-infrastructure-architect": {
+      "id": "terraform-infrastructure-architect",
+      "file": "terraform-infrastructure-architect.md",
+      "summary": "Terraform IaC, modules, state management",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["terraform", "iac", "modules", "state"]
+    },
+    "test-suite-architect": {
+      "id": "test-suite-architect",
+      "file": "test-suite-architect.md",
+      "summary": "Test suite design, coverage strategies",
+      "clusters": ["testing-quality-assurance"],
+      "tags": ["testing", "test-suite", "coverage", "unit-tests"]
+    },
+    "typescript-type-architect": {
+      "id": "typescript-type-architect",
+      "file": "typescript-type-architect.md",
+      "summary": "Advanced generics, type utilities",
+      "clusters": ["frontend-development"],
+      "tags": ["typescript", "generics", "types", "type-safety"]
+    },
+    "ux-pain-point-fixer": {
+      "id": "ux-pain-point-fixer",
+      "file": "ux-pain-point-fixer.md",
+      "summary": "UX friction analysis, drop-off investigation",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["ux", "friction", "drop-off", "conversion"]
+    },
+    "ux-simplifier": {
+      "id": "ux-simplifier",
+      "file": "ux-simplifier.md",
+      "summary": "UI simplification, flow reduction",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["ux", "simplification", "flows", "reduction"]
+    },
+    "ux-writer": {
+      "id": "ux-writer",
+      "file": "ux-writer.md",
+      "summary": "Microcopy, error messages, onboarding text",
+      "clusters": ["ui-ux-design-quality"],
+      "tags": ["ux-writing", "microcopy", "error-messages", "onboarding"]
+    },
+    "viral-growth-engineer": {
+      "id": "viral-growth-engineer",
+      "file": "viral-growth-engineer.md",
+      "summary": "Viral loops, referral mechanics, activation",
+      "clusters": ["growth-marketing"],
+      "tags": ["viral", "growth", "referral", "activation"]
+    },
+    "vue3-architect": {
+      "id": "vue3-architect",
+      "file": "vue3-architect.md",
+      "summary": "Vue 3 Composition API, Pinia, reactivity",
+      "clusters": ["frontend-development"],
+      "tags": ["vue", "vue3", "composition-api", "pinia"]
+    },
+    "workflow-orchestrator": {
+      "id": "workflow-orchestrator",
+      "file": "workflow-orchestrator.md",
+      "summary": "DAG pipelines, task execution, retry logic",
+      "clusters": ["infrastructure-devops"],
+      "tags": ["workflow", "dag", "pipelines", "orchestration"]
+    }
+  },
+  "cross_cluster_agents": [
+    {
+      "id": "cloud-architect",
+      "clusters": ["architecture-system-design", "infrastructure-devops"]
+    },
+    {
+      "id": "ml-pipeline-engineer",
+      "clusters": ["data-engineering", "ai-llm-development"]
+    },
+    {
+      "id": "senior-code-reviewer",
+      "clusters": ["testing-quality-assurance", "refactoring-code-quality"]
+    }
+  ],
+  "statistics": {
+    "total_agents": 63,
+    "total_clusters": 17,
+    "agents_with_multiple_clusters": 3,
+    "largest_cluster": {
+      "name": "Backend Frameworks",
+      "count": 8
+    },
+    "smallest_clusters": [
+      {"name": "Security & Compliance", "count": 2},
+      {"name": "API & Integration", "count": 2},
+      {"name": "Product & Strategy", "count": 2},
+      {"name": "Data Engineering", "count": 2},
+      {"name": "Community & Support", "count": 2},
+      {"name": "Documentation & Research", "count": 2}
+    ]
+  }
+}
