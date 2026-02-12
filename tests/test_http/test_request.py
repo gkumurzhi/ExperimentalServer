@@ -1,6 +1,5 @@
 """Tests for HTTP request parsing."""
 
-import pytest
 
 from src.http.request import HTTPRequest
 
@@ -64,6 +63,22 @@ class TestHTTPRequest:
         request = HTTPRequest(raw)
 
         assert request.content_type == "application/octet-stream"
+
+    def test_query_params_parsed(self):
+        """Test query string parameters are parsed."""
+        raw = b"GET /dir?offset=10&limit=50 HTTP/1.1\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.path == "/dir"
+        assert request.query_params["offset"] == "10"
+        assert request.query_params["limit"] == "50"
+
+    def test_query_params_empty(self):
+        """Test missing query string yields empty dict."""
+        raw = b"GET /plain HTTP/1.1\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.query_params == {}
 
     def test_repr(self):
         """Test string representation."""

@@ -1,5 +1,5 @@
 """
-Утилиты - вспомогательные модули.
+Utilities — helper modules.
 """
 
 from .captcha import generate_password_captcha

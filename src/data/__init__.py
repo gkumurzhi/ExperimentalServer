@@ -1,3 +1,3 @@
 """
-Статические ресурсы пакета.
+Static package resources.
 """

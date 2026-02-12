@@ -1,43 +1,59 @@
 """
-Основной HTTP-сервер с поддержкой произвольных методов.
+Main HTTP server with custom method support.
 """
 
+import atexit
+import json
+import logging
+import os
+import secrets
 import socket
 import ssl
-import json
-import secrets
-import logging
-import atexit
-import os
+import threading
+import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .http import HTTPRequest, HTTPResponse
-from .handlers import HandlerMixin
-from .security.auth import BasicAuthenticator, generate_random_credentials
-from .security.tls import (
-    generate_self_signed_cert,
-    check_openssl_available,
-    check_certbot_available,
-    check_cert_needs_renewal,
-    obtain_letsencrypt_cert,
-)
 from .config import (
-    ServerConfig,
     HIDDEN_FILES,
     OPSEC_METHOD_PREFIXES,
     OPSEC_METHOD_SUFFIXES,
     __version__,
 )
+from .handlers import HandlerMixin
+from .http import HTTPRequest, HTTPResponse
+from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
+from .security.tls import (
+    check_cert_needs_renewal,
+    check_certbot_available,
+    check_openssl_available,
+    generate_self_signed_cert,
+    obtain_letsencrypt_cert,
+)
 
-# Настройка логирования
+# Logging setup
 logger = logging.getLogger("httpserver")
 
 
-class ExperimentalHTTPServer(HandlerMixin):
-    """HTTP-сервер с поддержкой произвольных методов."""
+class _JSONLogFormatter(logging.Formatter):
+    """Structured JSON log formatter."""
 
-    # Скрытые файлы, недоступные через GET
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[1]:
+            entry["exception"] = self.formatException(record.exc_info)
+        return json.dumps(entry, ensure_ascii=False)
+
+
+class ExperimentalHTTPServer(HandlerMixin):
+    """HTTP server with custom method support."""
+
+    # Hidden files not accessible via GET
     HIDDEN_FILES = HIDDEN_FILES
 
     def __init__(
@@ -59,16 +75,20 @@ class ExperimentalHTTPServer(HandlerMixin):
         domain: str | None = None,
         email: str | None = None,
         # Auth options
-        auth: str | None = None,  # "user:password" или "random"
+        auth: str | None = None,  # "user:password" or "random"
         # Debug
         debug: bool = False,
         # Browser
         open_browser: bool = False,
+        # Logging
+        json_log: bool = False,
+        # CORS
+        cors_origin: str = "*",
     ):
         self.host = host
         self.port = port
         self.root_dir = Path(root_dir).resolve()
-        self.socket = None
+        self.socket: socket.socket | None = None
         self.opsec_mode = opsec_mode
         self.sandbox_mode = sandbox_mode
         self.max_upload_size = max_upload_size
@@ -76,8 +96,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.running = False
         self.debug = debug
         self.open_browser = open_browser
+        self.json_log = json_log
+        self.cors_origin = cors_origin
 
-        # TLS настройки
+        # TLS settings
         self.tls_enabled = tls
         self.cert_file = cert_file
         self.key_file = key_file
@@ -85,36 +107,48 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.domain = domain
         self.email = email
         self.ssl_context: ssl.SSLContext | None = None
-        self._temp_cert_files: list[str] = []  # Для очистки временных файлов
+        self._temp_cert_files: list[str] = []  # For cleanup of temp files
 
-        # Временные SMUGGLE файлы (удаляются после отдачи)
+        # Temporary SMUGGLE files (deleted after serving)
         self._temp_smuggle_files: set[str] = set()
+        self._smuggle_lock = threading.Lock()
+
+        # In-memory metrics
+        self._metrics_lock = threading.Lock()
+        self._start_time: float = 0.0
+        self._request_count: int = 0
+        self._error_count: int = 0
+        self._bytes_sent: int = 0
+        self._status_counts: dict[int, int] = {}
 
         # Basic Auth
         self.authenticator: BasicAuthenticator | None = None
         self._setup_auth(auth)
 
-        # Настройка логирования
+        # Rate limiting for auth
+        self._rate_limiter = AuthRateLimiter() if self.authenticator else None
+
+        # Logging setup
         self._setup_logging(quiet)
 
-        # Директория для загруженных файлов
+        # Directory for uploaded files
         self.upload_dir = self.root_dir / "uploads"
         self.upload_dir.mkdir(exist_ok=True)
 
-        # Очищаем старые SMUGGLE файлы от предыдущих сессий
+        # Clean up stale SMUGGLE files from previous sessions
         self._cleanup_old_smuggle_files()
 
-        # OPSEC: генерируем случайные имена методов при каждом запуске
+        # OPSEC: generate random method names on each startup
         self.opsec_methods: dict[str, str] = {}
         if opsec_mode:
             self._generate_opsec_methods()
             logger.debug(f"OPSEC methods generated: {self.opsec_methods}")
 
-        # Регистрируем обработчики методов
+        # Register method handlers
         self.method_handlers = {
             "GET": self.handle_get,
             "POST": self.handle_post,
-            "PUT": self.handle_none,  # PUT тоже загружает файлы
+            "PUT": self.handle_none,  # PUT also handles file upload
             "OPTIONS": self.handle_options,
             "FETCH": self.handle_fetch,
             "INFO": self.handle_info,
@@ -124,27 +158,27 @@ class ExperimentalHTTPServer(HandlerMixin):
         }
 
     def _setup_auth(self, auth: str | None) -> None:
-        """Настройка Basic Auth."""
+        """Set up Basic Auth."""
         if not auth:
             return
 
         if auth == "random":
             username, password = generate_random_credentials()
             self.authenticator = BasicAuthenticator({username: password})
-            print(f"\n[AUTH] Generated credentials:")
+            print("\n[AUTH] Generated credentials:")
             print(f"  Username: {username}")
             print(f"  Password: {password}")
         elif ":" in auth:
             username, password = auth.split(":", 1)
             self.authenticator = BasicAuthenticator({username: password})
         else:
-            # Только username, пароль = random
+            # Username only, password = random
             password = secrets.token_urlsafe(16)
             self.authenticator = BasicAuthenticator({auth: password})
             print(f"\n[AUTH] Generated password for '{auth}': {password}")
 
     def _setup_logging(self, quiet: bool) -> None:
-        """Настройка логирования."""
+        """Set up logging."""
         if self.debug:
             level = logging.DEBUG
         elif self.opsec_mode:
@@ -153,15 +187,18 @@ class ExperimentalHTTPServer(HandlerMixin):
             level = logging.WARNING if quiet else logging.INFO
 
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%H:%M:%S"
-        ))
+        if self.json_log:
+            handler.setFormatter(_JSONLogFormatter())
+        else:
+            handler.setFormatter(logging.Formatter(
+                "%(asctime)s [%(levelname)s] %(message)s",
+                datefmt="%H:%M:%S"
+            ))
         logger.handlers = [handler]
         logger.setLevel(level)
 
     def _generate_opsec_methods(self) -> None:
-        """Генерация случайных имён методов для OPSEC режима."""
+        """Generate random method names for OPSEC mode."""
         self.opsec_methods = {
             "upload": self._random_method_name(),
             "download": self._random_method_name(),
@@ -175,40 +212,43 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     @staticmethod
     def _random_method_name() -> str:
-        """Генерация случайного имени метода."""
+        """Generate a random method name."""
         prefix = secrets.choice(OPSEC_METHOD_PREFIXES)
         suffix = secrets.choice(OPSEC_METHOD_SUFFIXES)
         return f"{prefix}{suffix}" if suffix else prefix
 
     def _setup_tls(self) -> None:
-        """Настройка TLS контекста."""
+        """Set up the TLS context."""
         if not self.tls_enabled:
             return
 
         # Let's Encrypt
         if self.letsencrypt and self.domain:
             if not check_certbot_available():
-                print("[WARNING] certbot не найден. Используется самоподписный сертификат.")
-                print("  Установите certbot: https://certbot.eff.org/")
-                # fallthrough к самоподписной логике ниже
+                print("[WARNING] certbot not found. Falling back to self-signed certificate.")
+                print("  Install certbot: https://certbot.eff.org/")
+                # fallthrough to self-signed logic below
             else:
                 config_dir = Path.home() / ".exphttp" / "letsencrypt"
                 cert_path = config_dir / "live" / self.domain / "fullchain.pem"
                 key_path = config_dir / "live" / self.domain / "privkey.pem"
 
                 if not cert_path.exists() or check_cert_needs_renewal(cert_path):
-                    print(f"[TLS] Получение Let's Encrypt сертификата для {self.domain}...")
+                    print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
                     cert_path, key_path = obtain_letsencrypt_cert(
                         domain=self.domain, email=self.email, config_dir=config_dir,
                     )
-                    print(f"[TLS] Сертификат получен: {cert_path}")
+                    print(f"[TLS] Certificate obtained: {cert_path}")
                 else:
-                    print(f"[TLS] Используется существующий Let's Encrypt сертификат для {self.domain}")
+                    print(
+                        f"[TLS] Using existing Let's Encrypt"
+                        f" certificate for {self.domain}"
+                    )
 
                 self.cert_file = str(cert_path)
                 self.key_file = str(key_path)
 
-        # Если сертификат не указан, генерируем самоподписный
+        # If no certificate provided, generate a self-signed one
         if not self.cert_file or not self.key_file:
             if not check_openssl_available():
                 print("[WARNING] OpenSSL not found. TLS disabled.")
@@ -224,27 +264,52 @@ class ExperimentalHTTPServer(HandlerMixin):
             self.key_file = str(key_path)
             self._temp_cert_files = [self.cert_file, self.key_file]
 
-            # Удаляем временные файлы при выходе
+            # Delete temp files on exit
             atexit.register(self._cleanup_temp_files)
 
-        # Создаём SSL контекст
+        # Create SSL context
         self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         self.ssl_context.load_cert_chain(self.cert_file, self.key_file)
 
-        # Современные настройки безопасности
+        # Modern security settings
         self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
         self.ssl_context.set_ciphers('ECDHE+AESGCM:DHE+AESGCM:ECDHE+CHACHA20:DHE+CHACHA20')
 
+    def _record_metric(
+        self, status_code: int, response_size: int, *, error: bool = False,
+    ) -> None:
+        """Record request metrics (thread-safe)."""
+        with self._metrics_lock:
+            self._request_count += 1
+            self._bytes_sent += response_size
+            self._status_counts[status_code] = (
+                self._status_counts.get(status_code, 0) + 1
+            )
+            if error:
+                self._error_count += 1
+
+    def get_metrics(self) -> dict[str, object]:
+        """Return current server metrics snapshot."""
+        with self._metrics_lock:
+            uptime = time.monotonic() - self._start_time if self._start_time else 0
+            return {
+                "uptime_seconds": round(uptime, 1),
+                "total_requests": self._request_count,
+                "total_errors": self._error_count,
+                "bytes_sent": self._bytes_sent,
+                "status_counts": dict(self._status_counts),
+            }
+
     def _cleanup_temp_files(self) -> None:
-        """Очистка временных файлов сертификатов."""
+        """Clean up temporary certificate files."""
         for path in self._temp_cert_files:
             try:
-                os.unlink(path)
+                Path(path).unlink()
             except OSError:
                 pass
 
     def _cleanup_old_smuggle_files(self) -> None:
-        """Очистка старых SMUGGLE файлов от предыдущих сессий."""
+        """Clean up stale SMUGGLE files from previous sessions."""
         count = 0
         for file_path in self.upload_dir.glob("smuggle_*.html"):
             try:
@@ -253,20 +318,22 @@ class ExperimentalHTTPServer(HandlerMixin):
             except OSError:
                 pass
         if count > 0:
-            logger.info(f"Очищено {count} старых SMUGGLE файлов")
+            logger.info(f"Cleaned up {count} stale SMUGGLE files")
 
     def start(self) -> None:
-        """Запуск сервера."""
-        # Настройка TLS
+        """Start the server."""
+        # Set up TLS
         self._setup_tls()
 
         if self.debug:
             logger.debug("Debug logging enabled")
 
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.socket.bind((self.host, self.port))
-        self.socket.listen(5)
+        self._start_time = time.monotonic()
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((self.host, self.port))
+        sock.listen(128)
+        self.socket = sock
         self.running = True
 
         protocol = "https" if self.tls_enabled else "http"
@@ -276,113 +343,205 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  exphttp v{__version__}")
         print(f"  {url}")
         print()
-        print(f"  Корневая директория: {self.root_dir}")
-        print(f"  Макс. загрузка: {self.max_upload_size // (1024*1024)} MB")
-        print(f"  Методы: {', '.join(self.method_handlers.keys())}")
+        print(f"  Root directory: {self.root_dir}")
+        print(f"  Max upload: {self.max_upload_size // (1024*1024)} MB")
+        print(f"  Methods: {', '.join(self.method_handlers.keys())}")
 
         if self.tls_enabled:
             if self.letsencrypt and self.domain:
                 cert_info = f"Let's Encrypt ({self.domain})"
             elif self._temp_cert_files:
-                cert_info = "самоподписный"
+                cert_info = "self-signed"
             else:
-                cert_info = self.cert_file
-            print(f"\n  [TLS]     сертификат: {cert_info}")
+                cert_info = self.cert_file or "unknown"
+            print(f"\n  [TLS]     certificate: {cert_info}")
 
         if self.authenticator:
-            print("  [AUTH]    Basic Auth включён")
+            print("  [AUTH]    Basic Auth enabled")
 
         if self.sandbox_mode:
-            print(f"  [SANDBOX] доступ ограничен uploads/")
+            print("  [SANDBOX] access restricted to uploads/")
 
         if self.opsec_mode:
-            print(f"  [OPSEC]   случайные методы → .opsec_config.json")
+            print("  [OPSEC]   randomized methods -> .opsec_config.json")
             print(f"            upload: {self.opsec_methods['upload']}, "
                   f"download: {self.opsec_methods['download']}")
             print(f"            info: {self.opsec_methods['info']}, "
                   f"ping: {self.opsec_methods['ping']}")
 
-        print(f"\n  Ctrl+C для остановки")
+        print("\n  Ctrl+C to stop")
         print("=" * 60)
 
         if self.open_browser:
             import webbrowser
             webbrowser.open(url)
 
+        executor = ThreadPoolExecutor(max_workers=self.max_workers)
         try:
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                while self.running:
-                    try:
-                        self.socket.settimeout(1.0)  # Для graceful shutdown
-                        client_socket, client_address = self.socket.accept()
-
-                        # Оборачиваем в TLS если включено
-                        if self.tls_enabled and self.ssl_context:
-                            try:
-                                client_socket = self.ssl_context.wrap_socket(
-                                    client_socket,
-                                    server_side=True
-                                )
-                            except ssl.SSLError as e:
-                                logger.debug(f"SSL handshake failed: {e}")
-                                client_socket.close()
-                                continue
-
-                        executor.submit(self._handle_client, client_socket, client_address)
-                    except socket.timeout:
-                        continue
+            while self.running:
+                try:
+                    sock.settimeout(1.0)  # For graceful shutdown
+                    client_socket, client_address = sock.accept()
+                    executor.submit(self._handle_client, client_socket, client_address)
+                except TimeoutError:
+                    continue
         except KeyboardInterrupt:
-            print("\nОстановка сервера...")
+            print("\nShutting down...")
         finally:
             self.running = False
-            self.socket.close()
+            executor.shutdown(wait=True, cancel_futures=True)
+            sock.close()
             self._cleanup_temp_files()
-            print("Сервер остановлен")
+            # Clean up temp smuggle files
+            for path_str in list(self._temp_smuggle_files):
+                try:
+                    Path(path_str).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            self._temp_smuggle_files.clear()
+            print("Server stopped")
 
     def stop(self) -> None:
-        """Остановка сервера."""
+        """Stop the server."""
         self.running = False
 
-    def _handle_client(self, client_socket: socket.socket, client_address: tuple) -> None:
-        """Обработка клиентского подключения."""
-        try:
-            data = self._receive_request(client_socket)
-            if not data:
-                return
+    # Keep-alive settings
+    KEEP_ALIVE_TIMEOUT: int = 15  # seconds idle between requests
+    KEEP_ALIVE_MAX: int = 100  # max requests per connection
 
+    def _should_keep_alive(self, request: HTTPRequest) -> bool:
+        """Determine whether to keep the connection alive after this request."""
+        # OPSEC mode: always close to minimize fingerprint
+        if self.opsec_mode:
+            return False
+
+        conn_header = request.headers.get("connection", "").lower()
+        if conn_header == "close":
+            return False
+
+        # HTTP/1.1 defaults to keep-alive; HTTP/1.0 defaults to close
+        if request.http_version == "HTTP/1.1":
+            return conn_header != "close"
+        return conn_header == "keep-alive"
+
+    def _handle_client(self, client_socket: socket.socket, client_address: tuple[str, int]) -> None:
+        """Handle a client connection (with keep-alive support)."""
+        try:
+            # TLS handshake in worker thread (not blocking accept loop)
+            if self.tls_enabled and self.ssl_context:
+                try:
+                    client_socket.settimeout(5.0)
+                    client_socket = self.ssl_context.wrap_socket(
+                        client_socket, server_side=True
+                    )
+                except ssl.SSLError as e:
+                    logger.debug(f"SSL handshake failed: {e}")
+                    client_socket.close()
+                    return
+
+            requests_on_conn = 0
+
+            while self.running:
+                # For subsequent requests, use keep-alive idle timeout
+                idle_timeout = (
+                    self.KEEP_ALIVE_TIMEOUT if requests_on_conn > 0 else None
+                )
+
+                data = self._receive_request(client_socket, idle_timeout=idle_timeout)
+                if not data:
+                    break
+
+                requests_on_conn += 1
+                keep_alive = self._process_request(
+                    data, client_socket, client_address, requests_on_conn,
+                )
+                if not keep_alive:
+                    break
+        except Exception:
+            pass
+        finally:
+            client_socket.close()
+
+    def _process_request(
+        self,
+        data: bytes,
+        client_socket: socket.socket,
+        client_address: tuple[str, int],
+        request_num: int,
+    ) -> bool:
+        """
+        Process a single HTTP request on the connection.
+
+        Returns True if the connection should be kept alive for more requests.
+        """
+        start_time = time.monotonic()
+        request_id = secrets.token_hex(4)
+        _bld = {"opsec_mode": self.opsec_mode, "cors_origin": self.cors_origin}
+
+        try:
             request = HTTPRequest(data)
 
-            # Basic Auth проверка
+            # Determine keep-alive intent
+            want_keep_alive = self._should_keep_alive(request)
+            remaining = self.KEEP_ALIVE_MAX - request_num
+            use_keep_alive = want_keep_alive and remaining > 0
+
+            _bld["keep_alive"] = use_keep_alive
+            if use_keep_alive:
+                _bld["keep_alive_timeout"] = self.KEEP_ALIVE_TIMEOUT
+                _bld["keep_alive_max"] = remaining
+
+            # Basic Auth check
             if self.authenticator:
+                # Rate limiting check
+                if self._rate_limiter and self._rate_limiter.is_blocked(client_address[0]):
+                    logger.warning(f"Rate limited: {client_address[0]}")
+                    response = HTTPResponse(429)
+                    response.set_body(
+                        json.dumps({"error": "Too Many Requests", "status": 429}),
+                        "application/json",
+                    )
+                    client_socket.sendall(response.build(**_bld))
+                    return False
+
                 auth_header = request.headers.get("authorization")
                 if not self.authenticator.authenticate(auth_header):
+                    if self._rate_limiter:
+                        self._rate_limiter.record_failure(client_address[0])
                     logger.warning(f"Auth rejected: {client_address[0]}")
                     response = HTTPResponse(401)
                     response.set_header(
                         "WWW-Authenticate",
                         self.authenticator.get_www_authenticate_header()
                     )
-                    response.set_body("Unauthorized", "text/plain")
-                    client_socket.sendall(response.build(opsec_mode=self.opsec_mode))
-                    return
+                    response.set_body(
+                        json.dumps({"error": "Unauthorized", "status": 401}),
+                        "application/json",
+                    )
+                    client_socket.sendall(response.build(**_bld))
+                    return False
 
-            # Проверка размера Content-Length до обработки
+                # Auth successful — reset rate limiter
+                if self._rate_limiter:
+                    self._rate_limiter.reset(client_address[0])
+
+            # Check Content-Length before processing
             try:
                 content_length = int(request.headers.get("content-length", 0))
             except ValueError:
                 content_length = 0
             if content_length > self.max_upload_size:
+                max_mb = self.max_upload_size // (1024 * 1024)
                 response = HTTPResponse(413)
                 response.set_body(
-                    f"Payload too large. Max size: {self.max_upload_size // (1024*1024)} MB",
-                    "text/plain"
+                    json.dumps({
+                        "error": f"Payload too large. Max size: {max_mb} MB",
+                        "status": 413,
+                    }),
+                    "application/json",
                 )
-                client_socket.sendall(response.build(opsec_mode=self.opsec_mode))
-                return
-
-            # Логирование (не в OPSEC режиме)
-            if not self.opsec_mode:
-                logger.info(f"{client_address[0]} - {request.method} {request.path}")
+                client_socket.sendall(response.build(**_bld))
+                return False
 
             if self.opsec_mode:
                 handler = self._get_opsec_handler(request)
@@ -390,74 +549,172 @@ class ExperimentalHTTPServer(HandlerMixin):
                 handler = self.method_handlers.get(request.method)
 
             if handler:
-                logger.debug(f"{client_address[0]} - {request.method} {request.path} -> {handler.__name__}")
+                logger.debug(
+                    "[%s] %s - %s %s -> %s",
+                    request_id, client_address[0], request.method, request.path,
+                    getattr(handler, "__name__", "handler"),
+                )
                 response = handler(request)
             else:
                 if self.opsec_mode:
-                    # В OPSEC режиме не выдаём информацию о методах
                     response = HTTPResponse(404)
-                    response.set_body("Not Found", "text/plain")
+                    response.set_body(
+                        json.dumps({"error": "Not Found", "status": 404}),
+                        "application/json"
+                    )
                 else:
                     response = self._method_not_allowed(request.method)
 
-            client_socket.sendall(response.build(opsec_mode=self.opsec_mode))
-        except Exception as e:
-            logger.error(f"Ошибка обработки запроса: {e}")
+            if not self.opsec_mode:
+                response.set_header("X-Request-Id", request_id)
+
+            # Streaming responses always close (simplifies keep-alive logic)
+            if response.stream_path is not None:
+                _bld_close = {**_bld, "keep_alive": False}
+                header_bytes = response.build_headers(**_bld_close)
+                client_socket.sendall(header_bytes)
+                bytes_sent = len(header_bytes)
+                with response.stream_path.open("rb") as f:
+                    while True:
+                        chunk = f.read(65536)
+                        if not chunk:
+                            break
+                        client_socket.sendall(chunk)
+                        bytes_sent += len(chunk)
+                self._record_metric(response.status_code, bytes_sent)
+                use_keep_alive = False  # streamed — close connection
+            else:
+                response_bytes = response.build(**_bld)
+                client_socket.sendall(response_bytes)
+                self._record_metric(response.status_code, len(response_bytes))
+
+            # Log response status + latency (not in OPSEC mode)
+            if not self.opsec_mode:
+                duration_ms = (time.monotonic() - start_time) * 1000
+                logger.info(
+                    "[%s] %s - %s %s -> %d (%dms)",
+                    request_id, client_address[0], request.method,
+                    request.path, response.status_code, duration_ms,
+                )
+
+            return use_keep_alive
+
+        except Exception:
+            logger.exception("[%s] Request handling error from %s", request_id, client_address[0])
+            self._record_metric(500, 0, error=True)
             error_response = HTTPResponse(500)
             if self.opsec_mode:
-                error_response.set_body("Error", "text/plain")
+                error_response.set_body(
+                    json.dumps({"error": "Error", "status": 500}),
+                    "application/json"
+                )
             else:
-                error_response.set_body("Internal Server Error", "text/plain")
+                error_response.set_body(
+                    json.dumps({"error": "Internal Server Error", "status": 500}),
+                    "application/json"
+                )
             try:
-                client_socket.sendall(error_response.build(opsec_mode=self.opsec_mode))
+                client_socket.sendall(error_response.build(**_bld))
             except Exception:
                 pass
-        finally:
-            client_socket.close()
+            return False
 
-    def _receive_request(self, client_socket: socket.socket) -> bytes:
-        """Получение полного HTTP-запроса."""
-        data = b""
-        client_socket.settimeout(1.0)
+    def _receive_request(
+        self,
+        client_socket: socket.socket,
+        idle_timeout: float | None = None,
+    ) -> bytes:
+        """
+        Receive a complete HTTP request.
+
+        Args:
+            client_socket: The client socket.
+            idle_timeout: If set, use this as the initial socket timeout
+                          (for keep-alive idle wait). None uses default 5s.
+        """
+        chunks: list[bytes] = []
+        total_size = 0
+        start_time = time.monotonic()
+        HEADER_TIMEOUT = 30.0
+        BODY_TIMEOUT = 300.0
+
+        # For keep-alive idle wait, use the specified timeout for the first recv
+        initial_timeout = idle_timeout if idle_timeout is not None else 5.0
+        client_socket.settimeout(initial_timeout)
+        headers_received = False
+        content_length = 0
+        header_end_pos = 0
+        first_recv = True
 
         while True:
+            elapsed = time.monotonic() - start_time
+            if not headers_received and elapsed > HEADER_TIMEOUT:
+                logger.warning(f"Header receive timeout ({elapsed:.0f}s)")
+                return b""
+            if headers_received and elapsed > HEADER_TIMEOUT + BODY_TIMEOUT:
+                logger.warning(f"Body receive timeout ({elapsed:.0f}s)")
+                return b""
+
             try:
                 chunk = client_socket.recv(65536)
                 if not chunk:
                     break
-                data += chunk
 
-                # Защита от слишком больших запросов (DoS)
-                if len(data) > self.max_upload_size + 65536:
+                # After first data arrives, switch to standard 5s timeout
+                if first_recv and idle_timeout is not None:
+                    client_socket.settimeout(5.0)
+                    first_recv = False
+
+                chunks.append(chunk)
+                total_size += len(chunk)
+
+                # DoS protection: max request size
+                if total_size > self.max_upload_size + 65536:
+                    logger.warning(f"Request too large ({total_size} bytes), dropping")
                     return b""
 
-                if b"\r\n\r\n" in data:
-                    header_end = data.find(b"\r\n\r\n")
-                    headers_part = data[:header_end].decode("utf-8", errors="replace")
+                if not headers_received:
+                    # Join to find header end (headers are small, O(n^2) is negligible)
+                    data = b"".join(chunks)
+                    if b"\r\n\r\n" in data:
+                        header_end_pos = data.find(b"\r\n\r\n")
+                        headers_part = data[:header_end_pos].decode("utf-8", errors="replace")
 
-                    content_length = 0
-                    for line in headers_part.split("\r\n"):
-                        if line.lower().startswith("content-length:"):
-                            try:
-                                content_length = int(line.split(":")[1].strip())
-                            except ValueError:
-                                content_length = 0
+                        for line in headers_part.split("\r\n"):
+                            if line.lower().startswith("content-length:"):
+                                try:
+                                    content_length = int(line.split(":")[1].strip())
+                                except ValueError:
+                                    content_length = 0
+                                break
+
+                        headers_received = True
+                        body_received = total_size - header_end_pos - 4
+                        if body_received >= content_length:
                             break
-
-                    body_received = len(data) - header_end - 4
+                else:
+                    # Body phase: just count bytes, no joining needed
+                    body_received = total_size - header_end_pos - 4
                     if body_received >= content_length:
                         break
-            except socket.timeout:
-                break
 
-        logger.debug(f"Received {len(data)} bytes")
-        return data
+            except TimeoutError:
+                if not headers_received:
+                    # No data within timeout during header phase — give up
+                    break
+                # During body phase, continue until total timeout
+                continue
 
-    def _get_opsec_handler(self, request: HTTPRequest):
-        """Получение обработчика в OPSEC режиме."""
+        result = b"".join(chunks)
+        if result:
+            logger.debug(f"Received {len(result)} bytes")
+        return result
+
+    def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
+        """Get the handler for OPSEC mode."""
         method = request.method
 
-        # Стандартные методы всегда работают
+        # Standard methods always work
         if method in self.method_handlers:
             return self.method_handlers.get(method)
 
@@ -470,7 +727,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         elif method == self.opsec_methods.get("ping"):
             return self.handle_ping
 
-        # Любой неизвестный метод в OPSEC режиме -> upload
+        # Any unknown method in OPSEC mode -> upload
         if request.body:
             return self.handle_opsec_upload
 

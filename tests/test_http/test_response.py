@@ -1,6 +1,6 @@
 """Tests for HTTP response building."""
 
-import pytest
+from pathlib import Path
 
 from src.http.response import HTTPResponse
 
@@ -76,6 +76,51 @@ class TestHTTPResponse:
         built = response.build()
 
         assert b"Access-Control-Allow-Origin: *\r\n" in built
+
+    def test_set_file_streaming(self, tmp_path: Path):
+        """Test set_file sets stream_path and correct headers."""
+        f = tmp_path / "data.bin"
+        f.write_bytes(b"A" * 256)
+        response = HTTPResponse(200)
+        response.set_file(f, "application/octet-stream")
+
+        assert response.stream_path == f
+        assert response.body == b""  # body stays empty
+        assert response.headers["Content-Length"] == "256"
+        assert response.headers["Content-Type"] == "application/octet-stream"
+
+    def test_build_headers_only(self):
+        """Test build_headers returns header bytes without body."""
+        response = HTTPResponse(200)
+        response.set_body("hello", "text/plain")
+        headers = response.build_headers()
+
+        assert headers.startswith(b"HTTP/1.1 200 OK\r\n")
+        assert headers.endswith(b"\r\n")
+        assert b"hello" not in headers  # body excluded
+
+    def test_connection_close_by_default(self):
+        """Test that Connection: close is set by default."""
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build()
+        assert b"Connection: close\r\n" in built
+
+    def test_keep_alive_headers(self):
+        """Test keep-alive Connection and Keep-Alive headers."""
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(keep_alive=True, keep_alive_timeout=10, keep_alive_max=50)
+        assert b"Connection: keep-alive\r\n" in built
+        assert b"Keep-Alive: timeout=10, max=50\r\n" in built
+
+    def test_keep_alive_false_no_keepalive_header(self):
+        """Test that Keep-Alive header is absent when keep_alive=False."""
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(keep_alive=False)
+        assert b"Connection: close\r\n" in built
+        assert b"Keep-Alive:" not in built
 
     def test_repr(self):
         """Test string representation."""

@@ -2,8 +2,6 @@
 
 import base64
 
-import pytest
-
 from src.security.auth import (
     BasicAuthenticator,
     generate_random_credentials,

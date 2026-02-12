@@ -1,5 +1,5 @@
 """
-Модуль обработчиков HTTP-методов.
+HTTP method handlers module.
 """
 
 from .base import BaseHandler
@@ -16,9 +16,9 @@ class HandlerMixin(
     SmuggleHandlersMixin
 ):
     """
-    Объединённый миксин со всеми обработчиками HTTP-методов.
+    Combined mixin with all HTTP method handlers.
 
-    Включает:
+    Includes:
     - FileHandlersMixin: GET, POST, OPTIONS, FETCH, NONE
     - InfoHandlersMixin: INFO, PING
     - OpsecHandlersMixin: handle_opsec_upload

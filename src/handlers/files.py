@@ -1,5 +1,5 @@
 """
-Обработчики файловых операций: GET, POST, PUT, FETCH, NONE.
+File operation handlers: GET, POST, PUT, FETCH, NONE.
 """
 
 import json
@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ..http import HTTPRequest, HTTPResponse, sanitize_filename, make_unique_filename
+from ..http import HTTPRequest, HTTPResponse, make_unique_filename, sanitize_filename
 from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
 
-# Паттерн для удаления ссылки на телеграм в OPSEC режиме
+# Pattern to remove Telegram link in OPSEC mode
 TELEGRAM_LINK_PATTERN = re.compile(
     r'<a\s+href="https://t\.me/kgmnotes"[^>]*>.*?</a>',
     re.DOTALL | re.IGNORECASE
@@ -23,52 +23,52 @@ TELEGRAM_LINK_PATTERN = re.compile(
 
 
 class FileHandlersMixin(BaseHandler):
-    """Миксин с обработчиками файловых операций."""
+    """Mixin with file operation handlers."""
 
-    # Атрибут для временных SMUGGLE файлов (определён в сервере)
+    # Attribute for temporary SMUGGLE files (defined in the server)
     _temp_smuggle_files: set[str]
 
     def _process_html_for_opsec(self, content: bytes) -> bytes:
         """
-        Обработка HTML для OPSEC режима.
-        Удаляет ссылку на телеграм канал автора.
+        Process HTML for OPSEC mode.
+        Removes the author's Telegram channel link.
         """
         if not self.opsec_mode:
             return content
 
         try:
             html = content.decode("utf-8")
-            # Удаляем ссылку на телеграм
+            # Remove Telegram link
             html = TELEGRAM_LINK_PATTERN.sub("", html)
             return html.encode("utf-8")
         except UnicodeDecodeError:
             return content
 
     def handle_get(self, request: HTTPRequest) -> HTTPResponse:
-        """Обработка GET-запроса - возвращает содержимое файла."""
+        """Handle GET request — return file contents."""
         url_path = request.path.lstrip("/")
         logger.debug(f"GET {request.path}")
 
-        # Защита скрытых файлов
+        # Hidden file protection
         if self._is_hidden_file(request.path):
             return self._not_found(request.path)
 
-        # В sandbox режиме разрешаем доступ к:
-        # 1. Корневым файлам (index.html, style.css и т.д.)
-        # 2. Папке uploads/
-        # 3. Папке static/ (статические ресурсы)
+        # In sandbox mode, allow access to:
+        # 1. Root files (index.html, style.css, etc.)
+        # 2. uploads/ directory
+        # 3. static/ directory (static resources)
         if self.sandbox_mode:
-            # Проверяем, это запрос к uploads, static или к корневому файлу
+            # Check whether the request targets uploads, static, or a root file
             if url_path.startswith("uploads/") or url_path == "uploads":
-                # Запрос к uploads - используем sandbox логику
+                # Request to uploads — use sandbox logic
                 file_path = self._get_file_path(request.path, for_sandbox=True)
             elif url_path.startswith("static/") or url_path == "static":
-                # Запрос к static - разрешаем чтение статических файлов
+                # Request to static — allow reading static files
                 file_path = self._get_file_path(request.path, for_sandbox=True)
             else:
-                # Корневой файл - проверяем что это не попытка выйти за пределы
+                # Root file — verify no path traversal attempt
                 file_path = self._get_file_path(request.path, for_sandbox=False)
-                # В sandbox режиме запрещаем доступ к поддиректориям кроме uploads и static
+                # In sandbox mode, deny access to subdirectories other than uploads and static
                 if file_path and "/" in url_path and not url_path.startswith(("uploads", "static")):
                     return self._not_found(request.path)
         else:
@@ -78,7 +78,7 @@ class FileHandlersMixin(BaseHandler):
             return self._not_found(request.path)
 
         if file_path.is_dir():
-            # Пробуем найти index.html в директории
+            # Try to find index.html in the directory
             index_path = file_path / "index.html"
             if index_path.exists():
                 file_path = index_path
@@ -89,40 +89,66 @@ class FileHandlersMixin(BaseHandler):
         content_type, _ = mimetypes.guess_type(str(file_path))
         content_type = content_type or "application/octet-stream"
 
-        with open(file_path, "rb") as f:
-            content = f.read()
-
-        # В OPSEC режиме обрабатываем HTML (удаляем ссылку на телеграм)
-        if content_type and content_type.startswith("text/html"):
-            content = self._process_html_for_opsec(content)
-
-        response.set_body(content, content_type)
-
-        # Удаляем временные SMUGGLE файлы после отдачи
+        # Check if this is a temp smuggle file (must read fully for cleanup)
         file_path_str = str(file_path)
-        if file_path_str in self._temp_smuggle_files:
-            try:
-                file_path.unlink()
-                self._temp_smuggle_files.discard(file_path_str)
-                logger.debug(f"Smuggle file cleaned up: {file_path.name}")
-            except OSError:
-                pass  # Файл уже удалён или недоступен
+        with self._smuggle_lock:
+            is_smuggle = file_path_str in self._temp_smuggle_files
+
+        # HTML files need OPSEC processing; smuggle files need post-send cleanup
+        needs_full_read = (
+            is_smuggle
+            or (content_type and content_type.startswith("text/html") and self.opsec_mode)
+        )
+
+        if needs_full_read:
+            with file_path.open("rb") as f:
+                content = f.read()
+
+            if content_type and content_type.startswith("text/html"):
+                content = self._process_html_for_opsec(content)
+
+            response.set_body(content, content_type)
+
+            if is_smuggle:
+                try:
+                    file_path.unlink()
+                    with self._smuggle_lock:
+                        self._temp_smuggle_files.discard(file_path_str)
+                    logger.debug(f"Smuggle file cleaned up: {file_path.name}")
+                except OSError:
+                    pass
+        else:
+            # Stream file directly from disk (no full memory copy)
+            response.set_file(file_path, content_type)
+
+        # CSP header for HTML responses
+        if content_type and content_type.startswith("text/html"):
+            response.set_header(
+                "Content-Security-Policy",
+                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                "connect-src 'self'",
+            )
 
         return response
 
     def handle_post(self, request: HTTPRequest) -> HTTPResponse:
-        """Обработка POST-запроса - загрузка файлов (как NONE/PUT)."""
+        """Handle POST request — delegates to handle_none (file upload).
+
+        POST, PUT, and NONE all use the same file upload logic.
+        This allows standard HTTP clients to upload without custom methods.
+        """
         return self.handle_none(request)
 
     def handle_options(self, request: HTTPRequest) -> HTTPResponse:
-        """Обработка OPTIONS-запроса для CORS preflight."""
+        """Handle OPTIONS request for CORS preflight."""
         response = HTTPResponse(204)
 
         requested_method = request.headers.get("access-control-request-method", "")
         logger.debug(f"OPTIONS preflight: {requested_method}")
         if requested_method:
             if self.opsec_mode:
-                # В OPSEC режиме не раскрываем кастомные методы
+                # In OPSEC mode, do not expose custom methods
                 allowed = "GET, POST, PUT, OPTIONS"
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
@@ -135,8 +161,8 @@ class FileHandlersMixin(BaseHandler):
         return response
 
     def handle_fetch(self, request: HTTPRequest) -> HTTPResponse:
-        """Кастомный метод FETCH - скачивание файлов."""
-        # В sandbox режиме скачиваем только из uploads
+        """Custom FETCH method — file download."""
+        # In sandbox mode, download only from uploads
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists() or file_path.is_dir():
@@ -150,27 +176,27 @@ class FileHandlersMixin(BaseHandler):
 
         response = HTTPResponse(200)
 
-        with open(file_path, "rb") as f:
-            content = f.read()
-
         content_type, _ = mimetypes.guess_type(str(file_path))
         content_type = content_type or "application/octet-stream"
 
-        logger.debug(f"FETCH {file_path.name} ({len(content)} bytes)")
-        response.set_body(content, content_type)
+        stat = file_path.stat()
+        logger.debug(f"FETCH {file_path.name} ({stat.st_size} bytes)")
+
+        # Stream file directly from disk
+        response.set_file(file_path, content_type)
         response.set_header("Content-Disposition", f'attachment; filename="{file_path.name}"')
         response.set_header("X-Fetch-Status", "success")
         response.set_header("X-File-Name", file_path.name)
-        response.set_header("X-File-Size", str(len(content)))
+        response.set_header("X-File-Size", str(stat.st_size))
         response.set_header(
             "X-File-Modified",
-            datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
+            datetime.fromtimestamp(stat.st_mtime).isoformat()
         )
 
         return response
 
     def handle_none(self, request: HTTPRequest) -> HTTPResponse:
-        """Кастомный метод NONE - загрузка файлов."""
+        """Custom NONE method — file upload."""
         filename = request.headers.get("x-file-name", "")
         if filename:
             filename = unquote(filename)
@@ -181,7 +207,7 @@ class FileHandlersMixin(BaseHandler):
             else:
                 filename = f"upload_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        # Безопасное имя файла
+        # Sanitize filename
         safe_filename = sanitize_filename(filename)
 
         if not request.body:
@@ -199,7 +225,7 @@ class FileHandlersMixin(BaseHandler):
         safe_filename = file_path.name
 
         try:
-            with open(file_path, "wb") as f:
+            with file_path.open("wb") as f:
                 f.write(request.body)
 
             logger.debug(f"Upload: {safe_filename} ({len(request.body)} bytes)")
@@ -223,6 +249,7 @@ class FileHandlersMixin(BaseHandler):
             return response
 
         except Exception as e:
+            file_path.unlink(missing_ok=True)
             logger.error(f"Upload failed: {e}")
             response = HTTPResponse(500)
             response.set_header("X-Upload-Status", "error")

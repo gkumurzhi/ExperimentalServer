@@ -1,25 +1,25 @@
 """
-Обработчик OPSEC загрузки файлов.
+OPSEC file upload handler.
 """
 
-import json
 import base64
 import hashlib
+import json
 import logging
 import secrets
 
 from ..http import HTTPRequest, HTTPResponse
-from ..security.crypto import xor_decrypt, verify_hmac
+from ..security.crypto import decrypt, verify_hmac
 from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
 
 
 class OpsecHandlersMixin(BaseHandler):
-    """Миксин с OPSEC обработчиками."""
+    """Mixin with OPSEC handlers."""
 
     def handle_opsec_upload(self, request: HTTPRequest) -> HTTPResponse:
-        """OPSEC загрузка файлов - скрытый режим."""
+        """OPSEC file upload — covert mode."""
         if not request.body:
             response = HTTPResponse(400)
             response.set_body("", "text/plain")
@@ -38,10 +38,10 @@ class OpsecHandlersMixin(BaseHandler):
                 data_b64 = payload.get("d") or payload.get("data")
                 encryption = payload.get("e")
                 decrypt_key = payload.get("k")
-                key_is_base64 = payload.get("kb64", False)  # Флаг что ключ в base64
-                hmac_value = payload.get("h") or payload.get("hmac")  # HMAC для проверки
+                key_is_base64 = payload.get("kb64", False)  # Key is base64-encoded
+                hmac_value = payload.get("h") or payload.get("hmac")  # HMAC for verification
 
-                # Декодируем ключ из base64 если указан флаг
+                # Decode key from base64 if flag is set
                 if decrypt_key and key_is_base64:
                     decrypt_key = base64.b64decode(decrypt_key).decode("utf-8")
                 if data_b64:
@@ -52,7 +52,7 @@ class OpsecHandlersMixin(BaseHandler):
         if file_data is None:
             file_data = request.body
 
-        # Проверка HMAC если указан
+        # Verify HMAC if provided
         if hmac_value and decrypt_key:
             if not verify_hmac(file_data, decrypt_key, hmac_value):
                 logger.warning("OPSEC HMAC verification failed")
@@ -63,9 +63,11 @@ class OpsecHandlersMixin(BaseHandler):
                 )
                 return response
 
-        # Расшифровываем если указан ключ
-        if encryption == "xor" and decrypt_key:
-            file_data = xor_decrypt(file_data, decrypt_key)
+        # Decrypt if key is provided
+        if encryption and decrypt_key:
+            decrypted = decrypt(file_data, decrypt_key)
+            if decrypted is not None:
+                file_data = decrypted
 
         if not filename:
             data_hash = hashlib.sha256(file_data).hexdigest()[:12]
@@ -84,10 +86,13 @@ class OpsecHandlersMixin(BaseHandler):
                 safe_filename = f"{safe_filename}_{secrets.token_hex(4)}"
             file_path = self.upload_dir / safe_filename
 
-        logger.debug(f"OPSEC upload: {safe_filename}, encrypted={bool(encryption)}, hmac={bool(hmac_value)}")
+        logger.debug(
+            "OPSEC upload: %s, encrypted=%s, hmac=%s",
+            safe_filename, bool(encryption), bool(hmac_value),
+        )
 
         try:
-            with open(file_path, "wb") as f:
+            with file_path.open("wb") as f:
                 f.write(file_data)
 
             response = HTTPResponse(200)
@@ -100,6 +105,7 @@ class OpsecHandlersMixin(BaseHandler):
             return response
 
         except Exception as e:
+            file_path.unlink(missing_ok=True)
             logger.error(f"OPSEC write failed: {e}")
             response = HTTPResponse(500)
             response.set_body(json.dumps({"ok": False}), "application/json")

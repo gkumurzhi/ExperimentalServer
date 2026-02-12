@@ -4,22 +4,62 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
+    <meta name="description" content="HTTP server with custom methods, file upload, OPSEC mode, and HTML smuggling">
+    <meta name="theme-color" content="#1a1a2e">
     <title>Experimental HTTP Server</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='0.9em' font-size='56'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E">
     <script src="/static/crypto-js.min.js" defer></script>
     <style>
+        :root {
+            --color-bg-primary: #1a1a2e;
+            --color-bg-secondary: #16213e;
+            --color-bg-surface: rgba(255, 255, 255, 0.05);
+            --color-bg-input: #0d1117;
+            --color-border: #30363d;
+            --color-border-hover: rgba(255, 255, 255, 0.1);
+            --color-text: #eee;
+            --color-text-muted: #888;
+            --color-text-dimmed: #8a8a8a;
+            --color-text-code: #c9d1d9;
+            --color-accent: #00d4ff;
+            --color-accent-purple: #7b2cbf;
+            --color-success: #4ade80;
+            --color-warning: #facc15;
+            --color-error: #f87171;
+            --color-orange: #f97316;
+            --color-indigo: #6366f1;
+            --color-violet: #8b5cf6;
+            --color-pink: #fb7185;
+            --color-purple: #c084fc;
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-pill: 20px;
+            --radius-circle: 50%;
+            --spacing-xs: 5px;
+            --spacing-sm: 10px;
+            --spacing-md: 15px;
+            --spacing-lg: 20px;
+            --spacing-xl: 30px;
+            --transition-fast: 0.2s ease;
+            --transition-normal: 0.3s ease;
+        }
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
+        button, a, input, label {
+            touch-action: manipulation;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            color: #eee;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+            color: var(--color-text);
             min-height: 100vh;
-            padding: 20px;
+            padding: var(--spacing-lg);
         }
 
         .container {
@@ -33,7 +73,7 @@
         }
 
         h1 {
-            font-size: 2.5rem;
+            font-size: clamp(1.5rem, 5vw + 0.5rem, 2.5rem);
             background: linear-gradient(90deg, #00d4ff, #7b2cbf);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -54,18 +94,12 @@
         }
 
         .method-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 20px;
-            transition: all 0.3s ease;
+            background: var(--color-bg-surface);
+            border: 1px solid var(--color-border-hover);
+            border-radius: var(--radius-md);
+            padding: var(--spacing-lg);
         }
 
-        .method-card:hover {
-            transform: translateY(-5px);
-            border-color: #00d4ff;
-            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
-        }
 
         .method-name {
             font-size: 1.3rem;
@@ -88,9 +122,10 @@
 
         .demo-section {
             background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            padding: 30px;
-            margin-top: 30px;
+            border-radius: var(--radius-md);
+            padding: var(--spacing-xl);
+            margin-top: var(--spacing-xl);
+            min-height: 400px;
         }
 
         h2 {
@@ -105,6 +140,11 @@
             color: #888;
         }
 
+        .tab-content h2 {
+            font-size: 1.2rem;
+            color: #888;
+        }
+
         .demo-buttons {
             display: flex;
             flex-wrap: wrap;
@@ -115,15 +155,18 @@
         button {
             padding: 12px 24px;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             font-size: 1rem;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: transform var(--transition-fast), opacity var(--transition-fast);
             font-weight: 500;
+            min-height: 44px;
         }
 
-        button:hover {
-            transform: scale(1.05);
+        @media (hover: hover) {
+            button:hover {
+                transform: scale(1.05);
+            }
         }
 
         button:focus-visible,
@@ -150,15 +193,18 @@
         .btn-none { background: #f97316; color: #000; }
         .btn-download { background: #6366f1; color: #fff; }
 
+        .btn--sm { padding: 8px 12px; font-size: 0.85rem; }
+        .btn--lg { padding: 14px 32px; font-size: 1.1rem; }
+
         .response-area {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 8px;
+            background: var(--color-bg-input);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
             padding: 20px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.9rem;
             white-space: pre-wrap;
-            word-break: break-all;
+            overflow-wrap: break-word;
             min-height: 150px;
             max-height: 400px;
             overflow-y: auto;
@@ -186,16 +232,16 @@
             flex: 1;
             min-width: 200px;
             padding: 12px 16px;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            background: #0d1117;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-bg-input);
             color: #fff;
             font-size: 1rem;
         }
 
         input[type="text"]:focus {
             outline: none;
-            border-color: #00d4ff;
+            border-color: var(--color-accent);
         }
 
         footer {
@@ -205,16 +251,19 @@
             font-size: 0.9rem;
         }
 
-        .status {
+        .status, .file-status {
             display: inline-block;
             padding: 4px 12px;
-            border-radius: 20px;
+            border-radius: var(--radius-pill);
             font-size: 0.85rem;
-            margin-left: 10px;
         }
 
-        .status.success { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-        .status.error { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+        .status {
+            margin-left: var(--spacing-sm);
+        }
+
+        .status.success, .file-status.success { background: rgba(74, 222, 128, 0.2); color: var(--color-success); }
+        .status.error, .file-status.error { background: rgba(248, 113, 113, 0.2); color: var(--color-error); }
 
         /* Upload section */
         .upload-section {
@@ -224,7 +273,7 @@
             padding: 30px;
             text-align: center;
             margin: 20px 0;
-            transition: all 0.3s ease;
+            transition: background var(--transition-normal), border-color var(--transition-normal);
         }
 
         .upload-section.dragover {
@@ -288,16 +337,8 @@
             font-size: 0.85rem;
         }
 
-        .file-status {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-        }
-
-        .file-status.pending { background: rgba(250, 204, 21, 0.2); color: #facc15; }
-        .file-status.uploading { background: rgba(0, 212, 255, 0.2); color: #00d4ff; }
-        .file-status.success { background: rgba(74, 222, 128, 0.2); color: #4ade80; }
-        .file-status.error { background: rgba(248, 113, 113, 0.2); color: #f87171; }
+        .file-status.pending { background: rgba(250, 204, 21, 0.2); color: var(--color-warning); }
+        .file-status.uploading { background: rgba(0, 212, 255, 0.2); color: var(--color-accent); }
 
         .uploaded-files {
             margin-top: 20px;
@@ -383,23 +424,25 @@
         }
 
         .lang-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
+            background: var(--color-bg-surface);
+            border: 1px solid var(--color-border-hover);
+            border-radius: var(--radius-circle);
+            width: 44px;
+            height: 44px;
             font-size: 1.2rem;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
             padding: 0;
             display: flex;
             align-items: center;
             justify-content: center;
         }
 
-        .lang-btn:hover {
-            transform: scale(1.1);
-            border-color: #00d4ff;
+        @media (hover: hover) {
+            .lang-btn:hover {
+                transform: scale(1.1);
+                border-color: var(--color-accent);
+            }
         }
 
         .lang-btn.active {
@@ -415,8 +458,101 @@
             display: inline-block;
         }
 
-        .telegram-link:hover {
-            color: #00d4ff;
+        @media (hover: hover) {
+            .telegram-link:hover {
+                color: var(--color-accent);
+            }
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: var(--color-bg-primary);
+            padding: var(--spacing-xl);
+            border-radius: var(--radius-md);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            color: var(--color-violet);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+        }
+
+        .modal-actions button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--color-accent);
+            vertical-align: middle;
+        }
+
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
+
+            .demo-section {
+                padding: 20px;
+            }
+
+            header {
+                padding: 20px 0;
+            }
+
+
+            .methods-grid {
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: 10px;
+                margin: 20px 0;
+            }
+
+            .method-card {
+                padding: 12px;
+            }
         }
 
         @media (max-width: 640px) {
@@ -434,6 +570,68 @@
                 flex: 1 1 calc(50% - 6px);
                 text-align: center;
                 white-space: normal;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 8px;
+            }
+
+            .demo-section {
+                padding: 15px;
+            }
+
+            .subtitle {
+                font-size: 0.95rem;
+            }
+
+            .methods-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .upload-section {
+                padding: 20px 15px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            .input-group input[type="text"] {
+                min-width: 0;
+            }
+        }
+
+        @media (max-width: 360px) {
+            body {
+                padding: 6px;
+            }
+
+            .demo-section {
+                padding: 12px;
+            }
+
+            .methods-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .method-card {
+                padding: 10px;
+            }
+
+            .method-name {
+                font-size: 1.1rem;
+            }
+
+            .method-desc {
+                font-size: 0.8rem;
+            }
+
+            button {
+                padding: 10px 16px;
+                font-size: 0.9rem;
             }
         }
     </style>
@@ -479,19 +677,21 @@
             </div>
         </section>
 
+        <main>
         <section class="demo-section">
-            <div class="tabs">
-                <button class="tab active" onclick="switchTab('requests', this)" data-i18n="tabRequests">Запросы</button>
-                <button class="tab" onclick="switchTab('upload', this)" data-i18n="tabUpload">Загрузка файлов</button>
-                <button class="tab" onclick="switchTab('opsec', this)">OPSEC Mode</button>
-                <button class="tab" onclick="switchTab('files', this)" id="filesTabBtn" data-i18n="tabFiles">Файлы на сервере</button>
+            <div class="tabs" role="tablist" aria-label="Server features">
+                <button class="tab active" role="tab" aria-selected="true" aria-controls="requests-tab" id="tab-requests" onclick="switchTab('requests', this)" data-i18n="tabRequests">Запросы</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="upload-tab" id="tab-upload" onclick="switchTab('upload', this)" data-i18n="tabUpload">Загрузка файлов</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" id="tab-opsec" onclick="switchTab('opsec', this)" data-i18n="tabOpsec">OPSEC Mode</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="files-tab" id="tab-files" onclick="switchTab('files', this)" data-i18n="tabFiles">Файлы на сервере</button>
             </div>
 
             <!-- Вкладка запросов -->
-            <div id="requests-tab" class="tab-content active">
-                <h3 data-i18n="sendRequests">Отправка запросов</h3>
+            <div id="requests-tab" class="tab-content active" role="tabpanel" aria-labelledby="tab-requests">
+                <h2 data-i18n="sendRequests">Отправка запросов</h2>
 
                 <div class="input-group">
+                    <label for="pathInput" class="sr-only" data-i18n="labelFilePath">Путь к файлу</label>
                     <input type="text" id="pathInput" data-i18n-placeholder="pathPlaceholder" placeholder="Путь к файлу (например: /index.html)" value="/index.html">
                 </div>
 
@@ -502,21 +702,15 @@
                     <button class="btn-ping" onclick="sendRequest('PING')">PING</button>
                 </div>
 
-                <div class="response-area" id="responseArea">
-                    <div class="response-header">Нажмите на кнопку для отправки запроса...</div>
+                <div class="response-area" id="responseArea" aria-live="polite" data-testid="response-area">
+                    <div class="response-header" data-i18n="clickToSend">Нажмите на кнопку для отправки запроса...</div>
                 </div>
             </div>
 
             <!-- Вкладка загрузки -->
-            <div id="upload-tab" class="tab-content">
-                <h3 data-i18n="uploadFiles">Загрузка файлов</h3>
+            <div id="upload-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-upload">
+                <h2 data-i18n="uploadFiles">Загрузка файлов</h2>
 
-                <div class="demo-buttons" style="margin-bottom: 15px;">
-                    <span style="color: #888; margin-right: 10px;" data-i18n="methodLabel">Метод:</span>
-                    <button class="btn-post method-btn" onclick="selectUploadMethod('POST')" id="methodPostBtn">POST</button>
-                    <button class="btn-info method-btn" onclick="selectUploadMethod('PUT')" id="methodPutBtn" style="background: #8b5cf6;">PUT</button>
-                    <button class="btn-none method-btn active" onclick="selectUploadMethod('NONE')" id="methodNoneBtn">NONE</button>
-                </div>
 
                 <div class="upload-section" id="dropZone">
                     <label class="upload-label" for="fileInput">
@@ -527,92 +721,99 @@
                     <input type="file" id="fileInput" multiple>
                 </div>
 
-                <div class="file-list" id="fileList"></div>
+                <div class="file-list" id="fileList" data-testid="file-list"></div>
 
                 <div class="demo-buttons" style="margin-top: 20px;">
-                    <button class="btn-none" onclick="uploadAllFiles()" id="uploadBtn" disabled data-i18n="uploadAllBtn">Загрузить все файлы</button>
+                    <button class="btn-none" onclick="uploadAllFiles()" id="uploadBtn" disabled data-i18n="uploadAllBtn" data-testid="upload-btn">Загрузить все файлы</button>
                 </div>
 
-                <div class="response-area" id="uploadResponseArea">
-                    <div class="response-header">Выберите файлы для загрузки...</div>
+                <div class="response-area" id="uploadResponseArea" aria-live="polite" data-testid="upload-response-area">
+                    <div class="response-header" data-i18n="selectFilesToUpload">Выберите файлы для загрузки...</div>
                 </div>
             </div>
 
             <!-- Вкладка OPSEC -->
-            <div id="opsec-tab" class="tab-content">
-                <h3>OPSEC Mode - Скрытая загрузка</h3>
-                <p style="color: #888; margin-bottom: 20px;">
+            <div id="opsec-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-opsec">
+                <h2 data-i18n="opsecTitle">OPSEC Mode - Скрытая загрузка</h2>
+                <p style="color: #888; margin-bottom: 20px;" data-i18n="opsecDesc">
                     Загрузка файлов без раскрытия имени в URL/заголовках. Используются случайные HTTP методы.
+                </p>
+                <p id="opsecModeWarning" style="display: none; color: #f97316; background: rgba(249, 115, 22, 0.1); border: 1px solid rgba(249, 115, 22, 0.3); border-radius: 8px; padding: 12px; margin-bottom: 20px; font-size: 0.9rem;" data-i18n="opsecWarning">
+                    ⚠ Сервер запущен без флага --opsec. OPSEC-загрузка может не работать.
                 </p>
 
                 <div class="input-group">
-                    <input type="text" id="opsecMethodInput" placeholder="HTTP метод (любой, например: CHECKDATA)" value="">
+                    <label for="opsecMethodInput" class="sr-only">HTTP Method</label>
+                    <input type="text" id="opsecMethodInput" data-i18n-placeholder="opsecMethodPlaceholder" placeholder="HTTP метод (любой, например: CHECKDATA)" value="">
                     <button class="btn-info" onclick="generateRandomMethod()" style="background: #6366f1;">Random</button>
                 </div>
 
                 <div class="upload-section" id="opsecDropZone" style="border-color: #6366f1; background: rgba(99, 102, 241, 0.1);">
                     <label class="upload-label" for="opsecFileInput">
                         <div class="upload-icon">🔒</div>
-                        <div class="upload-text">OPSEC Upload - имя файла скрыто</div>
-                        <div class="upload-hint">Данные кодируются в base64, путь не содержит имени файла</div>
+                        <div class="upload-text" data-i18n="opsecUploadText">OPSEC Upload - имя файла скрыто</div>
+                        <div class="upload-hint" data-i18n="opsecUploadHint">Данные кодируются в base64, путь не содержит имени файла</div>
                     </label>
                     <input type="file" id="opsecFileInput">
                 </div>
 
                 <div class="input-group" style="margin-top: 15px;">
                     <label style="color: #888; margin-right: 10px;">
-                        <input type="checkbox" id="opsecIncludeName"> Включить имя файла (менее скрытно)
+                        <input type="checkbox" id="opsecIncludeName"> <span data-i18n="opsecIncludeName">Включить имя файла (менее скрытно)</span>
                     </label>
                 </div>
 
                 <div class="input-group" style="margin-top: 15px;">
                     <label style="color: #888; margin-right: 10px;">
-                        <input type="checkbox" id="opsecEncrypt"> Шифровать XOR
+                        <input type="checkbox" id="opsecEncrypt"> <span data-i18n="opsecEncryptXor">Шифровать XOR</span>
                     </label>
-                    <input type="password" id="opsecPassword" placeholder="Пароль для XOR-шифрования" style="flex: 1; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #fff;" disabled>
+                    <label for="opsecPassword" class="sr-only">XOR Password</label>
+                    <input type="password" id="opsecPassword" data-i18n-placeholder="opsecPasswordPlaceholder" placeholder="Пароль для XOR-шифрования" style="flex: 1; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; color: #fff;" disabled>
                 </div>
 
                 <div class="input-group" style="margin-top: 10px; margin-left: 25px;">
                     <label style="color: #8a8a8a; font-size: 0.9rem;">
-                        <input type="checkbox" id="opsecSendKey"> Отправить ключ на сервер (автоматическая расшифровка)
+                        <input type="checkbox" id="opsecSendKey"> <span data-i18n="opsecSendKey">Отправить ключ на сервер (автоматическая расшифровка)</span>
                     </label>
                 </div>
 
                 <div class="input-group" style="margin-top: 5px; margin-left: 45px;">
                     <label style="color: #8a8a8a; font-size: 0.85rem;">
-                        <input type="checkbox" id="opsecKeyBase64" disabled> Кодировать ключ в Base64
+                        <input type="checkbox" id="opsecKeyBase64" disabled> <span data-i18n="opsecKeyBase64">Кодировать ключ в Base64</span>
                     </label>
                 </div>
 
                 <div class="demo-buttons" style="margin-top: 20px;">
-                    <button style="background: #6366f1; color: #fff;" onclick="opsecUpload()" id="opsecUploadBtn" disabled>
+                    <button style="background: #6366f1; color: #fff;" onclick="opsecUpload()" id="opsecUploadBtn" disabled data-i18n="opsecUploadBtn" data-testid="opsec-upload-btn">
                         Загрузить (OPSEC)
                     </button>
                 </div>
 
-                <div class="response-area" id="opsecResponseArea">
-                    <div class="response-header">Выберите файл для скрытой загрузки...</div>
+                <div class="response-area" id="opsecResponseArea" aria-live="polite" data-testid="opsec-response-area">
+                    <div class="response-header" data-i18n="opsecSelectFile">Выберите файл для скрытой загрузки...</div>
                 </div>
             </div>
 
             <!-- Вкладка файлов -->
-            <div id="files-tab" class="tab-content">
-                <h3 data-i18n="serverFiles">Файлы на сервере</h3>
+            <div id="files-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-files">
+                <h2 data-i18n="serverFiles">Файлы на сервере</h2>
 
                 <div class="input-group">
                     <button class="btn-fetch" onclick="goToRoot()" style="padding: 12px 16px;">/</button>
                     <button class="btn-ping" onclick="goUp()" style="padding: 12px 16px;">..</button>
+                    <label for="browsePathInput" class="sr-only" data-i18n="labelDirPath">Путь к директории</label>
                     <input type="text" id="browsePathInput" data-i18n-placeholder="dirPathPlaceholder" placeholder="Путь к директории" value="/">
                     <button class="btn-info" onclick="browseDirectory()" data-i18n="browseBtn">Обзор (INFO)</button>
                 </div>
 
-                <div class="uploaded-files" id="serverFiles"></div>
+                <div class="uploaded-files" id="serverFiles" data-testid="server-files"></div>
 
-                <div class="response-area" id="filesResponseArea">
-                    <div class="response-header">Нажмите "Обзор" для просмотра файлов...</div>
+                <div class="response-area" id="filesResponseArea" aria-live="polite" data-testid="files-response-area">
+                    <div class="response-header" data-i18n="clickBrowse">Нажмите "Обзор" для просмотра файлов...</div>
                 </div>
             </div>
         </section>
+        </main>
 
         <footer>
             <p>Experimental HTTP Server v2.0</p>
@@ -637,7 +838,10 @@
                 tabRequests: "Запросы",
                 tabUpload: "Загрузка файлов",
                 tabFiles: "Файлы на сервере",
+                tabOpsec: "OPSEC Mode",
                 sendRequests: "Отправка запросов",
+                labelFilePath: "Путь к файлу",
+                labelDirPath: "Путь к директории",
                 pathPlaceholder: "Путь к файлу (например: /index.html)",
                 uploadFiles: "Загрузка файлов",
                 methodLabel: "Метод:",
@@ -654,7 +858,68 @@
                 clickToSend: "Нажмите на кнопку для отправки запроса...",
                 selectFilesToUpload: "Выберите файлы для загрузки...",
                 clickBrowse: "Нажмите \"Обзор\" для просмотра файлов...",
-                uploadViaMethod: "Файлы будут загружены через метод"
+                uploadViaMethod: "Файлы будут загружены через метод",
+                networkError: "Ошибка сети — сервер недоступен",
+                timeoutError: "Тайм-аут — превышено время ожидания",
+                parseError: "Ошибка парсинга",
+                error: "Ошибка",
+                uploadStarting: "Начинаем загрузку...",
+                uploadComplete: "Загрузка завершена",
+                successCount: "успешно",
+                errorCount: "ошибок",
+                sendingRequest: "Отправка",
+                requestTo: "запроса на",
+                headers: "Заголовки",
+                headersNA: "(не доступны)",
+                responseBody: "Тело ответа",
+                time: "Время",
+                download: "Скачать",
+                loadingInfo: "Загрузка информации о",
+                open: "Открыть",
+                opsecTitle: "OPSEC Mode - Скрытая загрузка",
+                opsecDesc: "Загрузка файлов без раскрытия имени в URL/заголовках. Используются случайные HTTP методы.",
+                opsecMethodPlaceholder: "HTTP метод (любой, например: CHECKDATA)",
+                opsecUploadText: "OPSEC Upload - имя файла скрыто",
+                opsecUploadHint: "Данные кодируются в base64, путь не содержит имени файла",
+                opsecIncludeName: "Включить имя файла (менее скрытно)",
+                opsecEncryptXor: "Шифровать XOR",
+                opsecPasswordPlaceholder: "Пароль для XOR-шифрования",
+                opsecSendKey: "Отправить ключ на сервер (автоматическая расшифровка)",
+                opsecKeyBase64: "Кодировать ключ в Base64",
+                opsecUploadBtn: "Загрузить (OPSEC)",
+                opsecSelectFile: "Выберите файл для скрытой загрузки...",
+                opsecFileSelected: "Файл выбран",
+                opsecPasswordRequired: "Ошибка: введите пароль для шифрования",
+                opsecUploading: "Загрузка через метод",
+                opsecXorEncryption: "XOR шифрование",
+                opsecSuccess: "OPSEC Upload успешен",
+                opsecUploaded: "Загружено",
+                opsecId: "ID",
+                opsecSize: "Размер",
+                opsecBytes: "байт",
+                opsecMethodRandom: "(случайный)",
+                opsecPathNoName: "(не содержит имя файла)",
+                opsecNameInReq: "Имя в запросе",
+                opsecYes: "да",
+                opsecNoHidden: "нет (скрыто)",
+                opsecEncryption: "Шифрование",
+                opsecNone: "нет",
+                opsecXorDecrypted: "XOR (расшифровано на сервере",
+                opsecKeyInBase64: ", ключ в base64",
+                opsecXorEncrypted: "XOR (файл зашифрован)",
+                smuggleTitle: "HTML Smuggling",
+                smuggleFile: "Файл",
+                smuggleProtect: "Защитить паролем (XOR)",
+                smuggleProtectHint: "Пароль будет сгенерирован сервером",
+                smuggleOpen: "Открыть",
+                smuggleCancel: "Отмена",
+                smuggleGenerated: "HTML сгенерирован",
+                smuggleEncrypted: "Зашифрован",
+                smuggleYes: "Да (XOR)",
+                smuggleNo: "Нет",
+                smuggleOpened: "HTML страница открыта в новой вкладке.",
+                opsecWarning: "⚠ Сервер запущен без флага --opsec. OPSEC-загрузка может не работать.",
+                viewInFiles: "Посмотреть в файлах →"
             },
             en: {
                 subtitle: "HTTP server with custom method support",
@@ -668,7 +933,10 @@
                 tabRequests: "Requests",
                 tabUpload: "File Upload",
                 tabFiles: "Server Files",
+                tabOpsec: "OPSEC Mode",
                 sendRequests: "Send Requests",
+                labelFilePath: "File path",
+                labelDirPath: "Directory path",
                 pathPlaceholder: "File path (e.g.: /index.html)",
                 uploadFiles: "File Upload",
                 methodLabel: "Method:",
@@ -685,7 +953,68 @@
                 clickToSend: "Click a button to send a request...",
                 selectFilesToUpload: "Select files to upload...",
                 clickBrowse: "Click \"Browse\" to view files...",
-                uploadViaMethod: "Files will be uploaded via method"
+                uploadViaMethod: "Files will be uploaded via method",
+                networkError: "Network error — server unavailable",
+                timeoutError: "Timeout — request took too long",
+                parseError: "Parse error",
+                error: "Error",
+                uploadStarting: "Starting upload...",
+                uploadComplete: "Upload complete",
+                successCount: "successful",
+                errorCount: "errors",
+                sendingRequest: "Sending",
+                requestTo: "request to",
+                headers: "Headers",
+                headersNA: "(not available)",
+                responseBody: "Response body",
+                time: "Time",
+                download: "Download",
+                loadingInfo: "Loading info for",
+                open: "Open",
+                opsecTitle: "OPSEC Mode - Covert Upload",
+                opsecDesc: "Upload files without revealing names in URL/headers. Random HTTP methods are used.",
+                opsecMethodPlaceholder: "HTTP method (any, e.g.: CHECKDATA)",
+                opsecUploadText: "OPSEC Upload - filename hidden",
+                opsecUploadHint: "Data is base64-encoded, path does not contain filename",
+                opsecIncludeName: "Include filename (less covert)",
+                opsecEncryptXor: "Encrypt with XOR",
+                opsecPasswordPlaceholder: "Password for XOR encryption",
+                opsecSendKey: "Send key to server (auto-decrypt)",
+                opsecKeyBase64: "Encode key in Base64",
+                opsecUploadBtn: "Upload (OPSEC)",
+                opsecSelectFile: "Select a file for covert upload...",
+                opsecFileSelected: "File selected",
+                opsecPasswordRequired: "Error: enter a password for encryption",
+                opsecUploading: "Uploading via method",
+                opsecXorEncryption: "XOR encryption",
+                opsecSuccess: "OPSEC Upload successful",
+                opsecUploaded: "Uploaded",
+                opsecId: "ID",
+                opsecSize: "Size",
+                opsecBytes: "bytes",
+                opsecMethodRandom: "(random)",
+                opsecPathNoName: "(does not contain filename)",
+                opsecNameInReq: "Name in request",
+                opsecYes: "yes",
+                opsecNoHidden: "no (hidden)",
+                opsecEncryption: "Encryption",
+                opsecNone: "none",
+                opsecXorDecrypted: "XOR (decrypted on server",
+                opsecKeyInBase64: ", key in base64",
+                opsecXorEncrypted: "XOR (file encrypted)",
+                smuggleTitle: "HTML Smuggling",
+                smuggleFile: "File",
+                smuggleProtect: "Protect with password (XOR)",
+                smuggleProtectHint: "Password will be generated by server",
+                smuggleOpen: "Open",
+                smuggleCancel: "Cancel",
+                smuggleGenerated: "HTML generated",
+                smuggleEncrypted: "Encrypted",
+                smuggleYes: "Yes (XOR)",
+                smuggleNo: "No",
+                smuggleOpened: "HTML page opened in new tab.",
+                opsecWarning: "⚠ Server started without --opsec flag. OPSEC upload may not work.",
+                viewInFiles: "View in Files →"
             }
         };
 
@@ -735,6 +1064,13 @@
             updateLangButtons();
         });
 
+        // HTML escape helper (XSS prevention)
+        function esc(str) {
+            const div = document.createElement('div');
+            div.textContent = String(str);
+            return div.innerHTML;
+        }
+
         // Базовый URL сервера (если страница открыта не с нашего сервера)
         const SERVER_URL = '';
 
@@ -743,6 +1079,7 @@
 
         // Sandbox mode flag
         let isSandboxMode = false;
+        let isOpsecMode = false;
 
         // Проверяем режим сервера при загрузке страницы
         async function checkServerMode() {
@@ -754,11 +1091,18 @@
                 if (info.sandbox_mode) {
                     isSandboxMode = true;
                     document.getElementById('sandboxIndicator').style.display = 'block';
-                    // В sandbox режиме начинаем с корня (который теперь uploads)
                     document.getElementById('browsePathInput').value = '/';
                 }
 
-                // В OPSEC режиме ссылка на телеграм удаляется на сервере
+                if (info.opsec_mode) {
+                    isOpsecMode = true;
+                }
+
+                // Show warning on OPSEC tab if server not in OPSEC mode
+                if (!info.opsec_mode) {
+                    const opsecWarning = document.getElementById('opsecModeWarning');
+                    if (opsecWarning) opsecWarning.style.display = 'block';
+                }
             } catch (e) {
                 console.log('Could not check server mode:', e);
             }
@@ -769,25 +1113,64 @@
 
         // Переключение вкладок
         function switchTab(tabName, tabButton) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab[role="tab"]').forEach(t => {
+                t.classList.remove('active');
+                t.setAttribute('aria-selected', 'false');
+            });
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
             if (tabButton) {
                 tabButton.classList.add('active');
+                tabButton.setAttribute('aria-selected', 'true');
             }
             document.getElementById(tabName + '-tab').classList.add('active');
+
+            // Update URL hash
+            history.replaceState(null, '', '#' + tabName);
 
             if (tabName === 'files') {
                 setTimeout(browseDirectory, 100);
             }
         }
 
+        // Restore tab from URL hash on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const hash = location.hash.replace('#', '');
+            if (hash && document.getElementById(hash + '-tab')) {
+                const tabBtn = document.getElementById('tab-' + hash);
+                if (tabBtn) switchTab(hash, tabBtn);
+            }
+        });
+
+        // Arrow key navigation for tabs (WAI-ARIA tab pattern)
+        document.querySelector('[role="tablist"]').addEventListener('keydown', (e) => {
+            const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+            const currentIndex = tabs.indexOf(document.activeElement);
+            if (currentIndex === -1) return;
+
+            let newIndex;
+            if (e.key === 'ArrowRight') {
+                newIndex = (currentIndex + 1) % tabs.length;
+            } else if (e.key === 'ArrowLeft') {
+                newIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+            } else if (e.key === 'Home') {
+                newIndex = 0;
+            } else if (e.key === 'End') {
+                newIndex = tabs.length - 1;
+            } else {
+                return;
+            }
+            e.preventDefault();
+            tabs[newIndex].focus();
+            tabs[newIndex].click();
+        });
+
         // ===== Отправка запросов =====
         async function sendRequest(method) {
             const path = document.getElementById('pathInput').value || '/';
             const responseArea = document.getElementById('responseArea');
 
-            responseArea.innerHTML = `<div class="response-header">Отправка ${method} запроса на ${path}...</div>`;
+            responseArea.innerHTML = `<div class="response-header">${t('sendingRequest')} ${esc(method)} ${t('requestTo')} ${esc(path)}...</div>`;
 
             try {
                 const startTime = performance.now();
@@ -817,28 +1200,28 @@
 
                 responseArea.innerHTML = `
 <div class="response-header">
-${method} ${path}
-<span class="status ${statusClass}">${response.status} ${response.statusText || ''}</span>
-Время: ${duration}ms
+${esc(method)} ${esc(path)}
+<span class="status ${statusClass}">${response.status} ${esc(response.statusText || '')}</span>
+${t('time')}: ${duration}ms
 </div>
-<div class="response-body">--- Заголовки ---
-${headersText || '(не доступны)'}
---- Тело ответа ---
-${bodyDisplay}</div>`;
+<div class="response-body">--- ${t('headers')} ---
+${esc(headersText || t('headersNA'))}
+--- ${t('responseBody')} ---
+${esc(bodyDisplay)}</div>`;
 
                 // Если это FETCH, предложим скачать файл
                 if (method === 'FETCH' && response.status === 200) {
                     const filename = response.headers['x-file-name'] || 'download';
-                    responseArea.innerHTML += `\n\n<button class="btn-download" onclick="downloadFile('${path}')">Скачать ${filename}</button>`;
+                    responseArea.innerHTML += `\n\n<button class="btn-download" onclick="downloadFile('${esc(path)}')">${t('download')} ${esc(filename)}</button>`;
                 }
 
             } catch (error) {
                 responseArea.innerHTML = `
 <div class="response-header">
-${method} ${path}
-<span class="status error">Ошибка</span>
+${esc(method)} ${esc(path)}
+<span class="status error">${t('error')}</span>
 </div>
-<div class="response-body">${error.message}</div>`;
+<div class="response-body">${esc(error.message)}</div>`;
             }
         }
 
@@ -876,8 +1259,8 @@ ${method} ${path}
                     });
                 };
 
-                xhr.onerror = () => reject(new Error('Network error - сервер недоступен'));
-                xhr.ontimeout = () => reject(new Error('Timeout - превышено время ожидания'));
+                xhr.onerror = () => reject(new Error(t('networkError')));
+                xhr.ontimeout = () => reject(new Error(t('timeoutError')));
 
                 if (body) {
                     xhr.send(body);
@@ -913,18 +1296,7 @@ ${method} ${path}
         }
 
         // ===== Загрузка файлов =====
-        let uploadMethod = 'NONE';  // Текущий метод загрузки
-
-        function selectUploadMethod(method) {
-            uploadMethod = method;
-
-            // Обновляем активную кнопку
-            document.querySelectorAll('.method-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`method${method === 'PUT' ? 'Put' : method.charAt(0) + method.slice(1).toLowerCase()}Btn`).classList.add('active');
-
-            // Обновляем подсказку
-            document.getElementById('uploadMethodHint').textContent = `${t('uploadViaMethod')} ${method}`;
-        }
+        const uploadMethod = 'NONE';
 
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -974,16 +1346,26 @@ ${method} ${path}
             return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
         }
 
+        let renderFileListRAF = null;
+        function scheduleRenderFileList() {
+            if (!renderFileListRAF) {
+                renderFileListRAF = requestAnimationFrame(() => {
+                    renderFileListRAF = null;
+                    renderFileList();
+                });
+            }
+        }
+
         function renderFileList() {
             fileList.innerHTML = filesToUpload.map((f, i) => `
-                <div class="file-item">
+                <div class="file-item" data-testid="file-item-${i}">
                     <div class="file-info">
-                        <span class="file-name">${f.name}</span>
+                        <span class="file-name">${esc(f.name)}</span>
                         <span class="file-size">${formatSize(f.size)}</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px;">
                         <span class="file-status ${f.status}">${getStatusText(f.status)}</span>
-                        ${f.status === 'pending' ? `<button onclick="removeFile(${i})" style="background: #f87171; padding: 5px 10px; font-size: 0.8rem;">✕</button>` : ''}
+                        ${f.status === 'pending' ? `<button class="btn--sm" onclick="removeFile(${i})" style="background: #f87171; padding: 5px 10px;">✕</button>` : ''}
                     </div>
                 </div>
                 ${f.status === 'uploading' ? `<div class="progress-bar"><div class="progress-fill" style="width: ${f.progress || 0}%"></div></div>` : ''}
@@ -1008,7 +1390,7 @@ ${method} ${path}
 
         async function uploadAllFiles() {
             const uploadResponseArea = document.getElementById('uploadResponseArea');
-            uploadResponseArea.innerHTML = '<div class="response-header">Начинаем загрузку...</div>';
+            uploadResponseArea.innerHTML = `<div class="response-header">${t('uploadStarting')}</div>`;
             uploadBtn.disabled = true;
 
             const results = [];
@@ -1041,7 +1423,7 @@ ${method} ${path}
                                 return;
                             }
                             fileData.progress = Math.round((event.loaded / event.total) * 100);
-                            renderFileList();
+                            scheduleRenderFileList();
                         }
                     );
 
@@ -1054,7 +1436,7 @@ ${method} ${path}
                     try {
                         result = JSON.parse(text);
                     } catch (parseError) {
-                        result = { success: false, error: `Ошибка парсинга: ${text.substring(0, 100)}` };
+                        result = { success: false, error: t('parseError') + ': ' + text.substring(0, 100) };
                     }
 
                     if ((response.status === 200 || response.status === 201) && result.success) {
@@ -1083,14 +1465,15 @@ ${method} ${path}
 
             uploadResponseArea.innerHTML = `
 <div class="response-header">
-Загрузка завершена
-<span class="status ${failCount === 0 ? 'success' : 'error'}">${successCount} успешно, ${failCount} ошибок</span>
+${t('uploadComplete')}
+<span class="status ${failCount === 0 ? 'success' : 'error'}">${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}</span>
 </div>
 <div class="response-body">${results.map(r =>
     r.success
-        ? `✓ ${r.name} -> ${r.path}`
-        : `✗ ${r.name}: ${r.error}`
-).join('\n')}</div>`;
+        ? `✓ ${esc(r.name)} -> ${esc(r.path)}`
+        : `✗ ${esc(r.name)}: ${esc(r.error)}`
+).join('\n')}</div>
+${successCount > 0 ? `<button class="btn-info btn--sm" onclick="switchTab('files', document.getElementById('tab-files'))" style="margin-top: 10px;">${t('viewInFiles')}</button>` : ''}`;
 
             // Очищаем успешно загруженные файлы
             filesToUpload = filesToUpload.filter(f => f.status !== 'success');
@@ -1130,7 +1513,7 @@ ${method} ${path}
             const filesResponseArea = document.getElementById('filesResponseArea');
             const serverFiles = document.getElementById('serverFiles');
 
-            filesResponseArea.innerHTML = `<div class="response-header">Загрузка информации о ${path}...</div>`;
+            filesResponseArea.innerHTML = `<div class="response-header">${t('loadingInfo')} ${esc(path)}...</div>`;
 
             try {
                 const response = await sendCustomRequest('INFO', SERVER_URL + path);
@@ -1140,20 +1523,20 @@ ${method} ${path}
                 if (info.is_directory && info.contents) {
                     const basePath = path === '/' ? '' : path;
                     serverFiles.innerHTML = info.contents.map(item => {
-                        const itemPath = (basePath + '/' + item.name).replace(/'/g, "\\'");
+                        const itemPath = (basePath + '/' + item.name).replace(/'/g, "\\'").replace(/</g, '&lt;');
                         return `
                         <div class="uploaded-file">
                             <div class="file-info">
                                 <span style="font-size: 1.2rem">${item.is_dir ? '📁' : '📄'}</span>
-                                <span class="file-name">${item.name}</span>
+                                <span class="file-name">${esc(item.name)}</span>
                             </div>
                             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                                 ${!item.is_dir ? `
-                                    <button class="btn-info" onclick="getFileInfo('${itemPath}')" style="padding: 8px 12px; font-size: 0.85rem;">INFO</button>
-                                    <button class="btn-fetch" onclick="downloadFile('${itemPath}')" style="padding: 8px 12px; font-size: 0.85rem;">FETCH</button>
-                                    <button onclick="showSmuggleDialog('${itemPath}')" style="padding: 8px 12px; font-size: 0.85rem; background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer;">SMUGGLE</button>
+                                    <button class="btn-info btn--sm" onclick="getFileInfo('${itemPath}')">INFO</button>
+                                    <button class="btn-fetch btn--sm" onclick="downloadFile('${itemPath}')">FETCH</button>
+                                    <button class="btn--sm" onclick="showSmuggleDialog('${itemPath}')" style="background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer;">SMUGGLE</button>
                                 ` : `
-                                    <button class="btn-info" onclick="document.getElementById('browsePathInput').value='${itemPath}'; browseDirectory();" style="padding: 8px 12px; font-size: 0.85rem;">Открыть</button>
+                                    <button class="btn-info btn--sm" onclick="document.getElementById('browsePathInput').value='${itemPath}'; browseDirectory();">${t('open')}</button>
                                 `}
                             </div>
                         </div>
@@ -1162,21 +1545,21 @@ ${method} ${path}
                     serverFiles.innerHTML = '';
                 }
 
-                const sandboxNote = info.sandbox_mode ? '\n--- SANDBOX MODE: доступ только к uploads/ ---\n' : '';
+                const sandboxNote = info.sandbox_mode ? '\n--- ' + t('sandboxMode') + ' ---\n' : '';
                 filesResponseArea.innerHTML = `
 <div class="response-header">
 INFO ${path}
 <span class="status success">200 OK</span>${info.sandbox_mode ? ' <span style="color: #f97316;">[SANDBOX]</span>' : ''}
 </div>
-<div class="response-body">${sandboxNote}${JSON.stringify(info, null, 2)}</div>`;
+<div class="response-body">${esc(sandboxNote)}${esc(JSON.stringify(info, null, 2))}</div>`;
 
             } catch (error) {
                 filesResponseArea.innerHTML = `
 <div class="response-header">
 INFO ${path}
-<span class="status error">Ошибка</span>
+<span class="status error">${t('error')}</span>
 </div>
-<div class="response-body">${error.message}</div>`;
+<div class="response-body">${esc(error.message)}</div>`;
             }
         }
 
@@ -1246,7 +1629,7 @@ INFO ${path}
                 opsecFile = opsecFileInput.files[0];
                 opsecUploadBtn.disabled = false;
                 document.getElementById('opsecResponseArea').innerHTML = `
-                    <div class="response-header">Файл выбран: ${opsecFile.name} (${formatSize(opsecFile.size)})</div>
+                    <div class="response-header">${esc(t('opsecFileSelected'))}: ${esc(opsecFile.name)} (${formatSize(opsecFile.size)})</div>
                 `;
             }
         });
@@ -1267,7 +1650,7 @@ INFO ${path}
                 opsecFile = e.dataTransfer.files[0];
                 opsecUploadBtn.disabled = false;
                 document.getElementById('opsecResponseArea').innerHTML = `
-                    <div class="response-header">Файл выбран: ${opsecFile.name} (${formatSize(opsecFile.size)})</div>
+                    <div class="response-header">${esc(t('opsecFileSelected'))}: ${esc(opsecFile.name)} (${formatSize(opsecFile.size)})</div>
                 `;
             }
         });
@@ -1283,11 +1666,11 @@ INFO ${path}
 
             // Validate password if encryption is enabled
             if (useEncryption && !password) {
-                responseArea.innerHTML = `<div class="response-header"><span class="status error">Ошибка: введите пароль для шифрования</span></div>`;
+                responseArea.innerHTML = `<div class="response-header"><span class="status error">${esc(t('opsecPasswordRequired'))}</span></div>`;
                 return;
             }
 
-            responseArea.innerHTML = `<div class="response-header">Загрузка через метод ${method}${useEncryption ? ' (XOR шифрование)' : ''}...</div>`;
+            responseArea.innerHTML = `<div class="response-header">${esc(t('opsecUploading'))} ${esc(method)}${useEncryption ? ' (' + esc(t('opsecXorEncryption')) + ')' : ''}...</div>`;
             opsecUploadBtn.disabled = true;
 
             try {
@@ -1350,35 +1733,35 @@ INFO ${path}
                 if (result.ok) {
                     responseArea.innerHTML = `
 <div class="response-header">
-${method} ${randomPath}
-<span class="status success">Загружено</span>
+${esc(method)} ${esc(randomPath)}
+<span class="status success">${esc(t('opsecUploaded'))}</span>
 </div>
-<div class="response-body">--- OPSEC Upload успешен ---
-ID: ${result.id}
-Размер: ${result.sz} байт
+<div class="response-body">--- ${esc(t('opsecSuccess'))} ---
+${esc(t('opsecId'))}: ${esc(result.id)}
+${esc(t('opsecSize'))}: ${esc(result.sz)} ${esc(t('opsecBytes'))}
 
-Метод: ${method} (случайный)
-Путь: ${randomPath} (не содержит имя файла)
-Имя в запросе: ${includeName ? 'да' : 'нет (скрыто)'}
-Шифрование: ${useEncryption ? (sendKeyToServer ? 'XOR (расшифровано на сервере' + (encodeKeyBase64 ? ', ключ в base64' : '') + ')' : 'XOR (файл зашифрован)') : 'нет'}
+${t('methodLabel')} ${esc(method)} ${esc(t('opsecMethodRandom'))}
+Path: ${esc(randomPath)} ${esc(t('opsecPathNoName'))}
+${esc(t('opsecNameInReq'))}: ${includeName ? esc(t('opsecYes')) : esc(t('opsecNoHidden'))}
+${esc(t('opsecEncryption'))}: ${useEncryption ? (sendKeyToServer ? esc(t('opsecXorDecrypted')) + (encodeKeyBase64 ? esc(t('opsecKeyInBase64')) : '') + ')' : esc(t('opsecXorEncrypted'))) : esc(t('opsecNone'))}
 </div>`;
                     // Генерируем новый случайный метод для следующей загрузки
                     generateRandomMethod();
                 } else {
                     responseArea.innerHTML = `
 <div class="response-header">
-${method} ${randomPath}
-<span class="status error">Ошибка</span>
+${esc(method)} ${esc(randomPath)}
+<span class="status error">${t('error')}</span>
 </div>
-<div class="response-body">${result.error || 'Unknown error'}</div>`;
+<div class="response-body">${esc(result.error || 'Unknown error')}</div>`;
                 }
             } catch (error) {
                 console.error('[OPSEC] Error:', error);
                 responseArea.innerHTML = `
 <div class="response-header">
-<span class="status error">Ошибка</span>
+<span class="status error">${t('error')}</span>
 </div>
-<div class="response-body">${error.message}</div>`;
+<div class="response-body">${esc(error.message)}</div>`;
             }
 
             opsecUploadBtn.disabled = false;
@@ -1386,23 +1769,24 @@ ${method} ${randomPath}
 
         // ===== HTML Smuggling =====
         function showSmuggleDialog(filePath) {
-            // Создаём модальное окно
+            // Clean up existing modal if any (prevent DOM leak)
+            closeSmuggleDialog();
             const modal = document.createElement('div');
             modal.id = 'smuggleModal';
             modal.innerHTML = `
-                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;">
-                    <div style="background: #1a1a2e; padding: 30px; border-radius: 12px; max-width: 400px; width: 90%;">
-                        <h3 style="color: #8b5cf6; margin-bottom: 15px;">HTML Smuggling</h3>
-                        <p style="color: #888; margin-bottom: 15px; font-size: 0.9rem;">Файл: ${filePath}</p>
-                        <div style="margin-bottom: 15px;">
-                            <label style="color: #888; font-size: 0.9rem;">
-                                <input type="checkbox" id="smuggleEncrypt"> Защитить паролем (XOR)
+                <div class="modal-overlay">
+                    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="smuggleDialogTitle">
+                        <h3 id="smuggleDialogTitle">${t('smuggleTitle')}</h3>
+                        <p style="color: var(--color-text-muted); margin-bottom: var(--spacing-md); font-size: 0.9rem;">${t('smuggleFile')}: ${esc(filePath)}</p>
+                        <div style="margin-bottom: var(--spacing-md);">
+                            <label style="color: var(--color-text-muted); font-size: 0.9rem;">
+                                <input type="checkbox" id="smuggleEncrypt"> ${t('smuggleProtect')}
                             </label>
-                            <p style="color: #8a8a8a; font-size: 0.8rem; margin-top: 5px;">Пароль будет сгенерирован сервером</p>
+                            <p style="color: var(--color-text-dimmed); font-size: 0.8rem; margin-top: var(--spacing-xs);">${t('smuggleProtectHint')}</p>
                         </div>
-                        <div style="display: flex; gap: 10px;">
-                            <button id="smuggleSubmitBtn" style="flex: 1; padding: 12px; background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Открыть</button>
-                            <button id="smuggleCancelBtn" style="flex: 1; padding: 12px; background: #30363d; color: #fff; border: none; border-radius: 8px; cursor: pointer;">Отмена</button>
+                        <div class="modal-actions">
+                            <button id="smuggleSubmitBtn" style="background: var(--color-violet); color: #fff;">${t('smuggleOpen')}</button>
+                            <button id="smuggleCancelBtn" style="background: var(--color-border); color: #fff; font-weight: normal;">${t('smuggleCancel')}</button>
                         </div>
                     </div>
                 </div>
@@ -1412,6 +1796,24 @@ ${method} ${randomPath}
             // Обработчики кнопок
             document.getElementById('smuggleSubmitBtn').onclick = () => executeSmuggle(filePath);
             document.getElementById('smuggleCancelBtn').onclick = closeSmuggleDialog;
+
+            // Close on Escape or overlay click, focus trap
+            modal.querySelector('.modal-overlay').addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal-overlay')) closeSmuggleDialog();
+            });
+            const keyHandler = (e) => {
+                if (e.key === 'Escape') { closeSmuggleDialog(); document.removeEventListener('keydown', keyHandler); return; }
+                if (e.key === 'Tab') {
+                    const focusable = modal.querySelectorAll('input, button');
+                    const first = focusable[0], last = focusable[focusable.length - 1];
+                    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+                    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+                }
+            };
+            document.addEventListener('keydown', keyHandler);
+
+            // Focus the submit button
+            document.getElementById('smuggleSubmitBtn').focus();
         }
 
         function closeSmuggleDialog() {
@@ -1444,19 +1846,21 @@ ${method} ${randomPath}
                     const filesResponseArea = document.getElementById('filesResponseArea');
                     filesResponseArea.innerHTML = `
 <div class="response-header">
-SMUGGLE ${filePath}
-<span class="status success">HTML сгенерирован</span>
+SMUGGLE ${esc(filePath)}
+<span class="status success">${t('smuggleGenerated')}</span>
 </div>
-<div class="response-body">Файл: ${result.file}
-Зашифрован: ${result.encrypted ? 'Да (XOR)' : 'Нет'}
-URL: ${result.url}
+<div class="response-body">${t('smuggleFile')}: ${esc(result.file)}
+${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}
+URL: ${esc(result.url)}
 
-HTML страница открыта в новой вкладке.</div>`;
+${t('smuggleOpened')}</div>`;
                 } else {
-                    alert('Ошибка: ' + text);
+                    const filesResponseArea = document.getElementById('filesResponseArea');
+                    filesResponseArea.innerHTML = `<div class="response-header">SMUGGLE ${esc(filePath)} <span class="status error">${t('error')}</span></div><div class="response-body">${esc(text)}</div>`;
                 }
             } catch (error) {
-                alert('Ошибка: ' + error.message);
+                const filesResponseArea = document.getElementById('filesResponseArea');
+                filesResponseArea.innerHTML = `<div class="response-header">SMUGGLE ${esc(filePath)} <span class="status error">${t('error')}</span></div><div class="response-body">${esc(error.message)}</div>`;
             }
         }
     </script>

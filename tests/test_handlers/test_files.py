@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from src.http.utils import make_unique_filename, sanitize_filename
 
 
