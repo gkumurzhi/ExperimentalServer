@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
     <title>Experimental HTTP Server</title>
-    <script src="/static/crypto-js.min.js"></script>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='0.9em' font-size='56'%3E%F0%9F%A7%AA%3C/text%3E%3C/svg%3E">
+    <script src="/static/crypto-js.min.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -124,6 +126,16 @@
             transform: scale(1.05);
         }
 
+        button:focus-visible,
+        input[type="text"]:focus-visible,
+        input[type="password"]:focus-visible,
+        input[type="checkbox"]:focus-visible,
+        .upload-label:focus-visible {
+            outline: 2px solid #00d4ff;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.2);
+        }
+
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -189,7 +201,7 @@
         footer {
             text-align: center;
             padding: 30px 0;
-            color: #666;
+            color: #8a8a8a;
             font-size: 0.9rem;
         }
 
@@ -241,7 +253,7 @@
         }
 
         .upload-hint {
-            color: #666;
+            color: #8a8a8a;
             font-size: 0.85rem;
         }
 
@@ -308,6 +320,9 @@
             margin-bottom: 20px;
             border-bottom: 1px solid #30363d;
             padding-bottom: 10px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: thin;
         }
 
         .tab {
@@ -316,6 +331,8 @@
             border: 1px solid #30363d;
             color: #888;
             border-radius: 8px 8px 0 0;
+            flex: 0 0 auto;
+            white-space: nowrap;
         }
 
         .tab.active {
@@ -401,6 +418,24 @@
         .telegram-link:hover {
             color: #00d4ff;
         }
+
+        @media (max-width: 640px) {
+            .tabs {
+                gap: 6px;
+                padding-bottom: 8px;
+                margin-bottom: 16px;
+                flex-wrap: wrap;
+                overflow-x: visible;
+            }
+
+            .tab {
+                padding: 10px 12px;
+                font-size: 0.9rem;
+                flex: 1 1 calc(50% - 6px);
+                text-align: center;
+                white-space: normal;
+            }
+        }
     </style>
 </head>
 <body>
@@ -446,10 +481,10 @@
 
         <section class="demo-section">
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('requests')" data-i18n="tabRequests">Запросы</button>
-                <button class="tab" onclick="switchTab('upload')" data-i18n="tabUpload">Загрузка файлов</button>
-                <button class="tab" onclick="switchTab('opsec')">OPSEC Mode</button>
-                <button class="tab" onclick="switchTab('files')" data-i18n="tabFiles">Файлы на сервере</button>
+                <button class="tab active" onclick="switchTab('requests', this)" data-i18n="tabRequests">Запросы</button>
+                <button class="tab" onclick="switchTab('upload', this)" data-i18n="tabUpload">Загрузка файлов</button>
+                <button class="tab" onclick="switchTab('opsec', this)">OPSEC Mode</button>
+                <button class="tab" onclick="switchTab('files', this)" id="filesTabBtn" data-i18n="tabFiles">Файлы на сервере</button>
             </div>
 
             <!-- Вкладка запросов -->
@@ -538,13 +573,13 @@
                 </div>
 
                 <div class="input-group" style="margin-top: 10px; margin-left: 25px;">
-                    <label style="color: #666; font-size: 0.9rem;">
+                    <label style="color: #8a8a8a; font-size: 0.9rem;">
                         <input type="checkbox" id="opsecSendKey"> Отправить ключ на сервер (автоматическая расшифровка)
                     </label>
                 </div>
 
                 <div class="input-group" style="margin-top: 5px; margin-left: 45px;">
-                    <label style="color: #666; font-size: 0.85rem;">
+                    <label style="color: #8a8a8a; font-size: 0.85rem;">
                         <input type="checkbox" id="opsecKeyBase64" disabled> Кодировать ключ в Base64
                     </label>
                 </div>
@@ -659,6 +694,7 @@
         function setLang(lang) {
             currentLang = lang;
             localStorage.setItem('lang', lang);
+            document.documentElement.lang = lang;
             applyTranslations();
             updateLangButtons();
         }
@@ -694,6 +730,7 @@
 
         // Применяем переводы при загрузке
         document.addEventListener('DOMContentLoaded', () => {
+            document.documentElement.lang = currentLang;
             applyTranslations();
             updateLangButtons();
         });
@@ -731,12 +768,18 @@
         checkServerMode();
 
         // Переключение вкладок
-        function switchTab(tabName) {
+        function switchTab(tabName, tabButton) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-            event.target.classList.add('active');
+            if (tabButton) {
+                tabButton.classList.add('active');
+            }
             document.getElementById(tabName + '-tab').classList.add('active');
+
+            if (tabName === 'files') {
+                setTimeout(browseDirectory, 100);
+            }
         }
 
         // ===== Отправка запросов =====
@@ -800,11 +843,15 @@ ${method} ${path}
         }
 
         // Универсальная функция для кастомных HTTP-методов
-        function sendCustomRequest(method, path, body, headers = {}) {
+        function sendCustomRequest(method, path, body, headers = {}, onUploadProgress = null) {
             return new Promise((resolve, reject) => {
                 const xhr = new XMLHttpRequest();
                 xhr.open(method, path, true);
                 xhr.timeout = 30000; // 30 секунд таймаут
+
+                if (onUploadProgress && xhr.upload) {
+                    xhr.upload.onprogress = onUploadProgress;
+                }
 
                 for (const [key, value] of Object.entries(headers)) {
                     xhr.setRequestHeader(key, value);
@@ -911,7 +958,8 @@ ${method} ${path}
                         file: file,
                         name: file.name,
                         size: file.size,
-                        status: 'pending'
+                        status: 'pending',
+                        progress: 0
                     });
                 }
             }
@@ -938,7 +986,7 @@ ${method} ${path}
                         ${f.status === 'pending' ? `<button onclick="removeFile(${i})" style="background: #f87171; padding: 5px 10px; font-size: 0.8rem;">✕</button>` : ''}
                     </div>
                 </div>
-                ${f.status === 'uploading' ? '<div class="progress-bar"><div class="progress-fill" style="width: 50%"></div></div>' : ''}
+                ${f.status === 'uploading' ? `<div class="progress-bar"><div class="progress-fill" style="width: ${f.progress || 0}%"></div></div>` : ''}
             `).join('');
         }
 
@@ -970,6 +1018,7 @@ ${method} ${path}
                 if (fileData.status !== 'pending') continue;
 
                 fileData.status = 'uploading';
+                fileData.progress = 0;
                 renderFileList();
 
                 try {
@@ -979,10 +1028,22 @@ ${method} ${path}
                     // Кодируем имя файла для передачи в заголовке (поддержка кириллицы)
                     const encodedFileName = encodeURIComponent(fileData.name);
 
-                    const response = await sendCustomRequest(uploadMethod, SERVER_URL + '/' + encodedFileName, arrayBuffer, {
-                        'Content-Type': fileData.file.type || 'application/octet-stream',
-                        'X-File-Name': encodedFileName
-                    });
+                    const response = await sendCustomRequest(
+                        uploadMethod,
+                        SERVER_URL + '/' + encodedFileName,
+                        arrayBuffer,
+                        {
+                            'Content-Type': fileData.file.type || 'application/octet-stream',
+                            'X-File-Name': encodedFileName
+                        },
+                        (event) => {
+                            if (!event.lengthComputable) {
+                                return;
+                            }
+                            fileData.progress = Math.round((event.loaded / event.total) * 100);
+                            renderFileList();
+                        }
+                    );
 
                     console.log(`Ответ: ${response.status}`, response);
 
@@ -998,15 +1059,18 @@ ${method} ${path}
 
                     if ((response.status === 200 || response.status === 201) && result.success) {
                         fileData.status = 'success';
+                        fileData.progress = 100;
                         fileData.serverPath = result.path;
                         results.push({ name: fileData.name, success: true, path: result.path });
                     } else {
                         fileData.status = 'error';
+                        fileData.progress = 0;
                         results.push({ name: fileData.name, success: false, error: result.error || `HTTP ${response.status}` });
                     }
                 } catch (error) {
                     console.error(`Ошибка загрузки ${fileData.name}:`, error);
                     fileData.status = 'error';
+                    fileData.progress = 0;
                     results.push({ name: fileData.name, success: false, error: error.message });
                 }
 
@@ -1120,11 +1184,6 @@ INFO ${path}
             document.getElementById('browsePathInput').value = path;
             await browseDirectory();
         }
-
-        // Загружаем список файлов при открытии вкладки
-        document.querySelector('.tab:nth-child(4)').addEventListener('click', () => {
-            setTimeout(browseDirectory, 100);
-        });
 
         // ===== OPSEC Mode =====
         let opsecFile = null;
@@ -1241,7 +1300,12 @@ INFO ${path}
                     console.log(`[OPSEC] XOR encryption applied with password length: ${password.length}`);
                 }
 
-                const base64Data = btoa(String.fromCharCode(...dataBytes));
+                let binary = '';
+                const chunkSize = 8192;
+                for (let i = 0; i < dataBytes.length; i += chunkSize) {
+                    binary += String.fromCharCode.apply(null, dataBytes.subarray(i, i + chunkSize));
+                }
+                const base64Data = btoa(binary);
 
                 // Формируем payload - имя файла только если checkbox включен
                 const sendKeyToServer = document.getElementById('opsecSendKey').checked;
@@ -1334,7 +1398,7 @@ ${method} ${randomPath}
                             <label style="color: #888; font-size: 0.9rem;">
                                 <input type="checkbox" id="smuggleEncrypt"> Защитить паролем (XOR)
                             </label>
-                            <p style="color: #666; font-size: 0.8rem; margin-top: 5px;">Пароль будет сгенерирован сервером</p>
+                            <p style="color: #8a8a8a; font-size: 0.8rem; margin-top: 5px;">Пароль будет сгенерирован сервером</p>
                         </div>
                         <div style="display: flex; gap: 10px;">
                             <button id="smuggleSubmitBtn" style="flex: 1; padding: 12px; background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Открыть</button>
