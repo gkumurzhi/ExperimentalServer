@@ -14,6 +14,7 @@ class HTTPRequest:
     def __init__(self, raw_data: bytes):
         self.method: str = ""
         self.path: str = ""
+        self.query_string: str = ""
         self.query_params: dict[str, str] = {}
         self.http_version: str = ""
         self.headers: dict[str, str] = {}
@@ -40,6 +41,7 @@ class HTTPRequest:
                     raw_url = parts[1]
                     parsed = urlparse(raw_url)
                     self.path = unquote(parsed.path)
+                    self.query_string = parsed.query
                     # Single-value query params (last value wins)
                     self.query_params = {
                         k: v[-1] for k, v in parse_qs(parsed.query).items()

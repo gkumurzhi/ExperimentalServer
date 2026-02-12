@@ -28,6 +28,7 @@ OPSEC_METHOD_SUFFIXES: tuple[str, ...] = (
 
 # HTTP status codes
 HTTP_STATUS_MESSAGES: dict[int, str] = {
+    101: "Switching Protocols",
     200: "OK",
     201: "Created",
     204: "No Content",

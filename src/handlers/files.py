@@ -1,5 +1,5 @@
 """
-File operation handlers: GET, POST, PUT, FETCH, NONE.
+File operation handlers: GET, POST, PUT, PATCH, FETCH, NONE.
 """
 
 import json
@@ -135,9 +135,13 @@ class FileHandlersMixin(BaseHandler):
     def handle_post(self, request: HTTPRequest) -> HTTPResponse:
         """Handle POST request — delegates to handle_none (file upload).
 
-        POST, PUT, and NONE all use the same file upload logic.
+        POST, PUT, PATCH, and NONE all use the same file upload logic.
         This allows standard HTTP clients to upload without custom methods.
         """
+        return self.handle_none(request)
+
+    def handle_patch(self, request: HTTPRequest) -> HTTPResponse:
+        """Handle PATCH request — delegates to handle_none (file upload)."""
         return self.handle_none(request)
 
     def handle_options(self, request: HTTPRequest) -> HTTPResponse:
@@ -149,11 +153,11 @@ class FileHandlersMixin(BaseHandler):
         if requested_method:
             if self.opsec_mode:
                 # In OPSEC mode, do not expose custom methods
-                allowed = "GET, POST, PUT, OPTIONS"
+                allowed = "GET, POST, PUT, PATCH, OPTIONS"
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             else:
-                allowed = "GET, POST, PUT, FETCH, INFO, PING, NONE, OPTIONS"
+                allowed = "GET, POST, PUT, PATCH, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             response.set_header("Access-Control-Allow-Methods", allowed)

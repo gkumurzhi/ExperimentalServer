@@ -108,15 +108,15 @@ class HTTPResponse:
         if "Access-Control-Allow-Methods" not in self.headers:
             if opsec_mode:
                 # In OPSEC mode, do not expose all methods
-                self.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+                self.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
             else:
                 self.set_header(
                     "Access-Control-Allow-Methods",
-                    "GET, POST, PUT, FETCH, INFO, PING, NONE, OPTIONS"
+                    "GET, POST, PUT, PATCH, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
                 )
 
         if "Access-Control-Allow-Headers" not in self.headers:
-            self.set_header("Access-Control-Allow-Headers", "Content-Type, X-File-Name")
+            self.set_header("Access-Control-Allow-Headers", "Content-Type, X-File-Name, X-Session-Id")
 
         if "Access-Control-Expose-Headers" not in self.headers and not opsec_mode:
             self.set_header(

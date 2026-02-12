@@ -23,6 +23,22 @@ from .config import (
 )
 from .handlers import HandlerMixin
 from .http import HTTPRequest, HTTPResponse
+from .websocket import (
+    WS_BINARY,
+    WS_CLOSE,
+    WS_PING,
+    WS_PONG,
+    WS_TEXT,
+    build_ws_close_frame,
+    build_ws_frame,
+    build_ws_handshake_response,
+    check_websocket_upgrade,
+    parse_ws_frame,
+)
+
+import re as _re
+
+_NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
 from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
 from .security.tls import (
     check_cert_needs_renewal,
@@ -113,6 +129,17 @@ class ExperimentalHTTPServer(HandlerMixin):
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
 
+        # Notes lock for thread-safe notepad writes
+        self._notes_lock = threading.Lock()
+
+        # ECDH key manager for Secure Notepad v2
+        self._ecdh_manager = None
+        try:
+            from .security.keys import ECDHKeyManager
+            self._ecdh_manager = ECDHKeyManager()
+        except (ImportError, RuntimeError):
+            pass
+
         # In-memory metrics
         self._metrics_lock = threading.Lock()
         self._start_time: float = 0.0
@@ -149,11 +176,13 @@ class ExperimentalHTTPServer(HandlerMixin):
             "GET": self.handle_get,
             "POST": self.handle_post,
             "PUT": self.handle_none,  # PUT also handles file upload
+            "PATCH": self.handle_patch,  # PATCH also handles file upload
             "OPTIONS": self.handle_options,
             "FETCH": self.handle_fetch,
             "INFO": self.handle_info,
             "PING": self.handle_ping,
             "NONE": self.handle_none,
+            "NOTE": self.handle_note,
             "SMUGGLE": self.handle_smuggle,
         }
 
@@ -204,6 +233,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             "download": self._random_method_name(),
             "info": self._random_method_name(),
             "ping": self._random_method_name(),
+            "notepad": self._random_method_name(),
         }
         config_path = self.root_dir / ".opsec_config.json"
         fd = os.open(str(config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -525,6 +555,12 @@ class ExperimentalHTTPServer(HandlerMixin):
                 if self._rate_limiter:
                     self._rate_limiter.reset(client_address[0])
 
+            # WebSocket upgrade detection for notepad real-time
+            if (request.path.startswith("/notes/ws")
+                    and check_websocket_upgrade(request)):
+                self._handle_notepad_ws(client_socket, request)
+                return False  # connection taken over by WS
+
             # Check Content-Length before processing
             try:
                 content_length = int(request.headers.get("content-length", 0))
@@ -726,9 +762,150 @@ class ExperimentalHTTPServer(HandlerMixin):
             return self.handle_info
         elif method == self.opsec_methods.get("ping"):
             return self.handle_ping
+        elif method == self.opsec_methods.get("notepad"):
+            return self.handle_note
 
         # Any unknown method in OPSEC mode -> upload
         if request.body:
             return self.handle_opsec_upload
 
         return None
+
+    def _handle_notepad_ws(
+        self, sock: socket.socket, request: HTTPRequest,
+    ) -> None:
+        """Handle a WebSocket connection for real-time notepad streaming."""
+        ws_key = request.headers.get("sec-websocket-key", "")
+        try:
+            sock.sendall(build_ws_handshake_response(ws_key))
+        except Exception:
+            return
+
+        buf = b""
+        try:
+            sock.settimeout(60.0)
+            while self.running:
+                try:
+                    chunk = sock.recv(65536)
+                    if not chunk:
+                        break
+                    buf += chunk
+                except TimeoutError:
+                    # Send ping to keep alive
+                    try:
+                        sock.sendall(build_ws_frame(b"", opcode=WS_PING))
+                    except Exception:
+                        break
+                    continue
+
+                # Process all complete frames in buffer
+                while True:
+                    frame = parse_ws_frame(buf)
+                    if frame is None:
+                        break
+                    opcode, payload, consumed = frame
+                    buf = buf[consumed:]
+
+                    if opcode == WS_CLOSE:
+                        try:
+                            sock.sendall(build_ws_close_frame())
+                        except Exception:
+                            pass
+                        return
+
+                    if opcode == WS_PING:
+                        try:
+                            sock.sendall(build_ws_frame(payload, opcode=WS_PONG))
+                        except Exception:
+                            return
+                        continue
+
+                    if opcode == WS_PONG:
+                        continue
+
+                    if opcode in (WS_TEXT, WS_BINARY):
+                        self._handle_ws_message(sock, payload)
+
+        except Exception as e:
+            logger.debug("WS connection error: %s", e)
+        finally:
+            try:
+                sock.sendall(build_ws_close_frame())
+            except Exception:
+                pass
+
+    def _handle_ws_message(self, sock: socket.socket, payload: bytes) -> None:
+        """Process a single WebSocket JSON message for notepad ops."""
+        try:
+            msg = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"})
+            return
+
+        msg_type = msg.get("type", "")
+
+        if msg_type == "save":
+            self._ws_handle_save(sock, msg)
+        elif msg_type == "load":
+            self._ws_handle_load(sock, msg)
+        elif msg_type == "list":
+            # Reuse the existing list handler
+            resp = self._note_list()
+            result = json.loads(resp.body)
+            result["type"] = "list"
+            self._ws_send_json(sock, result)
+        elif msg_type == "delete":
+            note_id = msg.get("id", "")
+            if note_id and _NOTE_ID_RE_WS.match(note_id):
+                resp = self._note_delete(note_id)
+                result = json.loads(resp.body)
+                result["type"] = "deleted"
+                self._ws_send_json(sock, result)
+            else:
+                self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+        else:
+            self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
+
+    def _ws_handle_save(self, sock: socket.socket, msg: dict) -> None:
+        """Handle a WS save message by building a fake HTTP request."""
+        import base64 as _b64
+        title = msg.get("title", "")
+        data = msg.get("data", "")
+        note_id = msg.get("noteId", "")
+        session_id = msg.get("sessionId", "")
+
+        payload = {"title": title, "data": data}
+        if note_id:
+            payload["id"] = note_id
+
+        body = json.dumps(payload).encode("utf-8")
+        # Build minimal raw HTTP for HTTPRequest parser
+        headers = f"NOTE /notes HTTP/1.1\r\nContent-Length: {len(body)}\r\n"
+        if session_id:
+            headers += f"X-Session-Id: {session_id}\r\n"
+        raw = headers.encode() + b"\r\n" + body
+        req = HTTPRequest(raw)
+        resp = self.handle_note(req)
+        result = json.loads(resp.body)
+        result["type"] = "saved"
+        self._ws_send_json(sock, result)
+
+    def _ws_handle_load(self, sock: socket.socket, msg: dict) -> None:
+        """Handle a WS load message."""
+        note_id = msg.get("id", "")
+        if not note_id or not _NOTE_ID_RE_WS.match(note_id):
+            self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+            return
+        resp = self._note_load(note_id)
+        result = json.loads(resp.body)
+        result["type"] = "loaded"
+        self._ws_send_json(sock, result)
+
+    @staticmethod
+    def _ws_send_json(sock: socket.socket, data: dict) -> None:
+        """Send a JSON message over WebSocket."""
+        frame = build_ws_frame(json.dumps(data).encode("utf-8"))
+        try:
+            sock.sendall(frame)
+        except Exception:
+            pass

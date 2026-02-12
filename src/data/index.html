@@ -113,6 +113,8 @@
         .method-name.info { color: #c084fc; }
         .method-name.ping { color: #fb7185; }
         .method-name.none { color: #f97316; }
+        .method-name.put { color: #38bdf8; }
+        .method-name.patch { color: #a78bfa; }
 
         .method-desc {
             color: #aaa;
@@ -191,7 +193,12 @@
         .btn-info { background: #c084fc; color: #000; }
         .btn-ping { background: #fb7185; color: #000; }
         .btn-none { background: #f97316; color: #000; }
+        .btn-put { background: #38bdf8; color: #000; }
+        .btn-patch { background: #a78bfa; color: #000; }
         .btn-download { background: #6366f1; color: #fff; }
+
+        .upload-method-btn { opacity: 0.5; }
+        .upload-method-btn.active { opacity: 1; box-shadow: 0 0 0 2px var(--color-text); }
 
         .btn--sm { padding: 8px 12px; font-size: 0.85rem; }
         .btn--lg { padding: 14px 32px; font-size: 1.1rem; }
@@ -530,7 +537,176 @@
             }
         }
 
+        /* Notepad */
+        .notepad-container {
+            display: flex;
+            gap: 15px;
+            min-height: 450px;
+        }
+
+        .notepad-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+            background: var(--color-bg-input);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            overflow-y: auto;
+            max-height: 500px;
+        }
+
+        .notepad-sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--color-border);
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+        }
+
+        .notepad-sidebar-header button {
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            min-height: 30px;
+            background: var(--color-bg-surface);
+            color: var(--color-text-muted);
+            border: 1px solid var(--color-border);
+        }
+
+        .note-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--color-border);
+            cursor: pointer;
+            transition: background var(--transition-fast);
+        }
+
+        @media (hover: hover) {
+            .note-item:hover {
+                background: var(--color-bg-surface);
+            }
+        }
+
+        .note-item.active {
+            background: rgba(0, 212, 255, 0.1);
+            border-left: 3px solid var(--color-accent);
+        }
+
+        .note-item-title {
+            font-size: 0.9rem;
+            color: var(--color-text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .note-item-date {
+            font-size: 0.75rem;
+            color: var(--color-text-dimmed);
+            margin-top: 3px;
+        }
+
+        .notepad-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            min-width: 0;
+        }
+
+        .notepad-toolbar {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .notepad-toolbar input[type="text"] {
+            flex: 1;
+            min-width: 150px;
+            padding: 10px 14px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-bg-input);
+            color: #fff;
+            font-size: 0.95rem;
+        }
+
+        .notepad-toolbar input:focus {
+            outline: none;
+            border-color: var(--color-accent);
+        }
+
+        .notepad-textarea {
+            flex: 1;
+            width: 100%;
+            min-height: 300px;
+            padding: 14px;
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            background: var(--color-bg-input);
+            color: var(--color-text-code);
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
+        .notepad-textarea:focus {
+            outline: none;
+            border-color: var(--color-accent);
+        }
+
+        .notepad-textarea:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .notepad-status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            color: var(--color-text-dimmed);
+            padding: 4px 0;
+        }
+
+        .save-indicator {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: var(--radius-pill);
+            font-size: 0.8rem;
+        }
+
+        .save-indicator.saved { background: rgba(74, 222, 128, 0.15); color: var(--color-success); }
+        .save-indicator.saving { background: rgba(0, 212, 255, 0.15); color: var(--color-accent); }
+        .save-indicator.error { background: rgba(248, 113, 113, 0.15); color: var(--color-error); }
+        .save-indicator.unsaved { background: rgba(250, 204, 21, 0.15); color: var(--color-warning); }
+
+        .notepad-connection-status { transition: color 0.3s; }
+        .notepad-connection-status.connected { color: var(--color-success); }
+        .notepad-connection-status.connecting { color: var(--color-warning); }
+        .notepad-connection-status.disconnected { color: var(--color-error); }
+        .notepad-connection-status.no-encryption { color: var(--color-text-dimmed); }
+
+        .notepad-no-notes {
+            padding: 20px 12px;
+            text-align: center;
+            color: var(--color-text-dimmed);
+            font-size: 0.85rem;
+        }
+
+        .btn-note { background: #10b981; color: #fff; }
+
         @media (max-width: 768px) {
+            .notepad-container {
+                flex-direction: column;
+            }
+
+            .notepad-sidebar {
+                width: 100%;
+                max-height: 200px;
+            }
+
             body {
                 padding: 12px;
             }
@@ -675,6 +851,14 @@
                 <div class="method-name none">NONE</div>
                 <p class="method-desc" data-i18n="methodNone">Загрузка файлов</p>
             </div>
+            <div class="method-card">
+                <div class="method-name put">PUT</div>
+                <p class="method-desc" data-i18n="methodPut">Загрузка/замена</p>
+            </div>
+            <div class="method-card">
+                <div class="method-name patch">PATCH</div>
+                <p class="method-desc" data-i18n="methodPatch">Обновление файлов</p>
+            </div>
         </section>
 
         <main>
@@ -684,6 +868,7 @@
                 <button class="tab" role="tab" aria-selected="false" aria-controls="upload-tab" id="tab-upload" onclick="switchTab('upload', this)" data-i18n="tabUpload">Загрузка файлов</button>
                 <button class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" id="tab-opsec" onclick="switchTab('opsec', this)" data-i18n="tabOpsec">OPSEC Mode</button>
                 <button class="tab" role="tab" aria-selected="false" aria-controls="files-tab" id="tab-files" onclick="switchTab('files', this)" data-i18n="tabFiles">Файлы на сервере</button>
+                <button class="tab" role="tab" aria-selected="false" aria-controls="notepad-tab" id="tab-notepad" onclick="switchTab('notepad', this)" data-i18n="tabNotepad">Secure Notepad</button>
             </div>
 
             <!-- Вкладка запросов -->
@@ -711,12 +896,18 @@
             <div id="upload-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-upload">
                 <h2 data-i18n="uploadFiles">Загрузка файлов</h2>
 
+                <div class="demo-buttons" style="margin-bottom: 12px;">
+                    <button class="btn-post upload-method-btn active" onclick="setUploadMethod('POST', this)">POST</button>
+                    <button class="btn-none upload-method-btn" onclick="setUploadMethod('NONE', this)">NONE</button>
+                    <button class="btn-put upload-method-btn" onclick="setUploadMethod('PUT', this)">PUT</button>
+                    <button class="btn-patch upload-method-btn" onclick="setUploadMethod('PATCH', this)">PATCH</button>
+                </div>
 
                 <div class="upload-section" id="dropZone">
                     <label class="upload-label" for="fileInput">
                         <div class="upload-icon">📁</div>
                         <div class="upload-text" data-i18n="dropFilesHere">Перетащите файлы сюда или нажмите для выбора</div>
-                        <div class="upload-hint" id="uploadMethodHint" data-i18n="uploadMethodHint">Файлы будут загружены через метод NONE</div>
+                        <div class="upload-hint" id="uploadMethodHint">Метод загрузки: POST</div>
                     </label>
                     <input type="file" id="fileInput" multiple>
                 </div>
@@ -794,6 +985,45 @@
                 </div>
             </div>
 
+            <!-- Notepad tab -->
+            <div id="notepad-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-notepad">
+                <h2 data-i18n="notepadTitle">Secure Notepad</h2>
+                <p style="color: #888; margin-bottom: 15px;" data-i18n="notepadDesc">
+                    End-to-end encrypted notes. Encryption keys are negotiated automatically via ECDH — no password needed.
+                </p>
+
+                <div class="notepad-toolbar">
+                    <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Note title</label>
+                    <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Note title" maxlength="200" disabled>
+                    <button class="btn-note btn--sm" onclick="notepadNewNote()" data-i18n="notepadNewBtn">New</button>
+                    <button class="btn--sm" style="background: #f87171; color: #fff;" onclick="notepadDeleteNote()" id="notepadDeleteBtn" disabled data-i18n="notepadDeleteBtn">Delete</button>
+                    <div class="transport-toggle" style="display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 0.85rem; color: var(--color-text-muted);">
+                        <label style="display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="radio" name="notepadTransport" value="http" checked> <span data-i18n="notepadTransportHttp">HTTP</span></label>
+                        <label style="display:flex;align-items:center;gap:3px;cursor:pointer;"><input type="radio" name="notepadTransport" value="ws"> <span data-i18n="notepadTransportWs">WebSocket</span></label>
+                        <span class="notepad-connection-status" id="notepadConnStatus" style="font-size:1.1em;" title="">&#9679;</span>
+                    </div>
+                </div>
+
+                <div class="notepad-container" style="margin-top: 12px;">
+                    <div class="notepad-sidebar">
+                        <div class="notepad-sidebar-header">
+                            <span data-i18n="notepadNotes">Notes</span>
+                            <button onclick="notepadRefreshList()" title="Refresh">&#8635;</button>
+                        </div>
+                        <div id="notepadNoteList">
+                            <div class="notepad-no-notes" data-i18n="notepadNoNotes">No notes yet</div>
+                        </div>
+                    </div>
+                    <div class="notepad-editor">
+                        <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Enter text here... (encrypted before saving)" disabled></textarea>
+                        <div class="notepad-status-bar">
+                            <span class="save-indicator" id="notepadSaveIndicator" data-i18n="notepadConnecting">Connecting...</span>
+                            <span id="notepadCharCount">0 chars</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Вкладка файлов -->
             <div id="files-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-files">
                 <h2 data-i18n="serverFiles">Файлы на сервере</h2>
@@ -835,6 +1065,8 @@
                 methodInfo: "Метаданные файла",
                 methodPing: "Проверка сервера",
                 methodNone: "Загрузка файлов",
+                methodPut: "Загрузка/замена",
+                methodPatch: "Обновление файлов",
                 tabRequests: "Запросы",
                 tabUpload: "Загрузка файлов",
                 tabFiles: "Файлы на сервере",
@@ -846,7 +1078,7 @@
                 uploadFiles: "Загрузка файлов",
                 methodLabel: "Метод:",
                 dropFilesHere: "Перетащите файлы сюда или нажмите для выбора",
-                uploadMethodHint: "Файлы будут загружены через метод NONE",
+                uploadMethodLabel: "Метод загрузки",
                 uploadAllBtn: "Загрузить все файлы",
                 serverFiles: "Файлы на сервере",
                 dirPathPlaceholder: "Путь к директории",
@@ -919,7 +1151,35 @@
                 smuggleNo: "Нет",
                 smuggleOpened: "HTML страница открыта в новой вкладке.",
                 opsecWarning: "⚠ Сервер запущен без флага --opsec. OPSEC-загрузка может не работать.",
-                viewInFiles: "Посмотреть в файлах →"
+                viewInFiles: "Посмотреть в файлах →",
+                tabNotepad: "Блокнот",
+                notepadTitle: "Защищённый блокнот",
+                notepadDesc: "Сквозное шифрование заметок. Ключи согласуются автоматически через ECDH — пароль не нужен.",
+                notepadTitlePlaceholder: "Название заметки",
+                notepadTextareaPlaceholder: "Введите текст... (шифруется перед сохранением)",
+                notepadNewBtn: "Новая",
+                notepadDeleteBtn: "Удалить",
+                notepadNotes: "Заметки",
+                notepadNoNotes: "Заметок пока нет",
+                notepadConnecting: "Подключение...",
+                notepadConnected: "Подключено (E2E)",
+                notepadDisconnected: "Отключено",
+                notepadReady: "Готово",
+                notepadUnsaved: "Не сохранено",
+                notepadSaving: "Сохранение...",
+                notepadSaved: "Сохранено",
+                notepadLoading: "Загрузка...",
+                notepadLoaded: "Загружено",
+                notepadSaveError: "Ошибка сохранения",
+                notepadLoadError: "Ошибка загрузки",
+                notepadDecryptError: "Ошибка расшифровки",
+                notepadSessionFailed: "Ошибка сессии",
+                notepadNoEncryption: "Без шифрования",
+                notepadTransportHttp: "HTTP",
+                notepadTransportWs: "WebSocket",
+                notepadEphemeralWarning: "Сессии не сохраняются при перезагрузке сервера",
+                notepadUntitled: "Без названия",
+                notepadDeleteConfirm: "Удалить эту заметку?"
             },
             en: {
                 subtitle: "HTTP server with custom method support",
@@ -930,6 +1190,8 @@
                 methodInfo: "File metadata",
                 methodPing: "Server check",
                 methodNone: "Upload files",
+                methodPut: "Upload/replace",
+                methodPatch: "Update files",
                 tabRequests: "Requests",
                 tabUpload: "File Upload",
                 tabFiles: "Server Files",
@@ -941,7 +1203,7 @@
                 uploadFiles: "File Upload",
                 methodLabel: "Method:",
                 dropFilesHere: "Drag files here or click to select",
-                uploadMethodHint: "Files will be uploaded via NONE method",
+                uploadMethodLabel: "Upload method",
                 uploadAllBtn: "Upload all files",
                 serverFiles: "Server Files",
                 dirPathPlaceholder: "Directory path",
@@ -1014,7 +1276,35 @@
                 smuggleNo: "No",
                 smuggleOpened: "HTML page opened in new tab.",
                 opsecWarning: "⚠ Server started without --opsec flag. OPSEC upload may not work.",
-                viewInFiles: "View in Files →"
+                viewInFiles: "View in Files →",
+                tabNotepad: "Notepad",
+                notepadTitle: "Secure Notepad",
+                notepadDesc: "End-to-end encrypted notes. Encryption keys are negotiated automatically via ECDH — no password needed.",
+                notepadTitlePlaceholder: "Note title",
+                notepadTextareaPlaceholder: "Enter text here... (encrypted before saving)",
+                notepadNewBtn: "New",
+                notepadDeleteBtn: "Delete",
+                notepadNotes: "Notes",
+                notepadNoNotes: "No notes yet",
+                notepadConnecting: "Connecting...",
+                notepadConnected: "Connected (E2E)",
+                notepadDisconnected: "Disconnected",
+                notepadReady: "Ready",
+                notepadUnsaved: "Unsaved",
+                notepadSaving: "Saving...",
+                notepadSaved: "Saved",
+                notepadLoading: "Loading...",
+                notepadLoaded: "Loaded",
+                notepadSaveError: "Save error",
+                notepadLoadError: "Load error",
+                notepadDecryptError: "Decrypt error",
+                notepadSessionFailed: "Session failed",
+                notepadNoEncryption: "No encryption",
+                notepadTransportHttp: "HTTP",
+                notepadTransportWs: "WebSocket",
+                notepadEphemeralWarning: "Sessions are lost on server restart",
+                notepadUntitled: "Untitled",
+                notepadDeleteConfirm: "Delete this note?"
             }
         };
 
@@ -1046,6 +1336,12 @@
                     el.placeholder = t[key];
                 }
             });
+
+            // Обновляем хинт метода загрузки
+            const hint = document.getElementById('uploadMethodHint');
+            if (hint && t.uploadMethodLabel) {
+                hint.textContent = t.uploadMethodLabel + ': ' + (typeof uploadMethod !== 'undefined' ? uploadMethod : 'POST');
+            }
         }
 
         function updateLangButtons() {
@@ -1130,6 +1426,9 @@
 
             if (tabName === 'files') {
                 setTimeout(browseDirectory, 100);
+            }
+            if (tabName === 'notepad') {
+                notepadInit();
             }
         }
 
@@ -1296,7 +1595,15 @@ ${esc(method)} ${esc(path)}
         }
 
         // ===== Загрузка файлов =====
-        const uploadMethod = 'NONE';
+        let uploadMethod = 'POST';
+
+        function setUploadMethod(method, btn) {
+            uploadMethod = method;
+            document.querySelectorAll('.upload-method-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const hint = document.getElementById('uploadMethodHint');
+            if (hint) hint.textContent = t('uploadMethodLabel') + ': ' + method;
+        }
 
         const dropZone = document.getElementById('dropZone');
         const fileInput = document.getElementById('fileInput');
@@ -1861,6 +2168,486 @@ ${t('smuggleOpened')}</div>`;
             } catch (error) {
                 const filesResponseArea = document.getElementById('filesResponseArea');
                 filesResponseArea.innerHTML = `<div class="response-header">SMUGGLE ${esc(filePath)} <span class="status error">${t('error')}</span></div><div class="response-body">${esc(error.message)}</div>`;
+            }
+        }
+        // ===== Secure Notepad v2 (ECDH + WebSocket) =====
+        let notepadCurrentId = null;
+        let notepadAutoSaveTimer = null;
+        let notepadSessionId = null;
+        let notepadDerivedKey = null;   // CryptoKey for AES-GCM
+        let notepadHasEcdh = false;
+        let notepadInitDone = false;
+        let notepadWs = null;
+
+        const NOTEPAD_HTTP_DELAY = 500;
+        const NOTEPAD_WS_DELAY = 300;
+
+        const notepadTitleInput = document.getElementById('notepadTitleInput');
+        const notepadTextarea = document.getElementById('notepadTextarea');
+        const notepadSaveIndicator = document.getElementById('notepadSaveIndicator');
+        const notepadCharCount = document.getElementById('notepadCharCount');
+        const notepadDeleteBtnEl = document.getElementById('notepadDeleteBtn');
+        const notepadConnStatus = document.getElementById('notepadConnStatus');
+
+        function notepadGetTransport() {
+            const el = document.querySelector('input[name="notepadTransport"]:checked');
+            return el ? el.value : 'http';
+        }
+
+        function notepadGetDelay() {
+            return notepadGetTransport() === 'ws' ? NOTEPAD_WS_DELAY : NOTEPAD_HTTP_DELAY;
+        }
+
+        // Transport toggle handlers
+        document.querySelectorAll('input[name="notepadTransport"]').forEach(el => {
+            el.addEventListener('change', () => {
+                if (el.value === 'ws' && el.checked) {
+                    notepadConnectWs();
+                } else if (el.value === 'http' && el.checked) {
+                    notepadDisconnectWs();
+                }
+            });
+        });
+
+        // Auto-save on textarea input
+        notepadTextarea.addEventListener('input', () => {
+            notepadCharCount.textContent = notepadTextarea.value.length + ' chars';
+            notepadScheduleAutoSave();
+        });
+
+        // Auto-save on title input
+        notepadTitleInput.addEventListener('input', () => {
+            notepadScheduleAutoSave();
+        });
+
+        function notepadScheduleAutoSave() {
+            if (!notepadInitDone) return;
+            notepadSetStatus('unsaved');
+            clearTimeout(notepadAutoSaveTimer);
+            notepadAutoSaveTimer = setTimeout(notepadSave, notepadGetDelay());
+        }
+
+        function notepadSetStatus(state) {
+            const stateMap = {
+                'connecting': { class: '', text: t('notepadConnecting') },
+                'connected': { class: 'saved', text: t('notepadConnected') },
+                'disconnected': { class: 'error', text: t('notepadDisconnected') },
+                'ready': { class: '', text: t('notepadReady') },
+                'unsaved': { class: 'unsaved', text: t('notepadUnsaved') },
+                'saving': { class: 'saving', text: t('notepadSaving') },
+                'saved': { class: 'saved', text: t('notepadSaved') },
+                'error': { class: 'error', text: t('notepadSaveError') },
+                'loading': { class: 'saving', text: t('notepadLoading') },
+                'loaded': { class: 'saved', text: t('notepadLoaded') },
+                'loadError': { class: 'error', text: t('notepadLoadError') },
+                'decryptError': { class: 'error', text: t('notepadDecryptError') },
+                'sessionFailed': { class: 'error', text: t('notepadSessionFailed') },
+                'noEncryption': { class: '', text: t('notepadNoEncryption') },
+            };
+            const s = stateMap[state] || { class: '', text: state };
+            notepadSaveIndicator.className = 'save-indicator ' + s.class;
+            notepadSaveIndicator.textContent = s.text;
+        }
+
+        function notepadSetConnStatus(cls, title) {
+            notepadConnStatus.className = 'notepad-connection-status ' + cls;
+            notepadConnStatus.title = title;
+        }
+
+        // ── Base64 helpers ──────────────────────────────────────
+
+        function uint8ToBase64(bytes) {
+            const chunks = [];
+            const chunkSize = 8192;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+                chunks.push(String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize)));
+            }
+            return btoa(chunks.join(''));
+        }
+
+        function base64ToUint8(b64) {
+            const binary = atob(b64);
+            const bytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+            return bytes;
+        }
+
+        // ── ECDH Session Init ───────────────────────────────────
+
+        async function notepadInit() {
+            if (notepadInitDone) {
+                notepadRefreshList();
+                return;
+            }
+            notepadSetStatus('connecting');
+            notepadSetConnStatus('connecting', t('notepadConnecting'));
+
+            try {
+                await notepadInitSession();
+                notepadInitDone = true;
+                notepadTitleInput.disabled = false;
+                notepadTextarea.disabled = false;
+                if (notepadHasEcdh) {
+                    notepadSetStatus('connected');
+                    notepadSetConnStatus('connected', t('notepadConnected'));
+                } else {
+                    notepadSetStatus('noEncryption');
+                    notepadSetConnStatus('no-encryption', t('notepadNoEncryption'));
+                }
+                notepadRefreshList();
+            } catch (e) {
+                console.error('[Notepad] Session init failed:', e);
+                // Fall back to unencrypted mode
+                notepadInitDone = true;
+                notepadHasEcdh = false;
+                notepadTitleInput.disabled = false;
+                notepadTextarea.disabled = false;
+                notepadSetStatus('noEncryption');
+                notepadSetConnStatus('no-encryption', t('notepadNoEncryption'));
+                notepadRefreshList();
+            }
+        }
+
+        async function notepadInitSession() {
+            // 1. Get server public key
+            const keyResp = await sendCustomRequest('NOTE', SERVER_URL + '/notes/key');
+            const keyText = await keyResp.text();
+            const keyData = JSON.parse(keyText);
+
+            if (!keyData.hasEcdh) {
+                notepadHasEcdh = false;
+                return;
+            }
+
+            // 2. Generate client ECDH key pair
+            const clientKeyPair = await crypto.subtle.generateKey(
+                { name: 'ECDH', namedCurve: 'P-256' },
+                true,
+                ['deriveBits']
+            );
+
+            // 3. Exchange keys
+            const clientPubRaw = await crypto.subtle.exportKey('raw', clientKeyPair.publicKey);
+            const clientPubB64 = uint8ToBase64(new Uint8Array(clientPubRaw));
+
+            const exchangeResp = await sendCustomRequest('NOTE', SERVER_URL + '/notes/exchange',
+                JSON.stringify({ clientPublicKey: clientPubB64 }),
+                { 'Content-Type': 'application/json' }
+            );
+            const exchangeText = await exchangeResp.text();
+            const exchangeData = JSON.parse(exchangeText);
+            notepadSessionId = exchangeData.sessionId;
+
+            // 4. Import server public key
+            const serverPubRaw = base64ToUint8(exchangeData.serverPublicKey);
+            const serverPubKey = await crypto.subtle.importKey(
+                'raw', serverPubRaw,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                []
+            );
+
+            // 5. Derive shared bits
+            const sharedBits = await crypto.subtle.deriveBits(
+                { name: 'ECDH', public: serverPubKey },
+                clientKeyPair.privateKey,
+                256
+            );
+
+            // 6. HKDF to get AES-256 key
+            const sharedKeyMaterial = await crypto.subtle.importKey(
+                'raw', sharedBits, 'HKDF', false, ['deriveKey']
+            );
+
+            notepadDerivedKey = await crypto.subtle.deriveKey(
+                {
+                    name: 'HKDF',
+                    hash: 'SHA-256',
+                    salt: new Uint8Array(32),  // 32 zero bytes
+                    info: new TextEncoder().encode('notepad-e2e-key'),
+                },
+                sharedKeyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+
+            notepadHasEcdh = true;
+        }
+
+        // ── ECDH encrypt/decrypt ────────────────────────────────
+
+        async function notepadEncrypt(text) {
+            const enc = new TextEncoder();
+            const plaintext = enc.encode(text);
+            const nonce = crypto.getRandomValues(new Uint8Array(12));
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: nonce },
+                notepadDerivedKey,
+                plaintext
+            );
+            // Wire format: nonce(12) + ciphertext + tag(16)
+            const result = new Uint8Array(12 + ciphertext.byteLength);
+            result.set(nonce, 0);
+            result.set(new Uint8Array(ciphertext), 12);
+            return result;
+        }
+
+        async function notepadDecrypt(encryptedBytes) {
+            if (encryptedBytes.length < 12 + 16) throw new Error('Data too short');
+            const nonce = encryptedBytes.slice(0, 12);
+            const ciphertext = encryptedBytes.slice(12);
+            const plaintext = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: nonce },
+                notepadDerivedKey,
+                ciphertext
+            );
+            return new TextDecoder().decode(plaintext);
+        }
+
+        // ── WebSocket client ────────────────────────────────────
+
+        function notepadConnectWs() {
+            notepadDisconnectWs();
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            notepadWs = new WebSocket(proto + '//' + location.host + '/notes/ws');
+            notepadSetConnStatus('connecting', t('notepadConnecting'));
+
+            notepadWs.onopen = () => {
+                notepadSetConnStatus('connected', notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption'));
+            };
+
+            notepadWs.onmessage = (evt) => {
+                try {
+                    const msg = JSON.parse(evt.data);
+                    notepadHandleWsMessage(msg);
+                } catch (e) {
+                    console.error('[Notepad WS] Parse error:', e);
+                }
+            };
+
+            notepadWs.onclose = () => {
+                // Only show "disconnected" if we didn't intentionally switch to HTTP
+                const wasIntentional = notepadGetTransport() === 'http';
+                notepadWs = null;
+                if (!wasIntentional) {
+                    notepadSetConnStatus('disconnected', t('notepadDisconnected'));
+                }
+            };
+
+            notepadWs.onerror = () => {
+                if (notepadGetTransport() !== 'http') {
+                    notepadSetConnStatus('disconnected', t('notepadDisconnected'));
+                }
+            };
+        }
+
+        function notepadDisconnectWs() {
+            if (notepadWs) {
+                notepadWs.close();
+                notepadWs = null;
+            }
+            notepadSetConnStatus(
+                notepadHasEcdh ? 'connected' : 'no-encryption',
+                notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption')
+            );
+        }
+
+        function notepadSendWs(msg) {
+            if (notepadWs && notepadWs.readyState === WebSocket.OPEN) {
+                notepadWs.send(JSON.stringify(msg));
+            }
+        }
+
+        function notepadHandleWsMessage(msg) {
+            if (msg.type === 'saved') {
+                if (msg.success) {
+                    if (!notepadCurrentId) notepadCurrentId = msg.id;
+                    notepadDeleteBtnEl.disabled = false;
+                    notepadSetStatus('saved');
+                    notepadRefreshList();
+                } else {
+                    notepadSetStatus('error');
+                }
+            } else if (msg.type === 'loaded') {
+                notepadHandleLoadResult(msg);
+            } else if (msg.type === 'list') {
+                notepadRenderList(msg.notes || []);
+            } else if (msg.type === 'deleted') {
+                notepadNewNote();
+            } else if (msg.type === 'error') {
+                console.error('[Notepad WS] Server error:', msg.error);
+                notepadSetStatus('error');
+            }
+        }
+
+        // ── CRUD operations ─────────────────────────────────────
+
+        async function notepadSave() {
+            const text = notepadTextarea.value;
+            const title = notepadTitleInput.value.trim() || t('notepadUntitled');
+
+            if (!text && !notepadCurrentId) return;
+
+            notepadSetStatus('saving');
+
+            try {
+                let dataB64;
+                if (notepadHasEcdh && notepadDerivedKey) {
+                    const encrypted = await notepadEncrypt(text);
+                    dataB64 = uint8ToBase64(encrypted);
+                } else {
+                    // Fallback: send plaintext as base64
+                    dataB64 = btoa(unescape(encodeURIComponent(text)));
+                }
+
+                if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
+                    // WebSocket save
+                    notepadSendWs({
+                        type: 'save',
+                        sessionId: notepadSessionId || '',
+                        noteId: notepadCurrentId || '',
+                        title: title,
+                        data: dataB64,
+                    });
+                } else {
+                    // HTTP save
+                    const payload = { title: title, data: dataB64 };
+                    if (notepadCurrentId) payload.id = notepadCurrentId;
+
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (notepadSessionId) headers['X-Session-Id'] = notepadSessionId;
+
+                    const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', JSON.stringify(payload), headers);
+                    const respText = await response.text();
+                    const result = JSON.parse(respText);
+
+                    if (result.success) {
+                        if (!notepadCurrentId) notepadCurrentId = result.id;
+                        notepadDeleteBtnEl.disabled = false;
+                        notepadSetStatus('saved');
+                        notepadRefreshList();
+                    } else {
+                        notepadSetStatus('error');
+                    }
+                }
+            } catch (e) {
+                console.error('[Notepad] Save error:', e);
+                notepadSetStatus('error');
+            }
+        }
+
+        async function notepadRefreshList() {
+            if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
+                notepadSendWs({ type: 'list' });
+                return;
+            }
+
+            try {
+                const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes?list');
+                const text = await response.text();
+                const result = JSON.parse(text);
+                notepadRenderList(result.notes || []);
+            } catch (e) {
+                console.error('[Notepad] List error:', e);
+            }
+        }
+
+        function notepadRenderList(notes) {
+            const listEl = document.getElementById('notepadNoteList');
+            if (!notes || notes.length === 0) {
+                listEl.innerHTML = '<div class="notepad-no-notes">' + esc(t('notepadNoNotes')) + '</div>';
+                return;
+            }
+
+            listEl.innerHTML = notes.map(note => {
+                const isActive = note.id === notepadCurrentId;
+                const date = note.updated_at ? new Date(note.updated_at).toLocaleString() : '';
+                return '<div class="note-item' + (isActive ? ' active' : '') + '" onclick="notepadLoadNote(\'' + esc(note.id) + '\')">' +
+                    '<div class="note-item-title">' + esc(note.title || t('notepadUntitled')) + '</div>' +
+                    '<div class="note-item-date">' + esc(date) + '</div>' +
+                    '</div>';
+            }).join('');
+        }
+
+        async function notepadLoadNote(id) {
+            notepadSetStatus('loading');
+
+            try {
+                const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes/' + id);
+                const text = await response.text();
+                const result = JSON.parse(text);
+
+                if (response.status === 404) {
+                    notepadSetStatus('loadError');
+                    return;
+                }
+
+                await notepadHandleLoadResult(result);
+            } catch (e) {
+                console.error('[Notepad] Load error:', e);
+                notepadSetStatus('loadError');
+            }
+        }
+
+        async function notepadHandleLoadResult(result) {
+            try {
+                const encryptedBytes = base64ToUint8(result.data);
+                let plaintext;
+
+                if (notepadHasEcdh && notepadDerivedKey) {
+                    plaintext = await notepadDecrypt(encryptedBytes);
+                } else {
+                    // Fallback: treat as plaintext base64
+                    plaintext = decodeURIComponent(escape(atob(result.data)));
+                }
+
+                notepadCurrentId = result.id;
+                notepadTitleInput.value = result.title || '';
+                notepadTextarea.value = plaintext;
+                notepadCharCount.textContent = plaintext.length + ' chars';
+                notepadDeleteBtnEl.disabled = false;
+                notepadSetStatus('loaded');
+                notepadRefreshList();
+            } catch (e) {
+                console.error('[Notepad] Decrypt/load error:', e);
+                if (e.name === 'OperationError' || (e.message && e.message.includes('decrypt'))) {
+                    notepadSetStatus('decryptError');
+                } else {
+                    notepadSetStatus('loadError');
+                }
+            }
+        }
+
+        function notepadNewNote() {
+            notepadCurrentId = null;
+            notepadTitleInput.value = '';
+            notepadTextarea.value = '';
+            notepadCharCount.textContent = '0 chars';
+            notepadDeleteBtnEl.disabled = true;
+            clearTimeout(notepadAutoSaveTimer);
+            if (notepadInitDone) {
+                notepadSetStatus('ready');
+                notepadTitleInput.focus();
+            } else {
+                notepadSetStatus('connecting');
+            }
+            notepadRefreshList();
+        }
+
+        async function notepadDeleteNote() {
+            if (!notepadCurrentId) return;
+            if (!confirm(t('notepadDeleteConfirm'))) return;
+
+            try {
+                if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
+                    notepadSendWs({ type: 'delete', id: notepadCurrentId });
+                } else {
+                    await sendCustomRequest('NOTE', SERVER_URL + '/notes/' + notepadCurrentId + '?delete');
+                    notepadNewNote();
+                }
+            } catch (e) {
+                console.error('[Notepad] Delete error:', e);
             }
         }
     </script>

@@ -13,6 +13,7 @@ from ..http import HTTPResponse, format_file_size
 
 if TYPE_CHECKING:
     import threading
+    from typing import Any
 
 logger = logging.getLogger("httpserver")
 
@@ -61,6 +62,7 @@ class BaseHandler:
     opsec_mode: bool
     _temp_smuggle_files: set[str]
     _smuggle_lock: "threading.Lock"
+    _ecdh_manager: "Any"  # ECDHKeyManager | None
 
     @staticmethod
     def format_size(size: int) -> str:
