@@ -12,6 +12,8 @@ import struct
 
 from .http import HTTPRequest
 
+_MAX_FRAME_SIZE = 10 * 1024 * 1024  # 10 MB
+
 # RFC 6455 magic GUID
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -83,6 +85,9 @@ def parse_ws_frame(data: bytes) -> tuple[int, bytes, int] | None:
             return None
         payload_len = struct.unpack("!Q", data[2:10])[0]
         offset = 10
+
+    if payload_len > _MAX_FRAME_SIZE:
+        raise ValueError(f"WebSocket frame too large: {payload_len} bytes")
 
     mask_key = b""
     if masked:

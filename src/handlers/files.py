@@ -6,7 +6,7 @@ import json
 import logging
 import mimetypes
 import re
-from datetime import datetime, timezone
+from datetime import datetime
 from email.utils import formatdate
 from pathlib import Path
 from urllib.parse import unquote
@@ -235,7 +235,10 @@ class FileHandlersMixin(BaseHandler):
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             else:
-                allowed = "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                allowed = (
+                    "GET, HEAD, POST, PUT, PATCH, DELETE,"
+                    " FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                )
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             response.set_header("Access-Control-Allow-Methods", allowed)

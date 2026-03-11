@@ -3,6 +3,7 @@ OPSEC file upload handler.
 """
 
 import base64
+import binascii
 import hashlib
 import json
 import logging
@@ -25,7 +26,10 @@ class OpsecHandlersMixin(BaseHandler):
         padding = 4 - len(data) % 4
         if padding != 4:
             data += '=' * padding
-        return base64.b64decode(data)
+        try:
+            return base64.b64decode(data)
+        except (binascii.Error, ValueError):
+            return b""
 
     def _extract_opsec_payload(self, request: HTTPRequest) -> dict:
         """Extract OPSEC payload from body, headers, or URL params (in priority order)."""

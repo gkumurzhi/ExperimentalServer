@@ -114,13 +114,17 @@ def get_safe_path(
         file_path = (sandbox_dir / clean_path).resolve()
 
         # Verify path is inside sandbox_dir
-        if not str(file_path).startswith(str(sandbox_dir)):
+        try:
+            file_path.relative_to(sandbox_dir.resolve())
+        except ValueError:
             return None
     else:
         file_path = (base_dir / clean_path).resolve()
 
         # Verify path is inside base_dir (path traversal protection)
-        if not str(file_path).startswith(str(base_dir)):
+        try:
+            file_path.relative_to(base_dir.resolve())
+        except ValueError:
             return None
 
     return file_path

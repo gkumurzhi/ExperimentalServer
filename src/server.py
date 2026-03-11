@@ -7,6 +7,7 @@ import gzip
 import json
 import logging
 import os
+import re as _re
 import secrets
 import socket
 import ssl
@@ -24,6 +25,14 @@ from .config import (
 )
 from .handlers import HandlerMixin
 from .http import HTTPRequest, HTTPResponse
+from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
+from .security.tls import (
+    check_cert_needs_renewal,
+    check_certbot_available,
+    check_openssl_available,
+    generate_self_signed_cert,
+    obtain_letsencrypt_cert,
+)
 from .websocket import (
     WS_BINARY,
     WS_CLOSE,
@@ -37,17 +46,7 @@ from .websocket import (
     parse_ws_frame,
 )
 
-import re as _re
-
 _NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
-from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
-from .security.tls import (
-    check_cert_needs_renewal,
-    check_certbot_available,
-    check_openssl_available,
-    generate_self_signed_cert,
-    obtain_letsencrypt_cert,
-)
 
 # Logging setup
 logger = logging.getLogger("httpserver")
@@ -766,13 +765,18 @@ class ExperimentalHTTPServer(HandlerMixin):
                         header_end_pos = data.find(b"\r\n\r\n")
                         headers_part = data[:header_end_pos].decode("utf-8", errors="replace")
 
+                        cl_values = []
                         for line in headers_part.split("\r\n"):
                             if line.lower().startswith("content-length:"):
                                 try:
-                                    content_length = int(line.split(":")[1].strip())
+                                    cl_values.append(int(line.split(":", 1)[1].strip()))
                                 except ValueError:
                                     content_length = 0
-                                break
+                                    break
+                        if cl_values:
+                            if len(set(cl_values)) > 1 or cl_values[0] < 0:
+                                return b""
+                            content_length = cl_values[0]
 
                         headers_received = True
                         body_received = total_size - header_end_pos - 4
@@ -816,7 +820,13 @@ class ExperimentalHTTPServer(HandlerMixin):
             return self.handle_note
 
         # Any unknown method in OPSEC mode -> upload
-        if request.body or request.headers.get("x-d") or request.headers.get("x-d-0") or request.query_params.get("d"):
+        has_data = (
+            request.body
+            or request.headers.get("x-d")
+            or request.headers.get("x-d-0")
+            or request.query_params.get("d")
+        )
+        if has_data:
             return self.handle_opsec_upload
 
         return None
@@ -850,7 +860,14 @@ class ExperimentalHTTPServer(HandlerMixin):
 
                 # Process all complete frames in buffer
                 while True:
-                    frame = parse_ws_frame(buf)
+                    try:
+                        frame = parse_ws_frame(buf)
+                    except ValueError:
+                        try:
+                            sock.sendall(build_ws_close_frame(1009, "Message too big"))
+                        except Exception:
+                            pass
+                        return
                     if frame is None:
                         break
                     opcode, payload, consumed = frame
@@ -918,7 +935,6 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _ws_handle_save(self, sock: socket.socket, msg: dict) -> None:
         """Handle a WS save message by building a fake HTTP request."""
-        import base64 as _b64
         title = msg.get("title", "")
         data = msg.get("data", "")
         note_id = msg.get("noteId", "")

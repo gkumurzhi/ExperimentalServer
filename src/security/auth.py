@@ -151,6 +151,7 @@ class BasicAuthenticator:
 
         # Check stored credentials
         if username not in self._credentials:
+            verify_password(password, "0" * 64, "0" * 32)
             logger.warning(f"Auth failed: user={username}")
             return False
 

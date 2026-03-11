@@ -15,6 +15,7 @@ Routes:
 """
 
 import base64
+import binascii
 import json
 import logging
 import re
@@ -122,7 +123,7 @@ class NotepadHandlersMixin(BaseHandler):
 
         try:
             client_pub_raw = base64.b64decode(client_key_b64)
-        except Exception:
+        except (ValueError, binascii.Error):
             return self._bad_request("Invalid base64 in 'clientPublicKey'")
 
         if len(client_pub_raw) != 65:
@@ -179,7 +180,7 @@ class NotepadHandlersMixin(BaseHandler):
         # Validate that data is valid base64
         try:
             raw_data = base64.b64decode(data_b64)
-        except Exception:
+        except (ValueError, binascii.Error):
             return self._bad_request("Invalid base64 in 'data'")
 
         if len(raw_data) == 0:
