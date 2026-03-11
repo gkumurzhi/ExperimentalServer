@@ -42,7 +42,10 @@ class StubServer(HandlerMixin):
         }
 
     def get_metrics(self):
-        return {"uptime_seconds": 0, "total_requests": 0, "total_errors": 0, "bytes_sent": 0, "status_counts": {}}
+        return {
+            "uptime_seconds": 0, "total_requests": 0, "total_errors": 0,
+            "bytes_sent": 0, "status_counts": {},
+        }
 
     def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
         """Mirror of ExperimentalHTTPServer._get_opsec_handler for testing."""
@@ -58,7 +61,11 @@ class StubServer(HandlerMixin):
         elif method == self.opsec_methods.get("ping"):
             return self.handle_ping
         # Any unknown method in OPSEC mode -> upload if data present
-        if request.body or request.headers.get("x-d") or request.headers.get("x-d-0") or request.query_params.get("d"):
+        has_data = (
+            request.body or request.headers.get("x-d")
+            or request.headers.get("x-d-0") or request.query_params.get("d")
+        )
+        if has_data:
             return self.handle_opsec_upload
         return None
 
@@ -105,7 +112,10 @@ class TestMethodRouting:
     """Test that standard method_handlers dispatch is correct."""
 
     def test_all_standard_methods_registered(self, server):
-        expected = {"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE", "SMUGGLE"}
+        expected = {
+            "GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS",
+            "FETCH", "INFO", "PING", "NONE", "SMUGGLE",
+        }
         assert set(server.method_handlers.keys()) == expected
 
     def test_get_handler_callable(self, server):

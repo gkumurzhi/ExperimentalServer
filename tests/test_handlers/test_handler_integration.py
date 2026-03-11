@@ -351,6 +351,7 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_xor_decrypt(self, temp_dir, upload_dir):
         """X-D + X-E: xor + X-K → decrypted content on disk."""
         import base64
+
         from src.security.crypto import xor_bytes
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"secret plaintext"
@@ -368,6 +369,7 @@ class TestHandleOpsecUpload:
     def test_opsec_url_xor_decrypt(self, temp_dir, upload_dir):
         """?d=...&e=xor&k=... → decrypted content on disk."""
         import base64
+
         from src.security.crypto import xor_bytes
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"url secret"
@@ -383,6 +385,7 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_hmac_valid(self, temp_dir, upload_dir):
         """X-H with correct HMAC → 200."""
         import base64
+
         from src.security.crypto import compute_hmac
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw_data = b"hmac data"
@@ -501,6 +504,7 @@ class TestHandleOpsecUpload:
     def test_opsec_kb64_header(self, temp_dir, upload_dir):
         """X-Kb64: true → key decoded from base64."""
         import base64
+
         from src.security.crypto import xor_bytes
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"kb64 test"

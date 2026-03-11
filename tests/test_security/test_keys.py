@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.security.keys import ECDHKeyManager, HAS_ECDH
+from src.security.keys import HAS_ECDH, ECDHKeyManager
 
 pytestmark = pytest.mark.skipif(not HAS_ECDH, reason="cryptography not installed")
 
@@ -91,7 +91,7 @@ class TestECDHKeyManager:
         tampered[-5] ^= 0xFF
         tampered = bytes(tampered)
 
-        with pytest.raises(Exception):  # InvalidTag
+        with pytest.raises((ValueError, Exception)):  # InvalidTag from cryptography
             mgr.decrypt(session_id, tampered)
 
     def test_multiple_sessions_independent(self):

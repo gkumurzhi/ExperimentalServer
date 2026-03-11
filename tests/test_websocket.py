@@ -2,8 +2,6 @@
 
 import struct
 
-import pytest
-
 from src.websocket import (
     WS_BINARY,
     WS_CLOSE,
@@ -18,7 +16,6 @@ from src.websocket import (
     parse_ws_frame,
 )
 from tests.conftest import make_request
-
 
 # ── Upgrade detection ─────────────────────────────────────────────
 

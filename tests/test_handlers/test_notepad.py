@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin
-from src.security.keys import ECDHKeyManager, HAS_ECDH
+from src.security.keys import HAS_ECDH, ECDHKeyManager
 from tests.conftest import make_request
 
 
@@ -39,7 +39,9 @@ def server(temp_dir, upload_dir):
     return NotepadStubServer(temp_dir, upload_dir)
 
 
-def _make_note_payload(title: str = "Test Note", data: bytes = b"encrypted blob", note_id: str = "") -> bytes:
+def _make_note_payload(
+    title: str = "Test Note", data: bytes = b"encrypted blob", note_id: str = "",
+) -> bytes:
     """Build a NOTE save payload."""
     payload: dict = {
         "title": title,
@@ -162,7 +164,7 @@ class TestNotepadList:
         body1 = _make_note_payload("First")
         req1 = make_request("NOTE", "/notes", body=body1)
         resp1 = server.handle_note(req1)
-        id1 = json.loads(resp1.body)["id"]
+        json.loads(resp1.body)["id"]
 
         body2 = _make_note_payload("Second")
         req2 = make_request("NOTE", "/notes", body=body2)
