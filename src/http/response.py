@@ -112,11 +112,15 @@ class HTTPResponse:
             else:
                 self.set_header(
                     "Access-Control-Allow-Methods",
-                    "GET, POST, PUT, PATCH, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
                 )
 
         if "Access-Control-Allow-Headers" not in self.headers:
-            self.set_header("Access-Control-Allow-Headers", "Content-Type, X-File-Name, X-Session-Id")
+            self.set_header(
+                "Access-Control-Allow-Headers",
+                "Content-Type, X-File-Name, X-Session-Id, X-D, X-E, X-K, X-Kb64, X-N, X-H, "
+                "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9"
+            )
 
         if "Access-Control-Expose-Headers" not in self.headers and not opsec_mode:
             self.set_header(

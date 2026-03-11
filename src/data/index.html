@@ -44,6 +44,40 @@
             --transition-normal: 0.3s ease;
         }
 
+        [data-theme="light"] {
+            --color-bg-primary: #f0f2f5;
+            --color-bg-secondary: #e4e7ec;
+            --color-bg-surface: rgba(0, 0, 0, 0.04);
+            --color-bg-input: #fff;
+            --color-border: #d0d7de;
+            --color-border-hover: rgba(0, 0, 0, 0.12);
+            --color-text: #1a1a2e;
+            --color-text-muted: #555;
+            --color-text-dimmed: #666;
+            --color-text-code: #24292f;
+        }
+
+        [data-theme="light"] body {
+            background: linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%);
+        }
+
+        [data-theme="light"] h1 {
+            background: linear-gradient(90deg, #0077b6, #6a1b9a);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        [data-theme="light"] .response-area {
+            background: #fff;
+            border-color: var(--color-border);
+        }
+
+        [data-theme="light"] .method-card {
+            background: rgba(0, 0, 0, 0.03);
+            border-color: var(--color-border);
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -457,6 +491,68 @@
             box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
         }
 
+        .theme-btn {
+            background: var(--color-bg-surface);
+            border: 1px solid var(--color-border-hover);
+            border-radius: var(--radius-circle);
+            width: 44px;
+            height: 44px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: transform var(--transition-fast), border-color var(--transition-fast);
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        @media (hover: hover) {
+            .theme-btn:hover {
+                transform: scale(1.1);
+                border-color: var(--color-accent);
+            }
+        }
+
+        kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            font-family: monospace;
+            color: var(--color-text-muted);
+            background: var(--color-bg-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 4px;
+            margin-left: 4px;
+            vertical-align: middle;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: var(--color-bg-surface);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 6px 0;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-accent), var(--color-accent-purple));
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+
+        .download-progress {
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+            margin-top: 4px;
+        }
+
+        .notepad-dirty .tab[data-i18n="tabNotepad"]::after {
+            content: " *";
+            color: var(--color-warning);
+        }
+
         .telegram-link {
             color: #888;
             text-decoration: none;
@@ -820,6 +916,7 @@
             <div class="lang-switcher">
                 <button class="lang-btn active" onclick="setLang('ru')" id="langRu" title="Русский">🇷🇺</button>
                 <button class="lang-btn" onclick="setLang('en')" id="langEn" title="English">🇺🇸</button>
+                <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle theme">🌙</button>
             </div>
             <p class="subtitle" id="sandboxIndicator" style="display: none; color: #f97316; margin-top: 10px; font-weight: bold;" data-i18n="sandboxMode">
                 🔒 SANDBOX MODE - доступ ограничен папкой uploads/
@@ -939,6 +1036,14 @@
                     <button class="btn-info" onclick="generateRandomMethod()" style="background: #6366f1;">Random</button>
                 </div>
 
+                <div class="input-group" style="margin-top: 10px; align-items: center;">
+                    <span style="color: #888; margin-right: 10px; white-space: nowrap;" data-i18n="opsecTransportLabel">Транспорт:</span>
+                    <label style="color: #c9d1d9; margin-right: 14px; cursor: pointer; font-size: 0.95rem;"><input type="radio" name="opsecTransport" value="body" checked style="margin-right: 4px;"> <span data-i18n="opsecTransportBody">Тело (JSON)</span></label>
+                    <label style="color: #c9d1d9; margin-right: 14px; cursor: pointer; font-size: 0.95rem;"><input type="radio" name="opsecTransport" value="headers" style="margin-right: 4px;"> <span data-i18n="opsecTransportHeaders">Заголовки</span></label>
+                    <label style="color: #c9d1d9; cursor: pointer; font-size: 0.95rem;"><input type="radio" name="opsecTransport" value="url" style="margin-right: 4px;"> <span data-i18n="opsecTransportUrl">URL параметры</span></label>
+                </div>
+                <div id="opsecTransportWarning" style="display:none; color: #facc15; background: rgba(250, 204, 21, 0.1); border: 1px solid rgba(250, 204, 21, 0.3); border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 0.85rem;"></div>
+
                 <div class="upload-section" id="opsecDropZone" style="border-color: #6366f1; background: rgba(99, 102, 241, 0.1);">
                     <label class="upload-label" for="opsecFileInput">
                         <div class="upload-icon">🔒</div>
@@ -1054,6 +1159,34 @@
     </div>
 
     <script>
+        // ===== Theme (restore before DOM renders to avoid flash) =====
+        (function() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            const next = current === 'light' ? 'dark' : 'light';
+            if (next === 'light') {
+                html.setAttribute('data-theme', 'light');
+            } else {
+                html.removeAttribute('data-theme');
+            }
+            localStorage.setItem('theme', next);
+            const btn = document.getElementById('themeBtn');
+            if (btn) btn.textContent = next === 'light' ? '☀️' : '🌙';
+        }
+
+        // Update theme button icon on load
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('themeBtn');
+            if (btn) btn.textContent = localStorage.getItem('theme') === 'light' ? '☀️' : '🌙';
+        });
+
         // ===== Система локализации =====
         const translations = {
             ru: {
@@ -1151,6 +1284,14 @@
                 smuggleNo: "Нет",
                 smuggleOpened: "HTML страница открыта в новой вкладке.",
                 opsecWarning: "⚠ Сервер запущен без флага --opsec. OPSEC-загрузка может не работать.",
+                opsecTransportLabel: "Транспорт:",
+                opsecTransportBody: "Тело (JSON)",
+                opsecTransportHeaders: "Заголовки",
+                opsecTransportUrl: "URL параметры",
+                opsecUrlSizeWarning: "Файл слишком большой для URL (~2 КБ макс). Используйте Body или Headers.",
+                opsecHeaderSizeWarning: "Файл может быть слишком большой для заголовков (~32 КБ макс). Рекомендуется Body.",
+                opsecTransportAutoSwitch: "Транспорт переключён на {0} (файл слишком большой для {1})",
+                opsecTransportUsed: "Транспорт",
                 viewInFiles: "Посмотреть в файлах →",
                 tabNotepad: "Блокнот",
                 notepadTitle: "Защищённый блокнот",
@@ -1179,7 +1320,15 @@
                 notepadTransportWs: "WebSocket",
                 notepadEphemeralWarning: "Сессии не сохраняются при перезагрузке сервера",
                 notepadUntitled: "Без названия",
-                notepadDeleteConfirm: "Удалить эту заметку?"
+                notepadDeleteConfirm: "Удалить эту заметку?",
+                notepadReconnecting: "Переподключение...",
+                deleteBtn: "Удалить",
+                deleteConfirm: "Удалить этот файл?",
+                deleteSuccess: "Файл удалён",
+                deleteError: "Ошибка удаления",
+                downloadProgress: "Загрузка",
+                downloadSpeed: "Скорость",
+                downloadEta: "Осталось"
             },
             en: {
                 subtitle: "HTTP server with custom method support",
@@ -1276,6 +1425,14 @@
                 smuggleNo: "No",
                 smuggleOpened: "HTML page opened in new tab.",
                 opsecWarning: "⚠ Server started without --opsec flag. OPSEC upload may not work.",
+                opsecTransportLabel: "Transport:",
+                opsecTransportBody: "Body (JSON)",
+                opsecTransportHeaders: "Headers",
+                opsecTransportUrl: "URL Params",
+                opsecUrlSizeWarning: "File too large for URL params (~2 KB max). Use Body or Headers.",
+                opsecHeaderSizeWarning: "File may be too large for headers (~32 KB max). Body recommended.",
+                opsecTransportAutoSwitch: "Transport switched to {0} (file too large for {1})",
+                opsecTransportUsed: "Transport",
                 viewInFiles: "View in Files →",
                 tabNotepad: "Notepad",
                 notepadTitle: "Secure Notepad",
@@ -1304,7 +1461,15 @@
                 notepadTransportWs: "WebSocket",
                 notepadEphemeralWarning: "Sessions are lost on server restart",
                 notepadUntitled: "Untitled",
-                notepadDeleteConfirm: "Delete this note?"
+                notepadDeleteConfirm: "Delete this note?",
+                notepadReconnecting: "Reconnecting...",
+                deleteBtn: "Delete",
+                deleteConfirm: "Delete this file?",
+                deleteSuccess: "File deleted",
+                deleteError: "Delete error",
+                downloadProgress: "Downloading",
+                downloadSpeed: "Speed",
+                downloadEta: "ETA"
             }
         };
 
@@ -1572,13 +1737,52 @@ ${esc(method)} ${esc(path)}
             });
         }
 
-        // Скачивание файла через FETCH
+        // Format ETA in mm:ss
+        function formatEta(seconds) {
+            if (!isFinite(seconds) || seconds < 0) return '--:--';
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+
+        // Download file via FETCH with progress
         async function downloadFile(path) {
             const xhr = new XMLHttpRequest();
             xhr.open('FETCH', SERVER_URL + path, true);
             xhr.responseType = 'blob';
 
+            // Create/get progress container
+            let progressEl = document.getElementById('downloadProgressArea');
+            if (!progressEl) {
+                progressEl = document.createElement('div');
+                progressEl.id = 'downloadProgressArea';
+                progressEl.style.cssText = 'position:fixed;bottom:20px;right:20px;background:var(--color-bg-secondary,#16213e);border:1px solid var(--color-border,#30363d);border-radius:12px;padding:16px;min-width:280px;z-index:1000;';
+                document.body.appendChild(progressEl);
+            }
+
+            const startTime = Date.now();
+            const fileName = path.split('/').pop() || 'download';
+            progressEl.innerHTML = `
+                <div style="font-weight:bold;margin-bottom:8px;color:var(--color-text,#eee);">${t('downloadProgress')}: ${esc(fileName)}</div>
+                <div class="progress-container"><div class="progress-bar-fill" id="dlProgressBar" style="width:0%"></div></div>
+                <div class="download-progress" id="dlProgressText">0%</div>`;
+            progressEl.style.display = 'block';
+
+            xhr.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    const bar = document.getElementById('dlProgressBar');
+                    const txt = document.getElementById('dlProgressText');
+                    if (bar) bar.style.width = pct + '%';
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = elapsed > 0 ? e.loaded / elapsed : 0;
+                    const remaining = speed > 0 ? (e.total - e.loaded) / speed : 0;
+                    if (txt) txt.textContent = `${pct}%  ${formatSize(e.loaded)}/${formatSize(e.total)}  ${t('downloadSpeed')}: ${formatSize(speed)}/s  ${t('downloadEta')}: ${formatEta(remaining)}`;
+                }
+            };
+
             xhr.onload = () => {
+                if (progressEl) progressEl.style.display = 'none';
                 const filename = xhr.getResponseHeader('X-File-Name') || 'download';
                 const blob = xhr.response;
                 const url = window.URL.createObjectURL(blob);
@@ -1589,6 +1793,10 @@ ${esc(method)} ${esc(path)}
                 a.click();
                 window.URL.revokeObjectURL(url);
                 a.remove();
+            };
+
+            xhr.onerror = () => {
+                if (progressEl) progressEl.style.display = 'none';
             };
 
             xhr.send();
@@ -1842,6 +2050,7 @@ ${successCount > 0 ? `<button class="btn-info btn--sm" onclick="switchTab('files
                                     <button class="btn-info btn--sm" onclick="getFileInfo('${itemPath}')">INFO</button>
                                     <button class="btn-fetch btn--sm" onclick="downloadFile('${itemPath}')">FETCH</button>
                                     <button class="btn--sm" onclick="showSmuggleDialog('${itemPath}')" style="background: #8b5cf6; color: #fff; border: none; border-radius: 8px; cursor: pointer;">SMUGGLE</button>
+                                    <button class="btn--sm" onclick="deleteFile('${itemPath}')" style="background: #f87171; color: #fff; border: none; border-radius: 8px; cursor: pointer;">${t('deleteBtn')}</button>
                                 ` : `
                                     <button class="btn-info btn--sm" onclick="document.getElementById('browsePathInput').value='${itemPath}'; browseDirectory();">${t('open')}</button>
                                 `}
@@ -1873,6 +2082,23 @@ INFO ${path}
         async function getFileInfo(path) {
             document.getElementById('browsePathInput').value = path;
             await browseDirectory();
+        }
+
+        // ===== DELETE file =====
+        async function deleteFile(path) {
+            if (!confirm(t('deleteConfirm'))) return;
+            try {
+                const response = await sendCustomRequest('DELETE', SERVER_URL + path);
+                const text = await response.text();
+                const result = JSON.parse(text);
+                if (result.success) {
+                    browseDirectory();
+                } else {
+                    alert(t('deleteError') + ': ' + (result.error || ''));
+                }
+            } catch (e) {
+                alert(t('deleteError') + ': ' + e.message);
+            }
         }
 
         // ===== OPSEC Mode =====
@@ -1931,6 +2157,46 @@ INFO ${path}
         // Инициализация случайным методом
         generateRandomMethod();
 
+        // Transport size warning + auto-switch
+        function setOpsecTransport(value) {
+            const radio = document.querySelector(`input[name="opsecTransport"][value="${value}"]`);
+            if (radio) radio.checked = true;
+        }
+
+        function checkOpsecTransportWarning() {
+            const warning = document.getElementById('opsecTransportWarning');
+            const transport = document.querySelector('input[name="opsecTransport"]:checked')?.value || 'body';
+            if (!opsecFile || transport === 'body') {
+                warning.style.display = 'none';
+                return;
+            }
+            // base64 inflates size by ~33%
+            const b64Size = Math.ceil(opsecFile.size * 4 / 3);
+
+            if (transport === 'url' && b64Size > 1500) {
+                // Auto-switch: URL → Headers (or Body if too large for headers too)
+                if (b64Size > 24000) {
+                    setOpsecTransport('body');
+                    warning.textContent = t('opsecTransportAutoSwitch').replace('{0}', t('opsecTransportBody')).replace('{1}', t('opsecTransportUrl'));
+                } else {
+                    setOpsecTransport('headers');
+                    warning.textContent = t('opsecTransportAutoSwitch').replace('{0}', t('opsecTransportHeaders')).replace('{1}', t('opsecTransportUrl'));
+                }
+                warning.style.display = 'block';
+            } else if (transport === 'headers' && b64Size > 24000) {
+                // Auto-switch: Headers → Body
+                setOpsecTransport('body');
+                warning.textContent = t('opsecTransportAutoSwitch').replace('{0}', t('opsecTransportBody')).replace('{1}', t('opsecTransportHeaders'));
+                warning.style.display = 'block';
+            } else {
+                warning.style.display = 'none';
+            }
+        }
+
+        document.querySelectorAll('input[name="opsecTransport"]').forEach(r => {
+            r.addEventListener('change', checkOpsecTransportWarning);
+        });
+
         opsecFileInput.addEventListener('change', () => {
             if (opsecFileInput.files.length > 0) {
                 opsecFile = opsecFileInput.files[0];
@@ -1938,6 +2204,7 @@ INFO ${path}
                 document.getElementById('opsecResponseArea').innerHTML = `
                     <div class="response-header">${esc(t('opsecFileSelected'))}: ${esc(opsecFile.name)} (${formatSize(opsecFile.size)})</div>
                 `;
+                checkOpsecTransportWarning();
             }
         });
 
@@ -1959,6 +2226,7 @@ INFO ${path}
                 document.getElementById('opsecResponseArea').innerHTML = `
                     <div class="response-header">${esc(t('opsecFileSelected'))}: ${esc(opsecFile.name)} (${formatSize(opsecFile.size)})</div>
                 `;
+                checkOpsecTransportWarning();
             }
         });
 
@@ -1970,6 +2238,7 @@ INFO ${path}
             const includeName = document.getElementById('opsecIncludeName').checked;
             const useEncryption = opsecEncryptCheckbox.checked;
             const password = opsecPasswordInput.value;
+            const transport = document.querySelector('input[name="opsecTransport"]:checked')?.value || 'body';
 
             // Validate password if encryption is enabled
             if (useEncryption && !password) {
@@ -1977,7 +2246,7 @@ INFO ${path}
                 return;
             }
 
-            responseArea.innerHTML = `<div class="response-header">${esc(t('opsecUploading'))} ${esc(method)}${useEncryption ? ' (' + esc(t('opsecXorEncryption')) + ')' : ''}...</div>`;
+            responseArea.innerHTML = `<div class="response-header">${esc(t('opsecUploading'))} ${esc(method)}${useEncryption ? ' (' + esc(t('opsecXorEncryption')) + ')' : ''} [${esc(transport)}]...</div>`;
             opsecUploadBtn.disabled = true;
 
             try {
@@ -1995,37 +2264,74 @@ INFO ${path}
                 for (let i = 0; i < dataBytes.length; i += chunkSize) {
                     binary += String.fromCharCode.apply(null, dataBytes.subarray(i, i + chunkSize));
                 }
-                const base64Data = btoa(binary);
+                const base64Std = btoa(binary);
 
-                // Формируем payload - имя файла только если checkbox включен
+                // Build payload fields
                 const sendKeyToServer = document.getElementById('opsecSendKey').checked;
                 const encodeKeyBase64 = document.getElementById('opsecKeyBase64').checked;
-                const payload = {
-                    d: base64Data
-                };
+                const fields = { d: base64Std };
                 if (useEncryption) {
-                    payload.e = 'xor';
+                    fields.e = 'xor';
                     if (sendKeyToServer) {
                         if (encodeKeyBase64) {
-                            payload.k = btoa(unescape(encodeURIComponent(password)));  // Base64 UTF-8
-                            payload.kb64 = true;  // Флаг что ключ в base64
+                            fields.k = btoa(unescape(encodeURIComponent(password)));
+                            fields.kb64 = 'true';
                         } else {
-                            payload.k = password;  // Ключ как есть
+                            fields.k = password;
                         }
                     }
                 }
                 if (includeName) {
-                    payload.n = opsecFile.name;
+                    fields.n = opsecFile.name;
                 }
 
-                // Генерируем случайный путь (не содержит имени файла!)
+                // Random path (does not contain filename!)
                 const randomPath = '/' + Math.random().toString(36).substring(2, 10);
+                let requestUrl = SERVER_URL + randomPath;
+                let requestBody = null;
+                let requestHeaders = {};
+                let response;
 
-                console.log(`[OPSEC] Method: ${method}, Path: ${randomPath}, Include name: ${includeName}`);
+                console.log(`[OPSEC] Method: ${method}, Path: ${randomPath}, Transport: ${transport}, Include name: ${includeName}`);
 
-                const response = await sendCustomRequest(method, SERVER_URL + randomPath, JSON.stringify(payload), {
-                    'Content-Type': 'application/json'
-                });
+                if (transport === 'headers') {
+                    // Send data in HTTP headers — chunked if > 7000 chars
+                    const HEADER_CHUNK_SIZE = 7000;
+                    if (base64Std.length > HEADER_CHUNK_SIZE) {
+                        for (let i = 0, idx = 0; i < base64Std.length; i += HEADER_CHUNK_SIZE, idx++) {
+                            requestHeaders[`X-D-${idx}`] = base64Std.substring(i, i + HEADER_CHUNK_SIZE);
+                        }
+                    } else {
+                        requestHeaders['X-D'] = base64Std;
+                    }
+                    if (fields.e) requestHeaders['X-E'] = fields.e;
+                    if (fields.k) requestHeaders['X-K'] = fields.k;
+                    if (fields.kb64) requestHeaders['X-Kb64'] = fields.kb64;
+                    if (fields.n) requestHeaders['X-N'] = fields.n;
+                    if (fields.h) requestHeaders['X-H'] = fields.h;
+                    response = await sendCustomRequest(method, requestUrl, null, requestHeaders);
+                } else if (transport === 'url') {
+                    // Send data in URL query parameters with URL-safe base64
+                    const urlSafeB64 = base64Std.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+                    const params = new URLSearchParams();
+                    params.set('d', urlSafeB64);
+                    if (fields.e) params.set('e', fields.e);
+                    if (fields.k) params.set('k', fields.k);
+                    if (fields.kb64) params.set('kb64', fields.kb64);
+                    if (fields.n) params.set('n', fields.n);
+                    if (fields.h) params.set('h', fields.h);
+                    requestUrl += '?' + params.toString();
+                    response = await sendCustomRequest(method, requestUrl, null, {});
+                } else {
+                    // Default: send as JSON body
+                    const payload = { d: fields.d };
+                    if (fields.e) payload.e = fields.e;
+                    if (fields.k) payload.k = fields.k;
+                    if (fields.kb64) payload.kb64 = true;
+                    if (fields.n) payload.n = fields.n;
+                    requestHeaders['Content-Type'] = 'application/json';
+                    response = await sendCustomRequest(method, requestUrl, JSON.stringify(payload), requestHeaders);
+                }
 
                 const text = await response.text();
                 console.log(`[OPSEC] Response:`, text);
@@ -2046,13 +2352,14 @@ ${esc(method)} ${esc(randomPath)}
 <div class="response-body">--- ${esc(t('opsecSuccess'))} ---
 ${esc(t('opsecId'))}: ${esc(result.id)}
 ${esc(t('opsecSize'))}: ${esc(result.sz)} ${esc(t('opsecBytes'))}
+${esc(t('opsecTransportUsed'))}: ${esc(result.transport || transport)}
 
 ${t('methodLabel')} ${esc(method)} ${esc(t('opsecMethodRandom'))}
 Path: ${esc(randomPath)} ${esc(t('opsecPathNoName'))}
 ${esc(t('opsecNameInReq'))}: ${includeName ? esc(t('opsecYes')) : esc(t('opsecNoHidden'))}
 ${esc(t('opsecEncryption'))}: ${useEncryption ? (sendKeyToServer ? esc(t('opsecXorDecrypted')) + (encodeKeyBase64 ? esc(t('opsecKeyInBase64')) : '') + ')' : esc(t('opsecXorEncrypted'))) : esc(t('opsecNone'))}
 </div>`;
-                    // Генерируем новый случайный метод для следующей загрузки
+                    // Generate new random method for next upload
                     generateRandomMethod();
                 } else {
                     responseArea.innerHTML = `
@@ -2179,6 +2486,14 @@ ${t('smuggleOpened')}</div>`;
         let notepadInitDone = false;
         let notepadWs = null;
 
+        // WS auto-reconnect state
+        let wsReconnectAttempt = 0;
+        let wsReconnectTimer = null;
+        let wsIntentionalClose = false;
+
+        // Unsaved changes flag
+        let notepadIsDirty = false;
+
         const NOTEPAD_HTTP_DELAY = 500;
         const NOTEPAD_WS_DELAY = 300;
 
@@ -2204,7 +2519,7 @@ ${t('smuggleOpened')}</div>`;
                 if (el.value === 'ws' && el.checked) {
                     notepadConnectWs();
                 } else if (el.value === 'http' && el.checked) {
-                    notepadDisconnectWs();
+                    notepadDisconnectWs(false);
                 }
             });
         });
@@ -2212,11 +2527,15 @@ ${t('smuggleOpened')}</div>`;
         // Auto-save on textarea input
         notepadTextarea.addEventListener('input', () => {
             notepadCharCount.textContent = notepadTextarea.value.length + ' chars';
+            notepadIsDirty = true;
+            document.body.classList.add('notepad-dirty');
             notepadScheduleAutoSave();
         });
 
         // Auto-save on title input
         notepadTitleInput.addEventListener('input', () => {
+            notepadIsDirty = true;
+            document.body.classList.add('notepad-dirty');
             notepadScheduleAutoSave();
         });
 
@@ -2407,13 +2726,27 @@ ${t('smuggleOpened')}</div>`;
 
         // ── WebSocket client ────────────────────────────────────
 
+        function scheduleReconnect() {
+            if (wsIntentionalClose) return;
+            const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempt), 30000);
+            wsReconnectAttempt++;
+            notepadSetConnStatus('disconnected', t('notepadReconnecting'));
+            wsReconnectTimer = setTimeout(() => {
+                if (notepadGetTransport() === 'ws' && !wsIntentionalClose) {
+                    notepadConnectWs();
+                }
+            }, delay);
+        }
+
         function notepadConnectWs() {
-            notepadDisconnectWs();
+            notepadDisconnectWs(true);
+            wsIntentionalClose = false;
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
             notepadWs = new WebSocket(proto + '//' + location.host + '/notes/ws');
             notepadSetConnStatus('connecting', t('notepadConnecting'));
 
             notepadWs.onopen = () => {
+                wsReconnectAttempt = 0;
                 notepadSetConnStatus('connected', notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption'));
             };
 
@@ -2427,30 +2760,32 @@ ${t('smuggleOpened')}</div>`;
             };
 
             notepadWs.onclose = () => {
-                // Only show "disconnected" if we didn't intentionally switch to HTTP
-                const wasIntentional = notepadGetTransport() === 'http';
                 notepadWs = null;
-                if (!wasIntentional) {
+                if (!wsIntentionalClose && notepadGetTransport() === 'ws') {
+                    scheduleReconnect();
+                } else if (!wsIntentionalClose) {
                     notepadSetConnStatus('disconnected', t('notepadDisconnected'));
                 }
             };
 
             notepadWs.onerror = () => {
-                if (notepadGetTransport() !== 'http') {
-                    notepadSetConnStatus('disconnected', t('notepadDisconnected'));
-                }
+                // onclose will fire after this
             };
         }
 
-        function notepadDisconnectWs() {
+        function notepadDisconnectWs(skipStatus) {
+            wsIntentionalClose = true;
+            if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
             if (notepadWs) {
                 notepadWs.close();
                 notepadWs = null;
             }
-            notepadSetConnStatus(
-                notepadHasEcdh ? 'connected' : 'no-encryption',
-                notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption')
-            );
+            if (!skipStatus) {
+                notepadSetConnStatus(
+                    notepadHasEcdh ? 'connected' : 'no-encryption',
+                    notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption')
+                );
+            }
         }
 
         function notepadSendWs(msg) {
@@ -2465,6 +2800,8 @@ ${t('smuggleOpened')}</div>`;
                     if (!notepadCurrentId) notepadCurrentId = msg.id;
                     notepadDeleteBtnEl.disabled = false;
                     notepadSetStatus('saved');
+                    notepadIsDirty = false;
+                    document.body.classList.remove('notepad-dirty');
                     notepadRefreshList();
                 } else {
                     notepadSetStatus('error');
@@ -2526,6 +2863,8 @@ ${t('smuggleOpened')}</div>`;
                         if (!notepadCurrentId) notepadCurrentId = result.id;
                         notepadDeleteBtnEl.disabled = false;
                         notepadSetStatus('saved');
+                        notepadIsDirty = false;
+                        document.body.classList.remove('notepad-dirty');
                         notepadRefreshList();
                     } else {
                         notepadSetStatus('error');
@@ -2607,6 +2946,8 @@ ${t('smuggleOpened')}</div>`;
                 notepadTextarea.value = plaintext;
                 notepadCharCount.textContent = plaintext.length + ' chars';
                 notepadDeleteBtnEl.disabled = false;
+                notepadIsDirty = false;
+                document.body.classList.remove('notepad-dirty');
                 notepadSetStatus('loaded');
                 notepadRefreshList();
             } catch (e) {
@@ -2625,6 +2966,8 @@ ${t('smuggleOpened')}</div>`;
             notepadTextarea.value = '';
             notepadCharCount.textContent = '0 chars';
             notepadDeleteBtnEl.disabled = true;
+            notepadIsDirty = false;
+            document.body.classList.remove('notepad-dirty');
             clearTimeout(notepadAutoSaveTimer);
             if (notepadInitDone) {
                 notepadSetStatus('ready');
@@ -2650,6 +2993,40 @@ ${t('smuggleOpened')}</div>`;
                 console.error('[Notepad] Delete error:', e);
             }
         }
+
+        // ===== Unsaved changes warning =====
+        window.addEventListener('beforeunload', (e) => {
+            if (notepadIsDirty) {
+                e.preventDefault();
+            }
+        });
+
+        // ===== Keyboard shortcuts =====
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+S → save notepad
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                const notepadTab = document.getElementById('notepad-tab');
+                if (notepadTab && notepadTab.classList.contains('active')) {
+                    e.preventDefault();
+                    notepadSave();
+                }
+            }
+            // Ctrl+Enter → upload files
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                const uploadTab = document.getElementById('upload-tab');
+                if (uploadTab && uploadTab.classList.contains('active')) {
+                    e.preventDefault();
+                    uploadAllFiles();
+                }
+            }
+            // Escape → close smuggle dialog
+            if (e.key === 'Escape') {
+                const dialog = document.getElementById('smuggleDialog');
+                if (dialog && dialog.style.display !== 'none') {
+                    closeSmuggleDialog();
+                }
+            }
+        });
     </script>
 </body>
 </html>

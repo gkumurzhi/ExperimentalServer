@@ -1,12 +1,13 @@
 """
-File operation handlers: GET, POST, PUT, PATCH, FETCH, NONE.
+File operation handlers: GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE.
 """
 
 import json
 import logging
 import mimetypes
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import formatdate
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -28,6 +29,12 @@ class FileHandlersMixin(BaseHandler):
     # Attribute for temporary SMUGGLE files (defined in the server)
     _temp_smuggle_files: set[str]
 
+    @staticmethod
+    def _compute_etag(file_path: Path) -> str:
+        """Compute a stat-based ETag for a file (no full read needed)."""
+        st = file_path.stat()
+        return f'"{st.st_size:x}-{st.st_mtime_ns:x}"'
+
     def _process_html_for_opsec(self, content: bytes) -> bytes:
         """
         Process HTML for OPSEC mode.
@@ -48,6 +55,10 @@ class FileHandlersMixin(BaseHandler):
         """Handle GET request — return file contents."""
         url_path = request.path.lstrip("/")
         logger.debug(f"GET {request.path}")
+
+        # /metrics endpoint
+        if request.path == "/metrics":
+            return self._serve_metrics()
 
         # Hidden file protection
         if self._is_hidden_file(request.path):
@@ -85,9 +96,32 @@ class FileHandlersMixin(BaseHandler):
             else:
                 return self._not_found(request.path)
 
+        # ETag / conditional request support
+        etag = self._compute_etag(file_path)
+        st = file_path.stat()
+        last_modified = formatdate(st.st_mtime, usegmt=True)
+
+        # Check If-None-Match for 304
+        if_none_match = request.headers.get("if-none-match", "")
+        if if_none_match and if_none_match == etag:
+            response = HTTPResponse(304)
+            response.set_header("ETag", etag)
+            response.set_header("Last-Modified", last_modified)
+            response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
+            return response
+
         response = HTTPResponse(200)
         content_type, _ = mimetypes.guess_type(str(file_path))
         content_type = content_type or "application/octet-stream"
+
+        # Cache headers
+        response.set_header("ETag", etag)
+        response.set_header("Last-Modified", last_modified)
+        # uploads/ gets no-cache; everything else gets must-revalidate
+        if url_path.startswith("uploads/") or url_path == "uploads":
+            response.set_header("Cache-Control", "no-cache")
+        else:
+            response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
 
         # Check if this is a temp smuggle file (must read fully for cleanup)
         file_path_str = str(file_path)
@@ -127,10 +161,54 @@ class FileHandlersMixin(BaseHandler):
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-                "connect-src 'self'",
+                "connect-src 'self' ws: wss:",
             )
 
         return response
+
+    def handle_head(self, request: HTTPRequest) -> HTTPResponse:
+        """Handle HEAD request — same as GET but with empty body."""
+        response = self.handle_get(request)
+        response.body = b""
+        response.stream_path = None
+        return response
+
+    def handle_delete(self, request: HTTPRequest) -> HTTPResponse:
+        """Handle DELETE request — delete file from uploads/."""
+        # Always sandbox-restricted
+        file_path = self._get_file_path(request.path, for_sandbox=True)
+
+        if file_path is None or not file_path.exists():
+            return self._not_found(request.path)
+
+        # Reject directories
+        if file_path.is_dir():
+            return self._bad_request("Cannot delete directories")
+
+        # Defense in depth: verify path is inside upload_dir
+        try:
+            file_path.resolve().relative_to(self.upload_dir.resolve())
+        except ValueError:
+            response = HTTPResponse(403)
+            response.set_body(json.dumps({
+                "error": "Cannot delete files outside uploads/",
+                "status": 403,
+            }), "application/json")
+            return response
+
+        try:
+            deleted_name = file_path.name
+            file_path.unlink()
+            logger.debug(f"DELETE {deleted_name}")
+            response = HTTPResponse(200)
+            response.set_body(json.dumps({
+                "success": True,
+                "deleted": deleted_name,
+                "path": request.path,
+            }), "application/json")
+            return response
+        except OSError as e:
+            return self._internal_error(f"Delete failed: {e}")
 
     def handle_post(self, request: HTTPRequest) -> HTTPResponse:
         """Handle POST request — delegates to handle_none (file upload).
@@ -157,7 +235,7 @@ class FileHandlersMixin(BaseHandler):
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             else:
-                allowed = "GET, POST, PUT, PATCH, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                allowed = "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
             response.set_header("Access-Control-Allow-Methods", allowed)

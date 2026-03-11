@@ -158,6 +158,23 @@ class BaseHandler:
 
         return file_path
 
+    # Provided by the server
+    get_metrics: "Callable[[], dict[str, object]]"
+
+    def _serve_metrics(self) -> "HTTPResponse":
+        """Return server metrics as JSON. Hidden in OPSEC mode."""
+        if self.opsec_mode:
+            return self._not_found("/metrics")
+        import json
+        metrics = self.get_metrics()
+        response = HTTPResponse(200)
+        response.set_body(
+            json.dumps(metrics, indent=2),
+            "application/json",
+        )
+        response.set_header("Cache-Control", "no-cache")
+        return response
+
     def _is_hidden_file(self, path: str) -> bool:
         """Check if file is hidden."""
         filename = Path(path).name

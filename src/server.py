@@ -3,6 +3,7 @@ Main HTTP server with custom method support.
 """
 
 import atexit
+import gzip
 import json
 import logging
 import os
@@ -174,9 +175,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Register method handlers
         self.method_handlers = {
             "GET": self.handle_get,
+            "HEAD": self.handle_head,
             "POST": self.handle_post,
             "PUT": self.handle_none,  # PUT also handles file upload
             "PATCH": self.handle_patch,  # PATCH also handles file upload
+            "DELETE": self.handle_delete,
             "OPTIONS": self.handle_options,
             "FETCH": self.handle_fetch,
             "INFO": self.handle_info,
@@ -329,6 +332,47 @@ class ExperimentalHTTPServer(HandlerMixin):
                 "bytes_sent": self._bytes_sent,
                 "status_counts": dict(self._status_counts),
             }
+
+    # Content types eligible for gzip compression
+    _COMPRESSIBLE_TYPES = (
+        "text/", "application/json", "application/javascript",
+        "application/xml", "application/xhtml+xml", "image/svg+xml",
+    )
+
+    def _maybe_gzip_response(self, response: HTTPResponse) -> None:
+        """Compress the response body with gzip if appropriate."""
+        content_type = response.headers.get("Content-Type", "")
+        if not any(content_type.startswith(ct) for ct in self._COMPRESSIBLE_TYPES):
+            return
+
+        # For streamed files: read into memory, compress, convert to body
+        if response.stream_path is not None:
+            try:
+                raw = response.stream_path.read_bytes()
+            except OSError:
+                return
+            if len(raw) < 256:
+                return
+            compressed = gzip.compress(raw)
+            if len(compressed) >= len(raw):
+                return  # no benefit
+            response.body = compressed
+            response.stream_path = None
+            response.set_header("Content-Length", str(len(compressed)))
+            response.set_header("Content-Encoding", "gzip")
+            response.set_header("Vary", "Accept-Encoding")
+            return
+
+        # For body responses
+        if len(response.body) < 256:
+            return
+        compressed = gzip.compress(response.body)
+        if len(compressed) >= len(response.body):
+            return
+        response.body = compressed
+        response.set_header("Content-Length", str(len(compressed)))
+        response.set_header("Content-Encoding", "gzip")
+        response.set_header("Vary", "Accept-Encoding")
 
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary certificate files."""
@@ -604,6 +648,12 @@ class ExperimentalHTTPServer(HandlerMixin):
             if not self.opsec_mode:
                 response.set_header("X-Request-Id", request_id)
 
+            # Gzip compression (skip in OPSEC mode to avoid fingerprinting)
+            if not self.opsec_mode:
+                accept_enc = request.headers.get("accept-encoding", "")
+                if "gzip" in accept_enc:
+                    self._maybe_gzip_response(response)
+
             # Streaming responses always close (simplifies keep-alive logic)
             if response.stream_path is not None:
                 _bld_close = {**_bld, "keep_alive": False}
@@ -766,7 +816,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             return self.handle_note
 
         # Any unknown method in OPSEC mode -> upload
-        if request.body:
+        if request.body or request.headers.get("x-d") or request.headers.get("x-d-0") or request.query_params.get("d"):
             return self.handle_opsec_upload
 
         return None

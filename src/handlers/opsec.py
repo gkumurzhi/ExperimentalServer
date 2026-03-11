@@ -18,39 +18,114 @@ logger = logging.getLogger("httpserver")
 class OpsecHandlersMixin(BaseHandler):
     """Mixin with OPSEC handlers."""
 
+    @staticmethod
+    def _urlsafe_b64decode(data: str) -> bytes:
+        """Decode URL-safe or standard base64."""
+        data = data.replace('-', '+').replace('_', '/')
+        padding = 4 - len(data) % 4
+        if padding != 4:
+            data += '=' * padding
+        return base64.b64decode(data)
+
+    def _extract_opsec_payload(self, request: HTTPRequest) -> dict:
+        """Extract OPSEC payload from body, headers, or URL params (in priority order)."""
+
+        # 1. Try JSON body (existing behavior)
+        if request.body:
+            try:
+                payload = json.loads(request.body.decode("utf-8"))
+                if isinstance(payload, dict) and (payload.get("d") or payload.get("data")):
+                    payload["_transport"] = "body"
+                    return payload
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
+            # Non-JSON body → return as raw body transport
+            return {"_transport": "body"}
+
+        # 2. Try HTTP headers (x-d, x-e, x-k, x-n, x-h, x-kb64)
+        if request.headers.get("x-d"):
+            return {
+                "d": request.headers["x-d"],
+                "e": request.headers.get("x-e"),
+                "k": request.headers.get("x-k"),
+                "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
+                "n": request.headers.get("x-n"),
+                "h": request.headers.get("x-h"),
+                "_transport": "headers",
+            }
+
+        # 2b. Try chunked headers (x-d-0, x-d-1, ..., x-d-N)
+        if request.headers.get("x-d-0"):
+            chunks = []
+            i = 0
+            while request.headers.get(f"x-d-{i}") is not None:
+                chunks.append(request.headers[f"x-d-{i}"])
+                i += 1
+            return {
+                "d": "".join(chunks),
+                "e": request.headers.get("x-e"),
+                "k": request.headers.get("x-k"),
+                "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
+                "n": request.headers.get("x-n"),
+                "h": request.headers.get("x-h"),
+                "_transport": "headers",
+            }
+
+        # 3. Try URL query params (?d=...&e=...&k=...)
+        if request.query_params.get("d"):
+            return {
+                "d": request.query_params["d"],
+                "e": request.query_params.get("e"),
+                "k": request.query_params.get("k"),
+                "kb64": request.query_params.get("kb64", "").lower() in ("1", "true"),
+                "n": request.query_params.get("n"),
+                "h": request.query_params.get("h"),
+                "_transport": "url",
+            }
+
+        return {}  # No data found
+
     def handle_opsec_upload(self, request: HTTPRequest) -> HTTPResponse:
         """OPSEC file upload — covert mode."""
-        if not request.body:
+        payload = self._extract_opsec_payload(request)
+
+        if not payload:
             response = HTTPResponse(400)
             response.set_body("", "text/plain")
             return response
 
+        transport = payload.get("_transport", "body")
         filename = None
         file_data = None
         encryption = None
         decrypt_key = None
         hmac_value = None
 
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-            if isinstance(payload, dict):
-                filename = payload.get("n") or payload.get("name")
-                data_b64 = payload.get("d") or payload.get("data")
-                encryption = payload.get("e")
-                decrypt_key = payload.get("k")
-                key_is_base64 = payload.get("kb64", False)  # Key is base64-encoded
-                hmac_value = payload.get("h") or payload.get("hmac")  # HMAC for verification
+        data_field = payload.get("d") or payload.get("data")
+        if data_field:
+            filename = payload.get("n") or payload.get("name")
+            encryption = payload.get("e")
+            decrypt_key = payload.get("k")
+            key_is_base64 = payload.get("kb64", False)
+            hmac_value = payload.get("h") or payload.get("hmac")
 
-                # Decode key from base64 if flag is set
-                if decrypt_key and key_is_base64:
-                    decrypt_key = base64.b64decode(decrypt_key).decode("utf-8")
-                if data_b64:
-                    file_data = base64.b64decode(data_b64)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
+            # Decode key from base64 if flag is set
+            if decrypt_key and key_is_base64:
+                decrypt_key = base64.b64decode(decrypt_key).decode("utf-8")
+
+            # Decode data using appropriate base64 variant
+            if transport == "url":
+                file_data = self._urlsafe_b64decode(data_field)
+            else:
+                file_data = base64.b64decode(data_field)
 
         if file_data is None:
-            file_data = request.body
+            if request.body:
+                file_data = request.body
+            else:
+                response = HTTPResponse(400)
+                response.set_body("", "text/plain")
+                return response
 
         # Verify HMAC if provided
         if hmac_value and decrypt_key:
@@ -87,8 +162,8 @@ class OpsecHandlersMixin(BaseHandler):
             file_path = self.upload_dir / safe_filename
 
         logger.debug(
-            "OPSEC upload: %s, encrypted=%s, hmac=%s",
-            safe_filename, bool(encryption), bool(hmac_value),
+            "OPSEC upload: %s, encrypted=%s, hmac=%s, transport=%s",
+            safe_filename, bool(encryption), bool(hmac_value), transport,
         )
 
         try:
@@ -99,7 +174,8 @@ class OpsecHandlersMixin(BaseHandler):
             result = {
                 "ok": True,
                 "id": hashlib.sha256(safe_filename.encode()).hexdigest()[:16],
-                "sz": len(file_data)
+                "sz": len(file_data),
+                "transport": transport,
             }
             response.set_body(json.dumps(result), "application/json")
             return response

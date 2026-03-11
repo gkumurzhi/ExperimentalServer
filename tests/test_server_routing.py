@@ -2,6 +2,7 @@
 
 import json
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -22,8 +23,10 @@ class StubServer(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self.method_handlers = {
             "GET": self.handle_get,
+            "HEAD": self.handle_head,
             "POST": self.handle_post,
             "PUT": self.handle_none,
+            "DELETE": self.handle_delete,
             "OPTIONS": self.handle_options,
             "FETCH": self.handle_fetch,
             "INFO": self.handle_info,
@@ -37,6 +40,27 @@ class StubServer(HandlerMixin):
             "info": "XINFO",
             "ping": "XPING",
         }
+
+    def get_metrics(self):
+        return {"uptime_seconds": 0, "total_requests": 0, "total_errors": 0, "bytes_sent": 0, "status_counts": {}}
+
+    def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
+        """Mirror of ExperimentalHTTPServer._get_opsec_handler for testing."""
+        method = request.method
+        if method in self.method_handlers:
+            return self.method_handlers.get(method)
+        if method == self.opsec_methods.get("upload"):
+            return self.handle_opsec_upload
+        elif method == self.opsec_methods.get("download"):
+            return self.handle_fetch
+        elif method == self.opsec_methods.get("info"):
+            return self.handle_info
+        elif method == self.opsec_methods.get("ping"):
+            return self.handle_ping
+        # Any unknown method in OPSEC mode -> upload if data present
+        if request.body or request.headers.get("x-d") or request.headers.get("x-d-0") or request.query_params.get("d"):
+            return self.handle_opsec_upload
+        return None
 
 
 def _make_request(method: str, path: str = "/", body: bytes = b"",
@@ -81,7 +105,7 @@ class TestMethodRouting:
     """Test that standard method_handlers dispatch is correct."""
 
     def test_all_standard_methods_registered(self, server):
-        expected = {"GET", "POST", "PUT", "OPTIONS", "FETCH", "INFO", "PING", "NONE", "SMUGGLE"}
+        expected = {"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE", "SMUGGLE"}
         assert set(server.method_handlers.keys()) == expected
 
     def test_get_handler_callable(self, server):
@@ -107,7 +131,7 @@ class TestMethodRouting:
         assert data["is_directory"] is True
 
     def test_unknown_method_not_in_handlers(self, server):
-        assert server.method_handlers.get("DELETE") is None
+        assert server.method_handlers.get("CONNECT") is None
 
     def test_post_delegates_to_none(self, server):
         """POST should delegate to handle_none (upload)."""
@@ -142,6 +166,28 @@ class TestOpsecMethods:
         data = json.loads(resp.body)
         assert "server" not in data
         assert data["status"] == "pong"
+
+    def test_opsec_unknown_method_with_xd_header(self, opsec_server):
+        """Unknown method + X-D header → routes to opsec upload."""
+        import base64
+        b64 = base64.b64encode(b"test").decode()
+        req = _make_request("RANDOMMETHOD", "/", headers={"X-D": b64})
+        handler = opsec_server._get_opsec_handler(req)
+        assert handler == opsec_server.handle_opsec_upload
+
+    def test_opsec_unknown_method_with_d_param(self, opsec_server):
+        """Unknown method + ?d= query param → routes to opsec upload."""
+        import base64
+        b64 = base64.urlsafe_b64encode(b"test").decode().rstrip("=")
+        req = _make_request("RANDOMMETHOD", f"/?d={b64}")
+        handler = opsec_server._get_opsec_handler(req)
+        assert handler == opsec_server.handle_opsec_upload
+
+    def test_opsec_unknown_method_no_data(self, opsec_server):
+        """Unknown method with no body/header/param → returns None."""
+        req = _make_request("RANDOMMETHOD", "/")
+        handler = opsec_server._get_opsec_handler(req)
+        assert handler is None
 
 
 class TestSmuggleHandler:
