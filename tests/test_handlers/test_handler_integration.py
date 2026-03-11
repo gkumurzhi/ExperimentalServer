@@ -14,6 +14,14 @@ from src.handlers import HandlerMixin
 from tests.conftest import make_request
 
 
+def _has_cryptography() -> bool:
+    try:
+        from src.security.crypto import HAS_CRYPTOGRAPHY
+        return HAS_CRYPTOGRAPHY
+    except ImportError:
+        return False
+
+
 class StubServer(HandlerMixin):
     """Minimal concrete class combining all handler mixins for testing."""
 
@@ -712,3 +720,97 @@ class TestMetrics:
         req = make_request("GET", "/metrics")
         resp = srv.handle_get(req)
         assert resp.status_code == 404
+
+
+# ── OPSEC AES decryption path tests ──────────────────────────────
+
+class TestOpsecAESDecryption:
+    """Test OPSEC upload with AES-256-GCM encrypted payload."""
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_headers_aes_decrypt(self, temp_dir, upload_dir):
+        """X-D + X-E: aes + X-K → AES-decrypted content on disk."""
+        import base64
+
+        from src.security.crypto import aes_encrypt
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        original = b"aes encrypted secret"
+        key = "strongpassword"
+        encrypted = aes_encrypt(original, key)
+        b64 = base64.b64encode(encrypted).decode()
+        req = make_request("XUPLOAD", "/", headers={
+            "X-D": b64, "X-E": "aes", "X-K": key,
+        })
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 200
+        saved = list(upload_dir.iterdir())
+        assert any(f.read_bytes() == original for f in saved)
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_url_aes_decrypt(self, temp_dir, upload_dir):
+        """?d=...&e=aes&k=... → AES-decrypted content on disk."""
+        import base64
+
+        from src.security.crypto import aes_encrypt
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        original = b"url aes secret"
+        key = "urlkey"
+        encrypted = aes_encrypt(original, key)
+        b64 = base64.urlsafe_b64encode(encrypted).decode().rstrip("=")
+        req = make_request("XUPLOAD", f"/?d={b64}&e=aes&k={key}")
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 200
+        saved = list(upload_dir.iterdir())
+        assert any(f.read_bytes() == original for f in saved)
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_aes_wrong_key_saves_encrypted(self, temp_dir, upload_dir):
+        """AES with wrong key → decrypt() returns None → file saved encrypted."""
+        import base64
+
+        from src.security.crypto import aes_encrypt
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        original = b"aes wrong key test"
+        encrypted = aes_encrypt(original, "correct_key")
+        b64 = base64.b64encode(encrypted).decode()
+        req = make_request("XUPLOAD", "/", headers={
+            "X-D": b64, "X-E": "aes", "X-K": "wrong_key",
+        })
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 200
+        # With wrong key, decrypt returns None so original encrypted data is saved
+        saved = list(upload_dir.iterdir())
+        assert any(f.read_bytes() == encrypted for f in saved)
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_aes_with_hmac(self, temp_dir, upload_dir):
+        """AES + HMAC verification → decrypted content on disk."""
+        import base64
+
+        from src.security.crypto import aes_encrypt, compute_hmac
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        original = b"aes hmac verified"
+        key = "hmacaeskey"
+        encrypted = aes_encrypt(original, key)
+        b64 = base64.b64encode(encrypted).decode()
+        hmac_val = compute_hmac(encrypted, key)
+        req = make_request("XUPLOAD", "/", headers={
+            "X-D": b64, "X-E": "aes", "X-K": key, "X-H": hmac_val,
+        })
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 200
+        assert json.loads(resp.body)["ok"] is True
+        saved = list(upload_dir.iterdir())
+        assert any(f.read_bytes() == original for f in saved)
