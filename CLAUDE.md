@@ -43,9 +43,10 @@ The server uses Python mixins for composable HTTP method handling:
 ExperimentalHTTPServer (src/server.py)
     ↓
 HandlerMixin (handlers/__init__.py - composition of all handlers)
-    ├── FileHandlersMixin      → GET, POST, PUT, OPTIONS, FETCH, NONE
+    ├── FileHandlersMixin      → GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS, FETCH, NONE
     ├── InfoHandlersMixin      → INFO, PING
     ├── OpsecHandlersMixin     → OPSEC upload handling
+    ├── NotepadHandlersMixin   → NOTE (Secure Notepad with ECDH)
     └── SmuggleHandlersMixin   → HTML Smuggling
         ↓
 BaseHandler (handlers/base.py - common utilities)
@@ -66,9 +67,12 @@ BaseHandler (handlers/base.py - common utilities)
 
 - **src/server.py** - Main `ExperimentalHTTPServer` class with socket handling and ThreadPoolExecutor
 - **src/handlers/** - Method handlers (each mixin handles specific HTTP methods)
+- **src/handlers/notepad.py** - Secure Notepad with end-to-end AES-256-GCM encryption
 - **src/security/** - Auth (Basic Auth), crypto (XOR/HMAC), tls (self-signed cert generation)
+- **src/security/keys.py** - ECDH P-256 key exchange and HKDF session key derivation
 - **src/http/** - Request parsing, response building, path utilities
-- **src/config.py** - `ServerConfig` dataclass and constants (hidden files list, OPSEC prefixes/suffixes)
+- **src/config.py** - Constants (hidden files list, OPSEC prefixes/suffixes)
+- **src/websocket.py** - WebSocket frame parsing and handshake (RFC 6455)
 
 ### Security Layers
 
@@ -90,17 +94,22 @@ BaseHandler (handlers/base.py - common utilities)
 - `pathlib.Path` for all file operations with `.resolve()` for absolute paths
 - Path traversal defense: always verify `str(resolved_path).startswith(str(base_dir))`
 - Logger name: `"httpserver"` with format `%(asctime)s [%(levelname)s] %(message)s`
-- Custom exceptions in `src/exceptions.py` map to HTTP status codes
 
 ## Custom HTTP Methods Reference
 
 | Method | Handler | Purpose |
 |--------|---------|---------|
 | GET | handle_get | Serve files (index.html, uploads, static) |
-| POST | handle_post | Echo request body |
+| HEAD | handle_head | Same as GET but headers only (no body) |
+| POST | handle_post | File upload (delegates to handle_none) |
+| PUT | handle_none | Binary file upload (alias) |
+| PATCH | handle_patch | Binary file upload (delegates to handle_none) |
+| DELETE | handle_delete | Delete uploaded file from uploads/ |
+| OPTIONS | handle_options | CORS preflight |
 | FETCH | handle_fetch | Download with Content-Disposition |
 | INFO | handle_info | Directory listing (JSON) |
 | PING | handle_ping | Health check |
 | NONE | handle_none | Binary file upload |
+| NOTE | handle_note | Secure Notepad (ECDH + AES-256-GCM) |
 | SMUGGLE | handle_smuggle | Generate HTML smuggling page |
 | OPSEC_* | handle_opsec_upload | Encrypted upload (random method name) |

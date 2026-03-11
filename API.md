@@ -20,9 +20,24 @@ GET /path/to/file HTTP/1.1
 
 ---
 
+## HEAD
+
+Returns the same headers as GET but with no response body. Useful for checking file existence and metadata without transferring content.
+
+**Request:**
+```
+HEAD /path/to/file HTTP/1.1
+```
+
+**Response:** Same status code and headers as GET (200 or 404), empty body.
+
+**Status codes:** `200` OK, `304` Not Modified (if ETag matches), `404` Not Found
+
+---
+
 ## POST / NONE
 
-Upload a file. POST delegates to NONE internally.
+Upload a file. POST and NONE both invoke the same upload handler.
 
 **Request:**
 ```
@@ -54,9 +69,31 @@ The filename is resolved in order: `X-File-Name` header > URL path > auto-genera
 
 ---
 
-## PUT
+## PUT / PATCH
 
-Alias for POST/NONE (upload).
+Aliases for POST/NONE (upload). All four methods (POST, PUT, PATCH, NONE) use the same file upload logic.
+
+---
+
+## DELETE
+
+Delete a file from `uploads/`. Always sandbox-restricted — only files inside `uploads/` can be deleted.
+
+**Request:**
+```
+DELETE /uploads/filename.txt HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "deleted": "filename.txt",
+  "path": "/uploads/filename.txt"
+}
+```
+
+**Status codes:** `200` OK, `403` Outside uploads/, `404` Not Found, `400` Cannot delete directory
 
 ---
 
@@ -162,6 +199,199 @@ SMUGGLE /uploads/file.txt?encrypt=1 HTTP/1.1
 **Response:** HTML page (`text/html`) with embedded file data.
 
 **Status codes:** `200` OK, `404` File not found, `400` Bad request
+
+---
+
+## NOTE
+
+Secure Notepad with end-to-end AES-256-GCM encryption. The server stores opaque encrypted blobs — plaintext is never visible server-side. ECDH P-256 key exchange is used for automatic session key negotiation (requires the `cryptography` package). Notes are stored in `uploads/notes/` as `<id>.enc` + `<id>.meta.json` pairs.
+
+### NOTE /notes/key
+
+Get the server's ECDH public key.
+
+**Request:**
+```
+NOTE /notes/key HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "hasEcdh": true,
+  "publicKey": "<base64 of 65-byte uncompressed P-256 point>"
+}
+```
+
+If the `cryptography` package is not installed, `hasEcdh` is `false` and `publicKey` is absent.
+
+---
+
+### NOTE /notes/exchange
+
+Exchange ECDH keys to establish a session. The client sends its ephemeral P-256 public key; the server returns a `sessionId` and its own public key. Both sides independently derive the same AES-256-GCM session key via HKDF-SHA256.
+
+**Request:**
+```
+NOTE /notes/exchange HTTP/1.1
+Content-Type: application/json
+
+{"clientPublicKey": "<base64 of 65-byte uncompressed P-256 point>"}
+```
+
+**Response (200):**
+```json
+{
+  "sessionId": "<32-char hex>",
+  "serverPublicKey": "<base64 of 65-byte uncompressed P-256 point>"
+}
+```
+
+**Status codes:** `200` OK, `400` Missing/invalid key, `501` ECDH unavailable
+
+---
+
+### NOTE /notes — list notes
+
+**Request:**
+```
+NOTE /notes HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "notes": [
+    {
+      "id": "<32-char hex>",
+      "title": "My Note",
+      "created_at": "2025-01-15T10:30:00+00:00",
+      "updated_at": "2025-01-15T10:30:00+00:00",
+      "size": 256
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### NOTE /notes — save note
+
+Send a JSON body to create or update a note. `data` must be a base64-encoded AES-256-GCM ciphertext (encrypted client-side). Include `id` to update an existing note; omit to create a new one.
+
+**Request:**
+```
+NOTE /notes HTTP/1.1
+Content-Type: application/json
+X-Session-Id: <sessionId>   (optional, for audit trail)
+
+{
+  "title": "My Note",
+  "data": "<base64-encoded encrypted blob>",
+  "id": "<32-char hex>"   (omit for new note)
+}
+```
+
+**Response (201 for new, 200 for update):**
+```json
+{
+  "success": true,
+  "id": "<32-char hex>",
+  "title": "My Note",
+  "created_at": "2025-01-15T10:30:00+00:00",
+  "updated_at": "2025-01-15T10:30:00+00:00",
+  "size": 256
+}
+```
+
+**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update)
+
+---
+
+### NOTE /notes/{id} — load note
+
+**Request:**
+```
+NOTE /notes/a1b2c3d4... HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "id": "<32-char hex>",
+  "title": "My Note",
+  "data": "<base64-encoded encrypted blob>",
+  "created_at": "2025-01-15T10:30:00+00:00",
+  "updated_at": "2025-01-15T10:30:00+00:00",
+  "size": 256
+}
+```
+
+**Status codes:** `200` OK, `404` Not Found
+
+---
+
+### NOTE /notes/{id}?delete — delete note
+
+**Request:**
+```
+NOTE /notes/a1b2c3d4...?delete HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "id": "<32-char hex>"
+}
+```
+
+**Status codes:** `200` OK, `404` Not Found
+
+---
+
+## WebSocket — /notes/ws
+
+Real-time notepad sync over WebSocket (RFC 6455). The server detects an upgrade request on any path starting with `/notes/ws` and performs the handshake inline, before the normal HTTP handler runs. The connection uses a 60-second idle timeout; the server sends a ping frame when idle to keep the connection alive.
+
+**Upgrade request:**
+```
+GET /notes/ws HTTP/1.1
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Key: <base64-nonce>
+Sec-WebSocket-Version: 13
+```
+
+**Response:**
+```
+HTTP/1.1 101 Switching Protocols
+Upgrade: websocket
+Connection: Upgrade
+Sec-WebSocket-Accept: <computed accept key>
+```
+
+All WebSocket messages are UTF-8 JSON text frames. The client sends masked frames (required by RFC 6455); the server sends unmasked frames.
+
+**Client message types:**
+
+| `type` | Fields | Description |
+|--------|--------|-------------|
+| `save` | `title`, `data`, `noteId?`, `sessionId?` | Save a note |
+| `load` | `id` | Load a note by ID |
+| `list` | — | List all notes |
+| `delete` | `id` | Delete a note |
+
+**Server response types:**
+
+| `type` | Fields | Description |
+|--------|--------|-------------|
+| `saved` | `success`, `id`, `title`, ... | Note saved |
+| `loaded` | `id`, `title`, `data`, ... | Note loaded |
+| `list` | `notes`, `count` | Note list |
+| `deleted` | `success`, `id` | Note deleted |
+| `error` | `error` | Error message |
 
 ---
 

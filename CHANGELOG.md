@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption
+- ECDH P-256 key exchange for session key derivation (requires `cryptography` package)
+- WebSocket support (RFC 6455) for real-time notepad sync via `/notes/ws`
+- Upload method selector — POST, PUT, PATCH, and NONE all perform file upload
+- HEAD, PATCH, DELETE HTTP method handlers
+
 ### Security
 - Fix XSS in HTML smuggling — filenames escaped via `json.dumps()` for JS context, `innerHTML` replaced with `textContent` (B01)
 - Replace SHA-256 password hashing with PBKDF2-SHA256 (600K iterations) (B07)

@@ -29,10 +29,12 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 
 ## Возможности
 
-- Кастомные HTTP-методы: `GET`, `POST`, `PUT`, `FETCH`, `INFO`, `PING`, `NONE`, `OPTIONS`
-- Загрузка файлов через методы `NONE` и `PUT`
+- Кастомные HTTP-методы: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `FETCH`, `INFO`, `PING`, `NONE`, `NOTE`, `OPTIONS`
+- Загрузка файлов через методы `NONE`, `POST`, `PUT`, `PATCH`
 - Скачивание файлов через метод `FETCH` с заголовками для загрузки
 - Получение метаданных файлов/директорий через `INFO` (JSON)
+- **Secure Notepad** — метод `NOTE` с end-to-end шифрованием AES-256-GCM и ECDH P-256
+- **WebSocket** — реал-тайм синхронизация блокнота (RFC 6455) по `/notes/ws`
 - **HTTPS/TLS** — самоподписные сертификаты на лету или свои
 - **Basic Auth** — HTTP аутентификация с генерацией паролей
 - **OPSEC-режим** — случайные имена методов + XOR-шифрование + HMAC
@@ -79,8 +81,8 @@ ExperimentalHTTPServer/
 │   ├── __main__.py        # python -m src
 │   ├── cli.py             # CLI интерфейс
 │   ├── server.py          # ExperimentalHTTPServer
-│   ├── config.py          # ServerConfig
-│   ├── exceptions.py      # Кастомные исключения
+│   ├── config.py          # Константы и конфигурация
+│   ├── websocket.py       # WebSocket RFC 6455
 │   ├── py.typed           # PEP 561 marker
 │   │
 │   ├── http/              # HTTP модули
@@ -90,14 +92,16 @@ ExperimentalHTTPServer/
 │   │
 │   ├── handlers/          # Обработчики методов
 │   │   ├── base.py        # BaseHandler
-│   │   ├── files.py       # GET, POST, PUT, FETCH, NONE
+│   │   ├── files.py       # GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE
 │   │   ├── info.py        # INFO, PING
+│   │   ├── notepad.py     # NOTE (Secure Notepad, ECDH)
 │   │   ├── opsec.py       # OPSEC upload
 │   │   └── smuggle.py     # HTML Smuggling
 │   │
 │   ├── security/          # Безопасность
-│   │   ├── auth.py        # Basic Auth
-│   │   ├── crypto.py      # XOR/HMAC
+│   │   ├── auth.py        # Basic Auth + rate limiting
+│   │   ├── crypto.py      # XOR/HMAC/AES-256-GCM
+│   │   ├── keys.py        # ECDH P-256 key exchange
 │   │   └── tls.py         # TLS сертификаты
 │   │
 │   ├── utils/             # Утилиты
@@ -192,13 +196,17 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 | Метод | Описание | Sandbox |
 |-------|----------|---------|
 | `GET` | Получение файлов и страниц | Корневые файлы + uploads/ + static/ |
+| `HEAD` | Заголовки GET без тела ответа | Корневые файлы + uploads/ + static/ |
 | `POST` | Загрузка файлов на сервер | Да |
 | `PUT` | Загрузка файлов на сервер | Да |
+| `PATCH` | Загрузка файлов на сервер | Да |
+| `DELETE` | Удаление файла из uploads/ | Только uploads/ |
 | `OPTIONS` | CORS preflight | Да |
 | `FETCH` | Скачивание файлов с Content-Disposition | Только uploads/ |
 | `INFO` | Метаданные файла/директории (JSON) | Только uploads/ |
 | `PING` | Проверка доступности сервера | Да |
 | `NONE` | Загрузка файлов на сервер | Да |
+| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM) | Только uploads/notes/ |
 | `SMUGGLE` | HTML Smuggling — генерация страницы со встроенным файлом | Только uploads/ |
 
 ### Заголовки ответов
