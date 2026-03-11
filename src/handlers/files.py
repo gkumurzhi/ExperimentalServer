@@ -51,57 +51,46 @@ class FileHandlersMixin(BaseHandler):
         except UnicodeDecodeError:
             return content
 
-    def handle_get(self, request: HTTPRequest) -> HTTPResponse:
-        """Handle GET request — return file contents."""
+    def _resolve_get_path(self, request: HTTPRequest) -> Path | None:
+        """Resolve the filesystem path for a GET request.
+
+        Handles sandbox mode restrictions, directory→index.html fallback,
+        and hidden file protection.  Returns None when the path should 404.
+        """
         url_path = request.path.lstrip("/")
-        logger.debug(f"GET {request.path}")
 
-        # /metrics endpoint
-        if request.path == "/metrics":
-            return self._serve_metrics()
-
-        # Hidden file protection
         if self._is_hidden_file(request.path):
-            return self._not_found(request.path)
+            return None
 
-        # In sandbox mode, allow access to:
-        # 1. Root files (index.html, style.css, etc.)
-        # 2. uploads/ directory
-        # 3. static/ directory (static resources)
         if self.sandbox_mode:
-            # Check whether the request targets uploads, static, or a root file
-            if url_path.startswith("uploads/") or url_path == "uploads":
-                # Request to uploads — use sandbox logic
-                file_path = self._get_file_path(request.path, for_sandbox=True)
-            elif url_path.startswith("static/") or url_path == "static":
-                # Request to static — allow reading static files
+            if url_path.startswith(("uploads/", "static/")) or url_path in ("uploads", "static"):
                 file_path = self._get_file_path(request.path, for_sandbox=True)
             else:
-                # Root file — verify no path traversal attempt
                 file_path = self._get_file_path(request.path, for_sandbox=False)
-                # In sandbox mode, deny access to subdirectories other than uploads and static
                 if file_path and "/" in url_path and not url_path.startswith(("uploads", "static")):
-                    return self._not_found(request.path)
+                    return None
         else:
             file_path = self._get_file_path(request.path)
 
         if file_path is None or not file_path.exists():
-            return self._not_found(request.path)
+            return None
 
+        # Directory → index.html fallback
         if file_path.is_dir():
-            # Try to find index.html in the directory
             index_path = file_path / "index.html"
-            if index_path.exists():
-                file_path = index_path
-            else:
-                return self._not_found(request.path)
+            return index_path if index_path.exists() else None
+
+        return file_path
+
+    def _serve_file(self, file_path: Path, request: HTTPRequest) -> HTTPResponse:
+        """Build a 200 response for *file_path* with ETag, cache, and CSP headers."""
+        url_path = request.path.lstrip("/")
 
         # ETag / conditional request support
         etag = self._compute_etag(file_path)
         st = file_path.stat()
         last_modified = formatdate(st.st_mtime, usegmt=True)
 
-        # Check If-None-Match for 304
         if_none_match = request.headers.get("if-none-match", "")
         if if_none_match and if_none_match == etag:
             response = HTTPResponse(304)
@@ -117,30 +106,25 @@ class FileHandlersMixin(BaseHandler):
         # Cache headers
         response.set_header("ETag", etag)
         response.set_header("Last-Modified", last_modified)
-        # uploads/ gets no-cache; everything else gets must-revalidate
         if url_path.startswith("uploads/") or url_path == "uploads":
             response.set_header("Cache-Control", "no-cache")
         else:
             response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
 
-        # Check if this is a temp smuggle file (must read fully for cleanup)
+        # Smuggle files and OPSEC HTML need a full read
         file_path_str = str(file_path)
         with self._smuggle_lock:
             is_smuggle = file_path_str in self._temp_smuggle_files
 
-        # HTML files need OPSEC processing; smuggle files need post-send cleanup
         needs_full_read = (
             is_smuggle
-            or (content_type and content_type.startswith("text/html") and self.opsec_mode)
+            or (content_type.startswith("text/html") and self.opsec_mode)
         )
 
         if needs_full_read:
-            with file_path.open("rb") as f:
-                content = f.read()
-
-            if content_type and content_type.startswith("text/html"):
+            content = file_path.read_bytes()
+            if content_type.startswith("text/html"):
                 content = self._process_html_for_opsec(content)
-
             response.set_body(content, content_type)
 
             if is_smuggle:
@@ -152,11 +136,10 @@ class FileHandlersMixin(BaseHandler):
                 except OSError:
                     pass
         else:
-            # Stream file directly from disk (no full memory copy)
             response.set_file(file_path, content_type)
 
         # CSP header for HTML responses
-        if content_type and content_type.startswith("text/html"):
+        if content_type.startswith("text/html"):
             response.set_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self' 'unsafe-inline'; "
@@ -165,6 +148,19 @@ class FileHandlersMixin(BaseHandler):
             )
 
         return response
+
+    def handle_get(self, request: HTTPRequest) -> HTTPResponse:
+        """Handle GET request — return file contents."""
+        logger.debug(f"GET {request.path}")
+
+        if request.path == "/metrics":
+            return self._serve_metrics()
+
+        file_path = self._resolve_get_path(request)
+        if file_path is None:
+            return self._not_found(request.path)
+
+        return self._serve_file(file_path, request)
 
     def handle_head(self, request: HTTPRequest) -> HTTPResponse:
         """Handle HEAD request — same as GET but with empty body."""

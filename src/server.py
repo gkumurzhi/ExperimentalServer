@@ -535,6 +535,97 @@ class ExperimentalHTTPServer(HandlerMixin):
         finally:
             client_socket.close()
 
+    def _authenticate_request(
+        self,
+        request: HTTPRequest,
+        client_address: tuple[str, int],
+    ) -> HTTPResponse | None:
+        """Check Basic Auth and rate limiting.
+
+        Returns an error HTTPResponse to send back, or None if auth passed.
+        """
+        if not self.authenticator:
+            return None
+
+        ip = client_address[0]
+
+        if self._rate_limiter and self._rate_limiter.is_blocked(ip):
+            logger.warning(f"Rate limited: {ip}")
+            response = HTTPResponse(429)
+            response.set_body(
+                json.dumps({"error": "Too Many Requests", "status": 429}),
+                "application/json",
+            )
+            return response
+
+        auth_header = request.headers.get("authorization")
+        if not self.authenticator.authenticate(auth_header):
+            if self._rate_limiter:
+                self._rate_limiter.record_failure(ip)
+            logger.warning(f"Auth rejected: {ip}")
+            response = HTTPResponse(401)
+            response.set_header(
+                "WWW-Authenticate",
+                self.authenticator.get_www_authenticate_header(),
+            )
+            response.set_body(
+                json.dumps({"error": "Unauthorized", "status": 401}),
+                "application/json",
+            )
+            return response
+
+        if self._rate_limiter:
+            self._rate_limiter.reset(ip)
+        return None
+
+    def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
+        """Look up and invoke the handler for *request*.method."""
+        if self.opsec_mode:
+            handler = self._get_opsec_handler(request)
+        else:
+            handler = self.method_handlers.get(request.method)
+
+        if handler:
+            return handler(request)
+
+        if self.opsec_mode:
+            response = HTTPResponse(404)
+            response.set_body(
+                json.dumps({"error": "Not Found", "status": 404}),
+                "application/json",
+            )
+            return response
+        return self._method_not_allowed(request.method)
+
+    def _send_response(
+        self,
+        response: HTTPResponse,
+        client_socket: socket.socket,
+        _bld: dict,
+    ) -> int:
+        """Send *response* to *client_socket* and return bytes sent.
+
+        Handles both streamed (file) and buffered (body) responses.
+        For streamed responses, ``_bld`` is overridden to close the connection.
+        """
+        if response.stream_path is not None:
+            _bld_close = {**_bld, "keep_alive": False}
+            header_bytes = response.build_headers(**_bld_close)
+            client_socket.sendall(header_bytes)
+            bytes_sent = len(header_bytes)
+            with response.stream_path.open("rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    client_socket.sendall(chunk)
+                    bytes_sent += len(chunk)
+            return bytes_sent
+
+        response_bytes = response.build(**_bld)
+        client_socket.sendall(response_bytes)
+        return len(response_bytes)
+
     def _process_request(
         self,
         data: bytes,
@@ -564,47 +655,19 @@ class ExperimentalHTTPServer(HandlerMixin):
                 _bld["keep_alive_timeout"] = self.KEEP_ALIVE_TIMEOUT
                 _bld["keep_alive_max"] = remaining
 
-            # Basic Auth check
-            if self.authenticator:
-                # Rate limiting check
-                if self._rate_limiter and self._rate_limiter.is_blocked(client_address[0]):
-                    logger.warning(f"Rate limited: {client_address[0]}")
-                    response = HTTPResponse(429)
-                    response.set_body(
-                        json.dumps({"error": "Too Many Requests", "status": 429}),
-                        "application/json",
-                    )
-                    client_socket.sendall(response.build(**_bld))
-                    return False
-
-                auth_header = request.headers.get("authorization")
-                if not self.authenticator.authenticate(auth_header):
-                    if self._rate_limiter:
-                        self._rate_limiter.record_failure(client_address[0])
-                    logger.warning(f"Auth rejected: {client_address[0]}")
-                    response = HTTPResponse(401)
-                    response.set_header(
-                        "WWW-Authenticate",
-                        self.authenticator.get_www_authenticate_header()
-                    )
-                    response.set_body(
-                        json.dumps({"error": "Unauthorized", "status": 401}),
-                        "application/json",
-                    )
-                    client_socket.sendall(response.build(**_bld))
-                    return False
-
-                # Auth successful — reset rate limiter
-                if self._rate_limiter:
-                    self._rate_limiter.reset(client_address[0])
+            # Auth gate
+            auth_error = self._authenticate_request(request, client_address)
+            if auth_error:
+                client_socket.sendall(auth_error.build(**_bld))
+                return False
 
             # WebSocket upgrade detection for notepad real-time
             if (request.path.startswith("/notes/ws")
                     and check_websocket_upgrade(request)):
                 self._handle_notepad_ws(client_socket, request)
-                return False  # connection taken over by WS
+                return False
 
-            # Check Content-Length before processing
+            # Payload size gate
             try:
                 content_length = int(request.headers.get("content-length", 0))
             except ValueError:
@@ -622,58 +685,23 @@ class ExperimentalHTTPServer(HandlerMixin):
                 client_socket.sendall(response.build(**_bld))
                 return False
 
-            if self.opsec_mode:
-                handler = self._get_opsec_handler(request)
-            else:
-                handler = self.method_handlers.get(request.method)
-
-            if handler:
-                logger.debug(
-                    "[%s] %s - %s %s -> %s",
-                    request_id, client_address[0], request.method, request.path,
-                    getattr(handler, "__name__", "handler"),
-                )
-                response = handler(request)
-            else:
-                if self.opsec_mode:
-                    response = HTTPResponse(404)
-                    response.set_body(
-                        json.dumps({"error": "Not Found", "status": 404}),
-                        "application/json"
-                    )
-                else:
-                    response = self._method_not_allowed(request.method)
+            # Dispatch
+            response = self._dispatch_handler(request)
 
             if not self.opsec_mode:
                 response.set_header("X-Request-Id", request_id)
-
-            # Gzip compression (skip in OPSEC mode to avoid fingerprinting)
-            if not self.opsec_mode:
                 accept_enc = request.headers.get("accept-encoding", "")
                 if "gzip" in accept_enc:
                     self._maybe_gzip_response(response)
 
-            # Streaming responses always close (simplifies keep-alive logic)
-            if response.stream_path is not None:
-                _bld_close = {**_bld, "keep_alive": False}
-                header_bytes = response.build_headers(**_bld_close)
-                client_socket.sendall(header_bytes)
-                bytes_sent = len(header_bytes)
-                with response.stream_path.open("rb") as f:
-                    while True:
-                        chunk = f.read(65536)
-                        if not chunk:
-                            break
-                        client_socket.sendall(chunk)
-                        bytes_sent += len(chunk)
-                self._record_metric(response.status_code, bytes_sent)
-                use_keep_alive = False  # streamed — close connection
-            else:
-                response_bytes = response.build(**_bld)
-                client_socket.sendall(response_bytes)
-                self._record_metric(response.status_code, len(response_bytes))
+            # Send
+            bytes_sent = self._send_response(response, client_socket, _bld)
+            self._record_metric(response.status_code, bytes_sent)
 
-            # Log response status + latency (not in OPSEC mode)
+            # Streamed responses always close
+            if response.stream_path is not None:
+                use_keep_alive = False
+
             if not self.opsec_mode:
                 duration_ms = (time.monotonic() - start_time) * 1000
                 logger.info(
@@ -688,16 +716,11 @@ class ExperimentalHTTPServer(HandlerMixin):
             logger.exception("[%s] Request handling error from %s", request_id, client_address[0])
             self._record_metric(500, 0, error=True)
             error_response = HTTPResponse(500)
-            if self.opsec_mode:
-                error_response.set_body(
-                    json.dumps({"error": "Error", "status": 500}),
-                    "application/json"
-                )
-            else:
-                error_response.set_body(
-                    json.dumps({"error": "Internal Server Error", "status": 500}),
-                    "application/json"
-                )
+            msg = "Error" if self.opsec_mode else "Internal Server Error"
+            error_response.set_body(
+                json.dumps({"error": msg, "status": 500}),
+                "application/json",
+            )
             try:
                 client_socket.sendall(error_response.build(**_bld))
             except Exception:
