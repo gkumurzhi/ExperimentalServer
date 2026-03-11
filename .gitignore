@@ -27,3 +27,15 @@ uploads/*
 # OS
 .DS_Store
 Thumbs.db
+
+# Screenshots & debug artifacts
+/*.png
+
+# Playwright MCP logs
+.playwright-mcp/
+
+# Runtime config
+.opsec_config.json
+
+# Agent review artifacts
+agents_review/
