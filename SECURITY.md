@@ -1,0 +1,89 @@
+# Security Policy
+
+## Scope
+
+ExperimentalHTTPServer is an **experimental** research-grade project. It is
+intended for learning, CTF practice, and controlled red/blue team exercises —
+not for untrusted internet exposure. Nothing in this document promises
+production-grade assurances.
+
+## Supported Versions
+
+| Version | Security fixes |
+|---------|----------------|
+| `2.x`   | ✅ Supported    |
+| `< 2.0` | ❌ End of life |
+
+Only the latest minor release on the `main` branch receives security fixes.
+
+## Reporting a Vulnerability
+
+**Do not open public GitHub issues for security vulnerabilities.**
+
+Instead:
+
+1. Open a [GitHub Security Advisory](https://github.com/gkumurzhi/ExperimentalServer/security/advisories/new)
+   (*Report a vulnerability*) — this keeps the report private until a fix ships.
+2. Alternatively, contact the maintainer privately through the repository
+   `Issues` page by requesting a private channel.
+
+Please include:
+
+- Affected version / commit hash
+- Minimal reproduction (request, command line, expected vs. actual behavior)
+- Impact assessment (confidentiality / integrity / availability)
+- Optional: proposed mitigation
+
+### Response SLA (best effort)
+
+| Step               | Target          |
+|--------------------|-----------------|
+| First response     | 5 business days |
+| Triage & severity  | 10 business days|
+| Fix / mitigation   | 30 business days|
+| Public disclosure  | after fix ships |
+
+Coordinated disclosure is preferred. Credit will be given in the CHANGELOG
+unless the reporter requests anonymity.
+
+## Threat Model
+
+A full threat model lives in [`docs/threat-model.md`](docs/threat-model.md).
+High-level assumptions:
+
+- **In scope:** path traversal, auth bypass, timing side channels on Basic
+  Auth, WebSocket frame smuggling, Content-Length/Transfer-Encoding
+  smuggling, TLS misconfiguration, OPSEC payload forgery.
+- **Out of scope:** advanced traffic analysis of the OPSEC mode, timing
+  attacks below microsecond resolution, DoS via resource exhaustion from
+  authenticated users, vulnerabilities in `cryptography` / OpenSSL / Python
+  stdlib (report upstream).
+
+## OPSEC Mode Caveats
+
+The OPSEC mode provides **obfuscation, not cryptographic secrecy**:
+
+- XOR + HMAC is *not* a substitute for AES-GCM. The AES-GCM path requires
+  the optional `cryptography` dependency; without it, XOR is used as a
+  compatibility fallback.
+- Random method names mask intent from casual observers but do not defeat
+  traffic analysis by a capable adversary.
+- Nginx header spoofing is decorative — fingerprinting (timing, TLS
+  handshake, body sizes) still reveals the server.
+
+Do not rely on OPSEC mode as sole defense against a motivated attacker.
+
+## Hardening Recommendations
+
+When running the server outside a sandbox:
+
+- Always use `--tls` with a real certificate (Let's Encrypt or internal CA).
+- Always use `--auth random` or supply a strong `user:password`.
+- Use `--sandbox` to restrict file operations to `uploads/`.
+- Bind to `127.0.0.1` unless external access is explicitly required.
+- Place behind a reverse proxy with rate limiting and request-size limits.
+
+## Known Limitations
+
+See `CHANGELOG.md` under `### Security` for a log of past fixes and their
+reference IDs (B01–B47).
