@@ -133,6 +133,7 @@ class TestBasicAuthenticator:
 
     def test_custom_callback(self):
         """Test authentication with custom callback."""
+
         def custom_auth(username: str, password: str) -> bool:
             return username == "custom" and password == "callback"
 

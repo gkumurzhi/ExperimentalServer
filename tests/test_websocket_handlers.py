@@ -62,15 +62,22 @@ class WSServerStub(HandlerMixin):
         self._ecdh_manager = None
         if HAS_ECDH:
             from src.security.keys import ECDHKeyManager
+
             self._ecdh_manager = ECDHKeyManager()
 
     def get_metrics(self):
-        return {"uptime_seconds": 0, "total_requests": 0, "total_errors": 0,
-                "bytes_sent": 0, "status_counts": {}}
+        return {
+            "uptime_seconds": 0,
+            "total_requests": 0,
+            "total_errors": 0,
+            "bytes_sent": 0,
+            "status_counts": {},
+        }
 
     # Mirror of server._handle_ws_message
     def _handle_ws_message(self, sock, payload: bytes) -> None:
         import re as _re
+
         _NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
 
         try:
@@ -125,6 +132,7 @@ class WSServerStub(HandlerMixin):
 
     def _ws_handle_load(self, sock, msg: dict) -> None:
         import re as _re
+
         _NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
         note_id = msg.get("id", "")
         if not note_id or not _NOTE_ID_RE_WS.match(note_id):
@@ -157,6 +165,7 @@ def mock_socket():
 
 # ── Invalid input tests ───────────────────────────────────────────
 
+
 class TestWSInvalidInput:
     def test_invalid_json_returns_error(self, ws_server, mock_socket):
         ws_server._handle_ws_message(mock_socket, b"not json{{{")
@@ -176,6 +185,7 @@ class TestWSInvalidInput:
 
 # ── List tests ────────────────────────────────────────────────────
 
+
 class TestWSList:
     def test_list_empty(self, ws_server, mock_socket):
         payload = json.dumps({"type": "list"}).encode()
@@ -188,14 +198,17 @@ class TestWSList:
 
 # ── Save tests ────────────────────────────────────────────────────
 
+
 class TestWSSave:
     def test_save_creates_note(self, ws_server, mock_socket):
         data_b64 = base64.b64encode(b"encrypted blob").decode()
-        payload = json.dumps({
-            "type": "save",
-            "title": "WS Note",
-            "data": data_b64,
-        }).encode()
+        payload = json.dumps(
+            {
+                "type": "save",
+                "title": "WS Note",
+                "data": data_b64,
+            }
+        ).encode()
         ws_server._handle_ws_message(mock_socket, payload)
         msg = mock_socket.last_json
         assert msg["type"] == "saved"
@@ -204,9 +217,13 @@ class TestWSSave:
 
     def test_save_then_list_shows_note(self, ws_server, mock_socket):
         data_b64 = base64.b64encode(b"data").decode()
-        save_payload = json.dumps({
-            "type": "save", "title": "Listed", "data": data_b64,
-        }).encode()
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Listed",
+                "data": data_b64,
+            }
+        ).encode()
         ws_server._handle_ws_message(mock_socket, save_payload)
 
         list_payload = json.dumps({"type": "list"}).encode()
@@ -219,13 +236,18 @@ class TestWSSave:
 
 # ── Load tests ────────────────────────────────────────────────────
 
+
 class TestWSLoad:
     def test_load_existing_note(self, ws_server, mock_socket):
         # Save first
         data_b64 = base64.b64encode(b"load me").decode()
-        save_payload = json.dumps({
-            "type": "save", "title": "Load Test", "data": data_b64,
-        }).encode()
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Load Test",
+                "data": data_b64,
+            }
+        ).encode()
         ws_server._handle_ws_message(mock_socket, save_payload)
         note_id = mock_socket.last_json["id"]
 
@@ -260,13 +282,18 @@ class TestWSLoad:
 
 # ── Delete tests ──────────────────────────────────────────────────
 
+
 class TestWSDelete:
     def test_delete_existing_note(self, ws_server, mock_socket, upload_dir):
         # Save
         data_b64 = base64.b64encode(b"delete me").decode()
-        save_payload = json.dumps({
-            "type": "save", "title": "Del Test", "data": data_b64,
-        }).encode()
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Del Test",
+                "data": data_b64,
+            }
+        ).encode()
         ws_server._handle_ws_message(mock_socket, save_payload)
         note_id = mock_socket.last_json["id"]
 

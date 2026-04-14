@@ -86,7 +86,8 @@ class TestSandboxPathTraversal:
 
     def test_sandbox_blocks_dot_dot_in_uploads(self, sandbox_handler):
         result = sandbox_handler._get_file_path(
-            "/uploads/../../../etc/passwd", for_sandbox=True,
+            "/uploads/../../../etc/passwd",
+            for_sandbox=True,
         )
         assert result is None
 

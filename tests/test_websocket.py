@@ -19,54 +19,80 @@ from tests.conftest import make_request
 
 # ── Upgrade detection ─────────────────────────────────────────────
 
+
 class TestWsUpgradeDetection:
     def test_valid_upgrade_request(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Upgrade": "websocket",
-            "Connection": "Upgrade",
-            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
         assert check_websocket_upgrade(req) is True
 
     def test_missing_upgrade_header(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Connection": "Upgrade",
-            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
         assert check_websocket_upgrade(req) is False
 
     def test_missing_connection_header(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Upgrade": "websocket",
-            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
         assert check_websocket_upgrade(req) is False
 
     def test_missing_ws_key(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Upgrade": "websocket",
-            "Connection": "Upgrade",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+            },
+        )
         assert check_websocket_upgrade(req) is False
 
     def test_case_insensitive_headers(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Upgrade": "WebSocket",
-            "Connection": "upgrade",
-            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "WebSocket",
+                "Connection": "upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
         assert check_websocket_upgrade(req) is True
 
     def test_connection_with_multiple_values(self):
-        req = make_request("GET", "/notes/ws", headers={
-            "Upgrade": "websocket",
-            "Connection": "keep-alive, Upgrade",
-            "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
-        })
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "keep-alive, Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
         assert check_websocket_upgrade(req) is True
 
 
 # ── Accept key (RFC 6455 Section 4.2.2) ──────────────────────────
+
 
 class TestWsAcceptKey:
     def test_rfc6455_test_vector(self):
@@ -77,6 +103,7 @@ class TestWsAcceptKey:
 
 
 # ── Handshake response ────────────────────────────────────────────
+
 
 class TestWsHandshake:
     def test_handshake_contains_101(self):
@@ -94,6 +121,7 @@ class TestWsHandshake:
 
 
 # ── Frame parsing ─────────────────────────────────────────────────
+
 
 class TestWsFrameParsing:
     @staticmethod
@@ -202,13 +230,14 @@ class TestWsFrameParsing:
         assert result1 is not None
         assert result1[1] == b"first"
 
-        remaining = data[result1[2]:]
+        remaining = data[result1[2] :]
         result2 = parse_ws_frame(remaining)
         assert result2 is not None
         assert result2[1] == b"second"
 
 
 # ── Frame building ────────────────────────────────────────────────
+
 
 class TestWsFrameBuilding:
     def test_small_text_frame(self):
@@ -250,6 +279,7 @@ class TestWsFrameBuilding:
 
 
 # ── Close frame ───────────────────────────────────────────────────
+
 
 class TestWsCloseFrame:
     def test_close_with_code(self):

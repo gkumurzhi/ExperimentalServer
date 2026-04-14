@@ -35,7 +35,7 @@ class TestSanitizeFilename:
 
     def test_special_characters(self):
         """Test removal of special characters."""
-        result = sanitize_filename("file<>:\"|?*.txt")
+        result = sanitize_filename('file<>:"|?*.txt')
         # Dangerous characters should be removed/replaced
         for char in '<>:"|?*':
             assert char not in result

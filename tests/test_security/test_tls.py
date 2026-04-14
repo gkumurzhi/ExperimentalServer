@@ -40,7 +40,8 @@ class TestGenerateSelfSignedCert:
         key_path = tmp_path / "key.pem"
 
         result_cert, result_key = generate_self_signed_cert(
-            cert_path=cert_path, key_path=key_path,
+            cert_path=cert_path,
+            key_path=key_path,
         )
 
         assert result_cert == cert_path
@@ -71,7 +72,9 @@ class TestGenerateSelfSignedCert:
         # Verify CN via openssl
         result = subprocess.run(
             ["openssl", "x509", "-in", str(cert_path), "-noout", "-subject"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         assert "myhost.local" in result.stdout
 
@@ -90,7 +93,9 @@ class TestGenerateSelfSignedCert:
         )
         result = subprocess.run(
             ["openssl", "x509", "-in", str(cert_path), "-noout", "-text"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         assert result.returncode == 0
         assert "Issuer:" in result.stdout

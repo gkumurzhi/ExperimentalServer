@@ -17,7 +17,10 @@ class ServerStub(HandlerMixin):
     """Minimal server with auth and dispatch for unit testing."""
 
     def __init__(
-        self, root_dir: Path, upload_dir: Path, *,
+        self,
+        root_dir: Path,
+        upload_dir: Path,
+        *,
         auth: BasicAuthenticator | None = None,
         opsec: bool = False,
     ):
@@ -53,13 +56,18 @@ class ServerStub(HandlerMixin):
 
     def get_metrics(self):
         return {
-            "uptime_seconds": 0, "total_requests": 0, "total_errors": 0,
-            "bytes_sent": 0, "status_counts": {},
+            "uptime_seconds": 0,
+            "total_requests": 0,
+            "total_errors": 0,
+            "bytes_sent": 0,
+            "status_counts": {},
         }
 
     # Mirror of ExperimentalHTTPServer._authenticate_request
     def _authenticate_request(
-        self, request: HTTPRequest, client_address: tuple[str, int],
+        self,
+        request: HTTPRequest,
+        client_address: tuple[str, int],
     ) -> HTTPResponse | None:
         if not self.authenticator:
             return None
@@ -153,6 +161,7 @@ ADDR = ("127.0.0.1", 12345)
 
 # ── _authenticate_request tests ───────────────────────────────────
 
+
 class TestAuthenticateRequest:
     def test_no_auth_configured_returns_none(self, server):
         req = make_request("GET", "/")
@@ -205,6 +214,7 @@ class TestAuthenticateRequest:
 
 
 # ── _dispatch_handler tests ───────────────────────────────────────
+
 
 class TestDispatchHandler:
     def test_known_method_dispatches(self, server):

@@ -17,6 +17,7 @@ from tests.conftest import make_request
 def _has_cryptography() -> bool:
     try:
         from src.security.crypto import HAS_CRYPTOGRAPHY
+
         return HAS_CRYPTOGRAPHY
     except ImportError:
         return False
@@ -69,6 +70,7 @@ def sandbox_server(temp_dir, upload_dir):
 
 # ── GET tests ──────────────────────────────────────────────────────
 
+
 class TestHandleGet:
     def test_get_index(self, server):
         req = make_request("GET", "/")
@@ -99,12 +101,12 @@ class TestHandleGet:
         assert resp.status_code == 404
 
     def test_get_upload_in_sandbox(self, sandbox_server, upload_dir):
-        (upload_dir / "data.bin").write_bytes(b"\xDE\xAD")
+        (upload_dir / "data.bin").write_bytes(b"\xde\xad")
         req = make_request("GET", "/uploads/data.bin")
         resp = sandbox_server.handle_get(req)
         assert resp.status_code == 200
         assert resp.stream_path is not None
-        assert resp.stream_path.read_bytes() == b"\xDE\xAD"
+        assert resp.stream_path.read_bytes() == b"\xde\xad"
 
     def test_get_directory_serves_index(self, server, temp_dir):
         sub = temp_dir / "sub"
@@ -117,11 +119,13 @@ class TestHandleGet:
 
 # ── NONE (upload) tests ────────────────────────────────────────────
 
+
 class TestHandleNone:
     def test_upload_file(self, server, upload_dir):
         body = b"file content 123"
         req = make_request(
-            "NONE", "/",
+            "NONE",
+            "/",
             headers={"X-File-Name": "test.txt"},
             body=body,
         )
@@ -142,7 +146,8 @@ class TestHandleNone:
 
     def test_upload_generates_safe_filename(self, server, upload_dir):
         req = make_request(
-            "NONE", "/",
+            "NONE",
+            "/",
             headers={"X-File-Name": "../../evil.sh"},
             body=b"pwned",
         )
@@ -156,7 +161,8 @@ class TestHandleNone:
     def test_upload_unique_name_on_collision(self, server, upload_dir):
         (upload_dir / "dup.txt").write_text("old")
         req = make_request(
-            "NONE", "/",
+            "NONE",
+            "/",
             headers={"X-File-Name": "dup.txt"},
             body=b"new",
         )
@@ -168,10 +174,12 @@ class TestHandleNone:
 
 # ── POST tests (delegates to NONE) ────────────────────────────────
 
+
 class TestHandlePost:
     def test_post_uploads_like_none(self, server, upload_dir):
         req = make_request(
-            "POST", "/",
+            "POST",
+            "/",
             headers={"X-File-Name": "post_file.bin"},
             body=b"post data",
         )
@@ -180,6 +188,7 @@ class TestHandlePost:
 
 
 # ── FETCH tests ────────────────────────────────────────────────────
+
 
 class TestHandleFetch:
     def test_fetch_existing_file(self, server, upload_dir):
@@ -198,6 +207,7 @@ class TestHandleFetch:
 
 
 # ── INFO tests ─────────────────────────────────────────────────────
+
 
 class TestHandleInfo:
     def test_info_existing_file(self, server, temp_dir):
@@ -260,6 +270,7 @@ class TestHandleInfo:
 
 # ── PING tests ─────────────────────────────────────────────────────
 
+
 class TestHandlePing:
     def test_ping_returns_pong(self, server):
         req = make_request("PING", "/")
@@ -280,10 +291,12 @@ class TestHandlePing:
 
 # ── OPTIONS tests ──────────────────────────────────────────────────
 
+
 class TestHandleOptions:
     def test_options_returns_204(self, server):
         req = make_request(
-            "OPTIONS", "/",
+            "OPTIONS",
+            "/",
             headers={"Access-Control-Request-Method": "FETCH"},
         )
         resp = server.handle_options(req)
@@ -292,7 +305,8 @@ class TestHandleOptions:
     def test_options_opsec_hides_custom_methods(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         req = make_request(
-            "OPTIONS", "/",
+            "OPTIONS",
+            "/",
             headers={"Access-Control-Request-Method": "POST"},
         )
         resp = srv.handle_options(req)
@@ -303,14 +317,18 @@ class TestHandleOptions:
 
 # ── OPSEC upload tests ─────────────────────────────────────────────
 
+
 class TestHandleOpsecUpload:
     def test_opsec_json_upload(self, temp_dir, upload_dir):
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
-        payload = json.dumps({
-            "n": "secret.bin",
-            "d": base64.b64encode(b"secret data").decode(),
-        }).encode()
+        payload = json.dumps(
+            {
+                "n": "secret.bin",
+                "d": base64.b64encode(b"secret data").decode(),
+            }
+        ).encode()
         req = make_request("OPSEC", "/", body=payload)
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
@@ -326,6 +344,7 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_transport(self, temp_dir, upload_dir):
         """X-D header with no body → 200, file saved correctly."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw_data = b"headers transport data"
         b64 = base64.b64encode(raw_data).decode()
@@ -343,6 +362,7 @@ class TestHandleOpsecUpload:
     def test_opsec_url_transport(self, temp_dir, upload_dir):
         """?d=<url-safe-b64> with no body → 200, file saved correctly."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw_data = b"url transport data"
         # URL-safe base64
@@ -361,14 +381,21 @@ class TestHandleOpsecUpload:
         import base64
 
         from src.security.crypto import xor_bytes
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"secret plaintext"
         key = "mykey"
         encrypted = xor_bytes(original, key)
         b64 = base64.b64encode(encrypted).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "xor", "X-K": key,
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "xor",
+                "X-K": key,
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
@@ -379,6 +406,7 @@ class TestHandleOpsecUpload:
         import base64
 
         from src.security.crypto import xor_bytes
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"url secret"
         key = "urlkey"
@@ -395,14 +423,22 @@ class TestHandleOpsecUpload:
         import base64
 
         from src.security.crypto import compute_hmac
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw_data = b"hmac data"
         key = "hmackey"
         b64 = base64.b64encode(raw_data).decode()
         hmac_val = compute_hmac(raw_data, key)
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "xor", "X-K": key, "X-H": hmac_val,
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "xor",
+                "X-K": key,
+                "X-H": hmac_val,
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         assert json.loads(resp.body)["ok"] is True
@@ -410,12 +446,20 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_hmac_invalid(self, temp_dir, upload_dir):
         """X-H with wrong HMAC → 400, err=hmac."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw_data = b"hmac data"
         b64 = base64.b64encode(raw_data).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "xor", "X-K": "somekey", "X-H": "deadbeef",
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "xor",
+                "X-K": "somekey",
+                "X-H": "deadbeef",
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 400
         assert json.loads(resp.body)["err"] == "hmac"
@@ -423,15 +467,23 @@ class TestHandleOpsecUpload:
     def test_opsec_body_priority_over_headers(self, temp_dir, upload_dir):
         """JSON body + X-D header → body wins, transport=body."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         body_data = b"body wins"
         header_data = b"header loses"
-        payload = json.dumps({
-            "d": base64.b64encode(body_data).decode(),
-        }).encode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": base64.b64encode(header_data).decode(),
-        }, body=payload)
+        payload = json.dumps(
+            {
+                "d": base64.b64encode(body_data).decode(),
+            }
+        ).encode()
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": base64.b64encode(header_data).decode(),
+            },
+            body=payload,
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
@@ -442,14 +494,19 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_priority_over_url(self, temp_dir, upload_dir):
         """X-D header + ?d= param → headers win, transport=headers."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         header_data = b"header wins"
         url_data = b"url loses"
         h_b64 = base64.b64encode(header_data).decode()
         u_b64 = base64.urlsafe_b64encode(url_data).decode().rstrip("=")
-        req = make_request("XUPLOAD", f"/?d={u_b64}", headers={
-            "X-D": h_b64,
-        })
+        req = make_request(
+            "XUPLOAD",
+            f"/?d={u_b64}",
+            headers={
+                "X-D": h_b64,
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
@@ -467,6 +524,7 @@ class TestHandleOpsecUpload:
     def test_opsec_transport_in_response(self, temp_dir, upload_dir):
         """Verify transport field in response for each mode."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw = b"transport test"
         b64_std = base64.b64encode(raw).decode()
@@ -488,6 +546,7 @@ class TestHandleOpsecUpload:
     def test_urlsafe_b64decode(self, temp_dir, upload_dir):
         """URL-safe base64 (-, _, no padding) decodes correctly."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         # Data that produces + and / in standard base64
         raw = bytes(range(256))
@@ -498,12 +557,18 @@ class TestHandleOpsecUpload:
     def test_opsec_headers_with_filename(self, temp_dir, upload_dir):
         """X-N header → file saved with that name."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw = b"named file"
         b64 = base64.b64encode(raw).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-N": "custom_name.txt",
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-N": "custom_name.txt",
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         assert (upload_dir / "custom_name.txt").exists()
@@ -514,15 +579,23 @@ class TestHandleOpsecUpload:
         import base64
 
         from src.security.crypto import xor_bytes
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"kb64 test"
         key = "mypassword"
         encrypted = xor_bytes(original, key)
         b64_data = base64.b64encode(encrypted).decode()
         b64_key = base64.b64encode(key.encode()).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64_data, "X-E": "xor", "X-K": b64_key, "X-Kb64": "true",
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64_data,
+                "X-E": "xor",
+                "X-K": b64_key,
+                "X-Kb64": "true",
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
@@ -531,6 +604,7 @@ class TestHandleOpsecUpload:
     def test_opsec_chunked_headers(self, temp_dir, upload_dir):
         """X-D-0 + X-D-1 + X-D-2 → reassembled correctly."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw = b"chunked header data that spans multiple headers"
         b64 = base64.b64encode(raw).decode()
@@ -538,7 +612,7 @@ class TestHandleOpsecUpload:
         chunk_size = len(b64) // 3 + 1
         chunks = {}
         for i in range(0, len(b64), chunk_size):
-            chunks[f"X-D-{i // chunk_size}"] = b64[i:i + chunk_size]
+            chunks[f"X-D-{i // chunk_size}"] = b64[i : i + chunk_size]
         req = make_request("XUPLOAD", "/", headers=chunks)
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
@@ -551,6 +625,7 @@ class TestHandleOpsecUpload:
     def test_opsec_chunked_single_chunk(self, temp_dir, upload_dir):
         """Only X-D-0 → works."""
         import base64
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         raw = b"single chunk"
         b64 = base64.b64encode(raw).decode()
@@ -566,14 +641,17 @@ class TestHandleOpsecUpload:
 
 # ── Auth rate limiter tests ────────────────────────────────────────
 
+
 class TestAuthRateLimiter:
     def test_not_blocked_initially(self):
         from src.security.auth import AuthRateLimiter
+
         rl = AuthRateLimiter(max_attempts=3, cooldown=10.0)
         assert rl.is_blocked("1.2.3.4") is False
 
     def test_blocked_after_max_failures(self):
         from src.security.auth import AuthRateLimiter
+
         rl = AuthRateLimiter(max_attempts=3, cooldown=10.0)
         for _ in range(3):
             rl.record_failure("1.2.3.4")
@@ -581,6 +659,7 @@ class TestAuthRateLimiter:
 
     def test_reset_unblocks(self):
         from src.security.auth import AuthRateLimiter
+
         rl = AuthRateLimiter(max_attempts=2, cooldown=10.0)
         rl.record_failure("1.2.3.4")
         rl.record_failure("1.2.3.4")
@@ -590,6 +669,7 @@ class TestAuthRateLimiter:
 
     def test_different_ips_independent(self):
         from src.security.auth import AuthRateLimiter
+
         rl = AuthRateLimiter(max_attempts=2, cooldown=10.0)
         rl.record_failure("1.1.1.1")
         rl.record_failure("1.1.1.1")
@@ -598,6 +678,7 @@ class TestAuthRateLimiter:
 
 
 # ── HEAD tests ────────────────────────────────────────────────────
+
 
 class TestHandleHead:
     def test_head_200(self, server):
@@ -631,6 +712,7 @@ class TestHandleHead:
 
 
 # ── DELETE tests ──────────────────────────────────────────────────
+
 
 class TestHandleDelete:
     def test_delete_existing_file(self, server, upload_dir):
@@ -670,6 +752,7 @@ class TestHandleDelete:
 
 # ── Cache headers tests ──────────────────────────────────────────
 
+
 class TestCacheHeaders:
     def test_get_returns_etag_and_last_modified(self, server, temp_dir):
         (temp_dir / "cached.txt").write_text("cache me")
@@ -703,6 +786,7 @@ class TestCacheHeaders:
 
 # ── Metrics tests ─────────────────────────────────────────────────
 
+
 class TestMetrics:
     def test_get_metrics_returns_json(self, server):
         req = make_request("GET", "/metrics")
@@ -724,6 +808,7 @@ class TestMetrics:
 
 # ── OPSEC AES decryption path tests ──────────────────────────────
 
+
 class TestOpsecAESDecryption:
     """Test OPSEC upload with AES-256-GCM encrypted payload."""
 
@@ -736,14 +821,21 @@ class TestOpsecAESDecryption:
         import base64
 
         from src.security.crypto import aes_encrypt
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"aes encrypted secret"
         key = "strongpassword"
         encrypted = aes_encrypt(original, key)
         b64 = base64.b64encode(encrypted).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "aes", "X-K": key,
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "aes",
+                "X-K": key,
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
@@ -758,6 +850,7 @@ class TestOpsecAESDecryption:
         import base64
 
         from src.security.crypto import aes_encrypt
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"url aes secret"
         key = "urlkey"
@@ -778,13 +871,20 @@ class TestOpsecAESDecryption:
         import base64
 
         from src.security.crypto import aes_encrypt
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"aes wrong key test"
         encrypted = aes_encrypt(original, "correct_key")
         b64 = base64.b64encode(encrypted).decode()
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "aes", "X-K": "wrong_key",
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "aes",
+                "X-K": "wrong_key",
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         # With wrong key, decrypt returns None so original encrypted data is saved
@@ -800,15 +900,23 @@ class TestOpsecAESDecryption:
         import base64
 
         from src.security.crypto import aes_encrypt, compute_hmac
+
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         original = b"aes hmac verified"
         key = "hmacaeskey"
         encrypted = aes_encrypt(original, key)
         b64 = base64.b64encode(encrypted).decode()
         hmac_val = compute_hmac(encrypted, key)
-        req = make_request("XUPLOAD", "/", headers={
-            "X-D": b64, "X-E": "aes", "X-K": key, "X-H": hmac_val,
-        })
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "aes",
+                "X-K": key,
+                "X-H": hmac_val,
+            },
+        )
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 200
         assert json.loads(resp.body)["ok"] is True

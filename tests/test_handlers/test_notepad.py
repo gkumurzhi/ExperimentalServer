@@ -40,7 +40,9 @@ def server(temp_dir, upload_dir):
 
 
 def _make_note_payload(
-    title: str = "Test Note", data: bytes = b"encrypted blob", note_id: str = "",
+    title: str = "Test Note",
+    data: bytes = b"encrypted blob",
+    note_id: str = "",
 ) -> bytes:
     """Build a NOTE save payload."""
     payload: dict = {
@@ -53,6 +55,7 @@ def _make_note_payload(
 
 
 # ── Save tests ─────────────────────────────────────────────────────
+
 
 class TestNotepadSave:
     def test_create_new_note(self, server):
@@ -150,6 +153,7 @@ class TestNotepadSave:
 
 # ── List tests ─────────────────────────────────────────────────────
 
+
 class TestNotepadList:
     def test_list_empty(self, server):
         req = make_request("NOTE", "/notes?list")
@@ -188,6 +192,7 @@ class TestNotepadList:
 
 # ── Load tests ─────────────────────────────────────────────────────
 
+
 class TestNotepadLoad:
     def test_load_existing_note(self, server):
         body = _make_note_payload("Load Me", b"secret stuff")
@@ -211,6 +216,7 @@ class TestNotepadLoad:
 
 
 # ── Delete tests ───────────────────────────────────────────────────
+
 
 class TestNotepadDelete:
     def test_delete_existing_note(self, server, upload_dir):
@@ -254,6 +260,7 @@ class TestNotepadDelete:
 
 # ── Security tests ─────────────────────────────────────────────────
 
+
 class TestNotepadSecurity:
     def test_invalid_hex_id_rejected(self, server):
         req = make_request("NOTE", "/notes/not-hex-at-all!!")
@@ -272,11 +279,13 @@ class TestNotepadSecurity:
         assert resp.status_code == 400
 
     def test_traversal_in_save_id_rejected(self, server):
-        payload = json.dumps({
-            "id": "../../../etc/passwd",
-            "title": "Evil",
-            "data": base64.b64encode(b"x").decode(),
-        }).encode()
+        payload = json.dumps(
+            {
+                "id": "../../../etc/passwd",
+                "title": "Evil",
+                "data": base64.b64encode(b"x").decode(),
+            }
+        ).encode()
         req = make_request("NOTE", "/notes", body=payload)
         resp = server.handle_note(req)
         assert resp.status_code == 400
@@ -288,6 +297,7 @@ class TestNotepadSecurity:
 
 
 # ── ECDH key exchange tests ───────────────────────────────────────
+
 
 @pytest.mark.skipif(not HAS_ECDH, reason="cryptography not installed")
 class TestECDHKeyExchange:
@@ -331,9 +341,11 @@ class TestECDHKeyExchange:
         assert resp.status_code == 400
 
     def test_exchange_invalid_key_length_returns_400(self, server):
-        body = json.dumps({
-            "clientPublicKey": base64.b64encode(b"tooshort").decode(),
-        }).encode()
+        body = json.dumps(
+            {
+                "clientPublicKey": base64.b64encode(b"tooshort").decode(),
+            }
+        ).encode()
         req = make_request("NOTE", "/notes/exchange", body=body)
         resp = server.handle_note(req)
         assert resp.status_code == 400
@@ -376,6 +388,7 @@ class TestECDHKeyExchangeNoEcdh:
 
 # ── Save with session header tests ────────────────────────────────
 
+
 @pytest.mark.skipif(not HAS_ECDH, reason="cryptography not installed")
 class TestNotepadSaveWithSession:
     def test_save_with_session_id_header(self, server):
@@ -390,9 +403,14 @@ class TestNotepadSaveWithSession:
 
         # Save with session header
         body = _make_note_payload("Session Note", b"ecdh-encrypted-data")
-        req = make_request("NOTE", "/notes", body=body, headers={
-            "X-Session-Id": session_id,
-        })
+        req = make_request(
+            "NOTE",
+            "/notes",
+            body=body,
+            headers={
+                "X-Session-Id": session_id,
+            },
+        )
         resp = server.handle_note(req)
         assert resp.status_code == 201
         data = json.loads(resp.body)

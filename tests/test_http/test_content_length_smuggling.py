@@ -82,12 +82,7 @@ class TestContentLengthSmuggling:
         port = 19872
         server = _start_server(port)
         try:
-            raw = (
-                b"GET / HTTP/1.1\r\n"
-                b"Host: localhost\r\n"
-                b"Content-Length: -1\r\n"
-                b"\r\n"
-            )
+            raw = b"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: -1\r\n\r\n"
             response = _send_raw(port, raw)
             assert response == b""
         finally:
@@ -116,12 +111,7 @@ class TestContentLengthSmuggling:
         port = 19874
         server = _start_server(port)
         try:
-            raw = (
-                b"PING / HTTP/1.1\r\n"
-                b"Host: localhost\r\n"
-                b"Content-Length: 0\r\n"
-                b"\r\n"
-            )
+            raw = b"PING / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n"
             response = _send_raw(port, raw)
             assert b"HTTP/1.1 200" in response
         finally:

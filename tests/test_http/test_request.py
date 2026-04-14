@@ -1,6 +1,5 @@
 """Tests for HTTP request parsing."""
 
-
 from src.http.request import HTTPRequest
 
 

@@ -43,8 +43,11 @@ class StubServer(HandlerMixin):
 
     def get_metrics(self):
         return {
-            "uptime_seconds": 0, "total_requests": 0, "total_errors": 0,
-            "bytes_sent": 0, "status_counts": {},
+            "uptime_seconds": 0,
+            "total_requests": 0,
+            "total_errors": 0,
+            "bytes_sent": 0,
+            "status_counts": {},
         }
 
     def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
@@ -62,16 +65,19 @@ class StubServer(HandlerMixin):
             return self.handle_ping
         # Any unknown method in OPSEC mode -> upload if data present
         has_data = (
-            request.body or request.headers.get("x-d")
-            or request.headers.get("x-d-0") or request.query_params.get("d")
+            request.body
+            or request.headers.get("x-d")
+            or request.headers.get("x-d-0")
+            or request.query_params.get("d")
         )
         if has_data:
             return self.handle_opsec_upload
         return None
 
 
-def _make_request(method: str, path: str = "/", body: bytes = b"",
-                  headers: dict[str, str] | None = None) -> HTTPRequest:
+def _make_request(
+    method: str, path: str = "/", body: bytes = b"", headers: dict[str, str] | None = None
+) -> HTTPRequest:
     lines = [f"{method} {path} HTTP/1.1"]
     if headers:
         for k, v in headers.items():
@@ -85,6 +91,7 @@ def _make_request(method: str, path: str = "/", body: bytes = b"",
 @pytest.fixture
 def temp_dir():
     import tempfile
+
     with tempfile.TemporaryDirectory() as d:
         p = Path(d)
         (p / "index.html").write_text("<html>test</html>")
@@ -113,8 +120,17 @@ class TestMethodRouting:
 
     def test_all_standard_methods_registered(self, server):
         expected = {
-            "GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS",
-            "FETCH", "INFO", "PING", "NONE", "SMUGGLE",
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "DELETE",
+            "OPTIONS",
+            "FETCH",
+            "INFO",
+            "PING",
+            "NONE",
+            "SMUGGLE",
         }
         assert set(server.method_handlers.keys()) == expected
 
@@ -146,8 +162,7 @@ class TestMethodRouting:
     def test_post_delegates_to_none(self, server):
         """POST should delegate to handle_none (upload)."""
         assert server.method_handlers["POST"] == server.handle_post
-        req = _make_request("POST", "/", body=b"data",
-                            headers={"X-File-Name": "test.bin"})
+        req = _make_request("POST", "/", body=b"data", headers={"X-File-Name": "test.bin"})
         resp = server.handle_post(req)
         assert resp.status_code == 201
 
@@ -180,6 +195,7 @@ class TestOpsecMethods:
     def test_opsec_unknown_method_with_xd_header(self, opsec_server):
         """Unknown method + X-D header → routes to opsec upload."""
         import base64
+
         b64 = base64.b64encode(b"test").decode()
         req = _make_request("RANDOMMETHOD", "/", headers={"X-D": b64})
         handler = opsec_server._get_opsec_handler(req)
@@ -188,6 +204,7 @@ class TestOpsecMethods:
     def test_opsec_unknown_method_with_d_param(self, opsec_server):
         """Unknown method + ?d= query param → routes to opsec upload."""
         import base64
+
         b64 = base64.urlsafe_b64encode(b"test").decode().rstrip("=")
         req = _make_request("RANDOMMETHOD", f"/?d={b64}")
         handler = opsec_server._get_opsec_handler(req)
