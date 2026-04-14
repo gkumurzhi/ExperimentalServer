@@ -14,6 +14,17 @@ build/
 .coverage
 .pytest_cache/
 htmlcov/
+.hypothesis/
+
+# Linting / Type-checking caches
+.ruff_cache/
+.mypy_cache/
+
+# Claude Code session state
+.remember/
+
+# Build artifacts
+site/                 # MkDocs output
 
 # Environment
 .env
