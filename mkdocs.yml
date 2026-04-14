@@ -1,0 +1,63 @@
+site_name: ExperimentalHTTPServer
+site_description: Experimental HTTP server with custom methods, TLS, Basic Auth, OPSEC mode
+repo_url: https://github.com/gkumurzhi/ExperimentalServer
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - API reference: api.md
+  - Architecture:
+      - Overview: architecture.md
+      - ADR-001 · Handler registry: ADR/ADR-001-handler-registry.md
+      - ADR-002 · OPSEC cipher: ADR/ADR-002-opsec-xor-hmac.md
+      - ADR-003 · Optional cryptography: ADR/ADR-003-cryptography-optional.md
+      - ADR-004 · Sandbox via relative_to: ADR/ADR-004-sandbox-relative-to.md
+      - ADR-005 · Concurrency model: ADR/ADR-005-threadpool-over-asyncio.md
+  - Security:
+      - Threat model: threat-model.md
+      - Disclosure policy: security.md
+  - Contributing: contributing.md
+  - Changelog: changelog.md

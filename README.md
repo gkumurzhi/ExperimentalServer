@@ -3,8 +3,15 @@
 ![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)
+[![CI](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml/badge.svg)](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml)
+[![Security](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/security.yml/badge.svg)](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/security.yml)
+![Tests](https://img.shields.io/badge/tests-393%20passed-brightgreen.svg)
+![Type checked](https://img.shields.io/badge/mypy-strict-blue.svg)
+![Lint](https://img.shields.io/badge/ruff-passing-blue.svg)
 
 HTTP-сервер с поддержкой произвольных HTTP-методов, написанный на чистом Python без внешних зависимостей.
+
+📄 **Документация:** [Threat Model](docs/threat-model.md) · [ADR](docs/ADR/) · [Security Policy](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Examples](examples/) · [Docker](Dockerfile)
 
 ## Содержание
 

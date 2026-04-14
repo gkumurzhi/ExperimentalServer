@@ -7,6 +7,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- **Infrastructure:** GitHub Actions CI (Python 3.10–3.13 matrix) with ruff/mypy/pytest and a 65 % coverage gate
+- **Infrastructure:** `security.yml` workflow running `pip-audit` and `bandit` weekly and on every PR
+- **Infrastructure:** `dependabot.yml` for weekly pip and github-actions updates
+- **Infrastructure:** `.pre-commit-config.yaml` mirroring CI checks locally
+- **Docs:** standalone `LICENSE` (MIT) file in repo root
+- **Docs:** `SECURITY.md` — disclosure policy, supported versions, response SLA
+- **Docs:** five ADRs in `docs/ADR/` documenting key design decisions
+- **Docs:** `docs/threat-model.md` — STRIDE-based threat analysis
+- **Docs:** `examples/` directory with `basic_file_server.sh`, `opsec_deployment.md`, `notepad_client.py`, Docker compose
+- **Docs:** MkDocs + Material configuration (`mkdocs.yml`) for documentation site
+- **Docs:** expanded `CONTRIBUTING.md` with Conventional Commits policy and PR checklist
+- **Docs:** `.github/PULL_REQUEST_TEMPLATE.md`
+- **Infrastructure:** multi-stage `Dockerfile` with non-root user and HEALTHCHECK, plus `.dockerignore`
+- **Tests:** 46 new tests (`test_metrics.py`, `test_handler_registry.py`, `test_security/test_tls_manager.py`, `test_http/test_io.py`, `test_property/` with Hypothesis)
+- **Deps:** new optional extras `[test]` (hypothesis, pytest-benchmark) and `[docs]` (mkdocs-material)
+
+### Changed
+- **Refactor:** extracted `MetricsCollector` to `src/metrics.py`
+- **Refactor:** extracted `TLSManager` to `src/security/tls_manager.py` — SSL context, cert acquisition, cleanup
+- **Refactor:** introduced `HandlerRegistry` in `src/handlers/registry.py` (Mapping-compatible) to replace the plain dict while keeping backwards-compatible lookups
+- **Refactor:** extracted `receive_request()` to `src/http/io.py` with unit tests
+- **Refactor:** split `_process_request` into guard functions (`_check_payload_size`, `_resolve_keep_alive`, `_post_process_response`, `_build_error_response`)
+- **Size:** `src/server.py` reduced from 1,000 LOC to 869 LOC
+
 - NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption
 - ECDH P-256 key exchange for session key derivation (requires `cryptography` package)
 - WebSocket support (RFC 6455) for real-time notepad sync via `/notes/ws`
