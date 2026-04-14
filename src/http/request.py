@@ -43,9 +43,7 @@ class HTTPRequest:
                     self.path = unquote(parsed.path)
                     self.query_string = parsed.query
                     # Single-value query params (last value wins)
-                    self.query_params = {
-                        k: v[-1] for k, v in parse_qs(parsed.query).items()
-                    }
+                    self.query_params = {k: v[-1] for k, v in parse_qs(parsed.query).items()}
                     self.http_version = parts[2]
 
             # Parse headers

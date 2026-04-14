@@ -65,7 +65,8 @@ class ECDHKeyManager:
             (session_id, derived_aes_key) — 32-byte AES key.
         """
         client_pub = ec.EllipticCurvePublicKey.from_encoded_point(
-            ec.SECP256R1(), client_pub_raw,
+            ec.SECP256R1(),
+            client_pub_raw,
         )
         shared_secret = self._private_key.exchange(ec.ECDH(), client_pub)
 

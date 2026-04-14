@@ -19,7 +19,7 @@ def xor_encrypt(data: bytes, password: str) -> bytes:
     so the server-side HTML Smuggling must do the same.
     Do NOT merge these implementations — they serve different protocols.
     """
-    key = hashlib.sha256(password.encode('utf-8')).digest()
+    key = hashlib.sha256(password.encode("utf-8")).digest()
     key_len = len(key)
 
     result = bytearray()
@@ -34,7 +34,7 @@ def generate_smuggling_html(
     filename: str,
     password: str | None = None,
     password_captcha: str | None = None,
-    crypto_js_src: str = "/static/crypto-js.min.js"
+    crypto_js_src: str = "/static/crypto-js.min.js",
 ) -> str:
     """
     Generate an HTML page for HTML Smuggling file delivery.
@@ -52,11 +52,13 @@ def generate_smuggling_html(
     if password:
         # Encrypt and encode to base64
         encrypted = xor_encrypt(file_data, password)
-        data_b64 = base64.b64encode(encrypted).decode('utf-8')
-        return _create_html_with_password(data_b64, filename, crypto_js_src, password_captcha, password)
+        data_b64 = base64.b64encode(encrypted).decode("utf-8")
+        return _create_html_with_password(
+            data_b64, filename, crypto_js_src, password_captcha, password
+        )
     else:
         # Plain base64
-        data_b64 = base64.b64encode(file_data).decode('utf-8')
+        data_b64 = base64.b64encode(file_data).decode("utf-8")
         return _create_html_no_password(data_b64, filename)
 
 
@@ -109,7 +111,7 @@ def _create_html_with_password(
     filename: str,
     crypto_js_src: str,
     captcha_img: str | None = None,
-    password: str | None = None
+    password: str | None = None,
 ) -> str:
     """HTML with password — password input form."""
     safe_fn = json.dumps(filename)[1:-1]

@@ -43,8 +43,7 @@ class InfoHandlersMixin(BaseHandler):
         if not file_path.exists():
             response = HTTPResponse(404)
             response.set_body(
-                json.dumps({"exists": False, "path": request.path}),
-                "application/json"
+                json.dumps({"exists": False, "path": request.path}), "application/json"
             )
             return response
 
@@ -86,13 +85,10 @@ class InfoHandlersMixin(BaseHandler):
             info["total_items"] = len(all_items)
             info["offset"] = offset
             info["limit"] = limit
-            info["contents"] = all_items[offset:offset + limit]
+            info["contents"] = all_items[offset : offset + limit]
 
         response = HTTPResponse(200)
-        response.set_body(
-            json.dumps(info, indent=2, ensure_ascii=False),
-            "application/json"
-        )
+        response.set_body(json.dumps(info, indent=2, ensure_ascii=False), "application/json")
         return response
 
     def handle_ping(self, request: HTTPRequest) -> HTTPResponse:

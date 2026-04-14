@@ -17,7 +17,7 @@ def generate_self_signed_cert(
     days: int = 365,
     common_name: str = "localhost",
     organization: str = "ExperimentalHTTPServer",
-    key_size: int = 2048
+    key_size: int = 2048,
 ) -> tuple[Path, Path]:
     """
     Generate a self-signed certificate using openssl.
@@ -52,43 +52,46 @@ def generate_self_signed_cert(
 
     # OpenSSL command
     cmd = [
-        "openssl", "req",
+        "openssl",
+        "req",
         "-x509",
-        "-newkey", f"rsa:{key_size}",
-        "-keyout", str(key_path),
-        "-out", str(cert_path),
-        "-days", str(days),
+        "-newkey",
+        f"rsa:{key_size}",
+        "-keyout",
+        str(key_path),
+        "-out",
+        str(cert_path),
+        "-days",
+        str(days),
         "-nodes",  # No passphrase on key
-        "-subj", subject,
-        "-addext", f"subjectAltName=DNS:{common_name},DNS:localhost,IP:127.0.0.1"
+        "-subj",
+        subject,
+        "-addext",
+        f"subjectAltName=DNS:{common_name},DNS:localhost,IP:127.0.0.1",
     ]
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
         if result.returncode != 0:
             # Retry without -addext (older openssl versions)
             cmd_fallback = [
-                "openssl", "req",
+                "openssl",
+                "req",
                 "-x509",
-                "-newkey", f"rsa:{key_size}",
-                "-keyout", str(key_path),
-                "-out", str(cert_path),
-                "-days", str(days),
+                "-newkey",
+                f"rsa:{key_size}",
+                "-keyout",
+                str(key_path),
+                "-out",
+                str(cert_path),
+                "-days",
+                str(days),
                 "-nodes",
-                "-subj", subject
+                "-subj",
+                subject,
             ]
-            result = subprocess.run(
-                cmd_fallback,
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+            result = subprocess.run(cmd_fallback, capture_output=True, text=True, timeout=30)
 
             if result.returncode != 0:
                 raise RuntimeError(f"OpenSSL error: {result.stderr}")
@@ -120,11 +123,7 @@ def generate_cert_in_memory() -> tuple[str, str]:
 def check_openssl_available() -> bool:
     """Check if OpenSSL is available."""
     try:
-        result = subprocess.run(
-            ["openssl", "version"],
-            capture_output=True,
-            timeout=5
-        )
+        result = subprocess.run(["openssl", "version"], capture_output=True, timeout=5)
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -204,11 +203,17 @@ def obtain_letsencrypt_cert(
         d.mkdir(parents=True, exist_ok=True)
 
     cmd = [
-        "certbot", "certonly", "--standalone",
-        "-d", domain,
-        "--config-dir", str(config_dir),
-        "--work-dir", str(work_dir),
-        "--logs-dir", str(logs_dir),
+        "certbot",
+        "certonly",
+        "--standalone",
+        "-d",
+        domain,
+        "--config-dir",
+        str(config_dir),
+        "--work-dir",
+        str(work_dir),
+        "--logs-dir",
+        str(logs_dir),
         "--non-interactive",
         "--agree-tos",
     ]
@@ -227,14 +232,10 @@ def obtain_letsencrypt_cert(
         )
 
         if result.returncode != 0:
-            raise RuntimeError(
-                f"certbot error (code {result.returncode}):\n{result.stderr}"
-            )
+            raise RuntimeError(f"certbot error (code {result.returncode}):\n{result.stderr}")
 
     except FileNotFoundError as err:
-        raise RuntimeError(
-            "certbot not found. Install certbot: https://certbot.eff.org/"
-        ) from err
+        raise RuntimeError("certbot not found. Install certbot: https://certbot.eff.org/") from err
     except subprocess.TimeoutExpired as err:
         raise RuntimeError("certbot command timed out (120s)") from err
 
@@ -265,7 +266,7 @@ def get_cert_info(cert_path: str | Path) -> dict[str, str]:
             ["openssl", "x509", "-in", str(cert_path), "-noout", "-subject", "-dates"],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=10,
         )
 
         if result.returncode != 0:

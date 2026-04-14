@@ -46,7 +46,11 @@ class HTTPResponse:
     ) -> bytes:
         """Build only the HTTP header portion (for streaming)."""
         self._finalize_headers(
-            opsec_mode, cors_origin, keep_alive, keep_alive_timeout, keep_alive_max,
+            opsec_mode,
+            cors_origin,
+            keep_alive,
+            keep_alive_timeout,
+            keep_alive_max,
         )
 
         status_message = HTTP_STATUS_MESSAGES.get(self.status_code, "Unknown")
@@ -67,9 +71,16 @@ class HTTPResponse:
         keep_alive_max: int = 100,
     ) -> bytes:
         """Build the full HTTP response as bytes."""
-        return self.build_headers(
-            opsec_mode, cors_origin, keep_alive, keep_alive_timeout, keep_alive_max,
-        ) + self.body
+        return (
+            self.build_headers(
+                opsec_mode,
+                cors_origin,
+                keep_alive,
+                keep_alive_timeout,
+                keep_alive_max,
+            )
+            + self.body
+        )
 
     def _finalize_headers(
         self,
@@ -85,16 +96,11 @@ class HTTPResponse:
         else:
             self.set_header("Server", f"ExperimentalHTTPServer/{__version__}")
 
-        self.set_header(
-            "Date",
-            datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
-        )
+        self.set_header("Date", datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
 
         if keep_alive:
             self.set_header("Connection", "keep-alive")
-            self.set_header(
-                "Keep-Alive", f"timeout={keep_alive_timeout}, max={keep_alive_max}"
-            )
+            self.set_header("Keep-Alive", f"timeout={keep_alive_timeout}, max={keep_alive_max}")
         else:
             self.set_header("Connection", "close")
 
@@ -112,14 +118,14 @@ class HTTPResponse:
             else:
                 self.set_header(
                     "Access-Control-Allow-Methods",
-                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS",
                 )
 
         if "Access-Control-Allow-Headers" not in self.headers:
             self.set_header(
                 "Access-Control-Allow-Headers",
                 "Content-Type, X-File-Name, X-Session-Id, X-D, X-E, X-K, X-Kb64, X-N, X-H, "
-                "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9"
+                "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9",
             )
 
         if "Access-Control-Expose-Headers" not in self.headers and not opsec_mode:

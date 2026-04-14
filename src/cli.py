@@ -29,124 +29,79 @@ Examples:
 
 Custom HTTP methods:
     FETCH, INFO, PING, NONE, SMUGGLE    (+ standard GET, POST, PUT, OPTIONS)
-        """
+        """,
     )
 
-    parser.add_argument(
-        "-V", "--version",
-        action="version",
-        version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
 
     # Basic
     basic = parser.add_argument_group("Basic")
     basic.add_argument(
-        "-H", "--host",
-        default="127.0.0.1",
-        metavar="HOST",
-        help="Bind host (default: 127.0.0.1)"
+        "-H", "--host", default="127.0.0.1", metavar="HOST", help="Bind host (default: 127.0.0.1)"
     )
     basic.add_argument(
-        "-p", "--port",
-        type=int,
-        default=8080,
-        metavar="PORT",
-        help="Listen port (default: 8080)"
+        "-p", "--port", type=int, default=8080, metavar="PORT", help="Listen port (default: 8080)"
     )
     basic.add_argument(
-        "-d", "--dir",
-        default=".",
-        metavar="DIR",
-        help="Root directory (default: current)"
+        "-d", "--dir", default=".", metavar="DIR", help="Root directory (default: current)"
     )
 
     # Operating modes
     modes = parser.add_argument_group("Modes")
     modes.add_argument(
-        "-o", "--opsec",
+        "-o",
+        "--opsec",
         action="store_true",
-        help="OPSEC mode (randomized method names, nginx masquerade)"
+        help="OPSEC mode (randomized method names, nginx masquerade)",
     )
     modes.add_argument(
-        "-s", "--sandbox",
-        action="store_true",
-        help="Sandbox mode (restrict access to uploads/)"
+        "-s", "--sandbox", action="store_true", help="Sandbox mode (restrict access to uploads/)"
     )
-    modes.add_argument(
-        "-q", "--quiet",
-        action="store_true",
-        help="Quiet mode (minimal logging)"
-    )
-    modes.add_argument(
-        "--debug",
-        action="store_true",
-        help="Debug mode (verbose logging)"
-    )
-    modes.add_argument(
-        "--open",
-        action="store_true",
-        help="Open browser after start"
-    )
-    modes.add_argument(
-        "--json-log",
-        action="store_true",
-        help="Structured JSON log format"
-    )
+    modes.add_argument("-q", "--quiet", action="store_true", help="Quiet mode (minimal logging)")
+    modes.add_argument("--debug", action="store_true", help="Debug mode (verbose logging)")
+    modes.add_argument("--open", action="store_true", help="Open browser after start")
+    modes.add_argument("--json-log", action="store_true", help="Structured JSON log format")
     modes.add_argument(
         "--cors-origin",
         default="*",
         metavar="ORIGIN",
-        help="Access-Control-Allow-Origin (default: *)"
+        help="Access-Control-Allow-Origin (default: *)",
     )
 
     # Limits
     limits = parser.add_argument_group("Limits")
     limits.add_argument(
-        "-m", "--max-size",
+        "-m",
+        "--max-size",
         type=int,
         default=100,
         metavar="MB",
-        help="Max upload size in MB (default: 100)"
+        help="Max upload size in MB (default: 100)",
     )
     limits.add_argument(
-        "-w", "--workers",
+        "-w",
+        "--workers",
         type=int,
         default=10,
         metavar="N",
-        help="Number of worker threads (default: 10)"
+        help="Number of worker threads (default: 10)",
     )
 
     # TLS options
     tls = parser.add_argument_group("TLS")
     tls.add_argument(
-        "--tls",
-        action="store_true",
-        help="Enable HTTPS (generates self-signed certificate)"
+        "--tls", action="store_true", help="Enable HTTPS (generates self-signed certificate)"
     )
-    tls.add_argument(
-        "--cert",
-        metavar="FILE",
-        help="Path to certificate file (PEM)"
-    )
-    tls.add_argument(
-        "--key",
-        metavar="FILE",
-        help="Path to private key file (PEM)"
-    )
+    tls.add_argument("--cert", metavar="FILE", help="Path to certificate file (PEM)")
+    tls.add_argument("--key", metavar="FILE", help="Path to private key file (PEM)")
     tls.add_argument(
         "--letsencrypt",
         action="store_true",
-        help="Obtain Let's Encrypt certificate (requires certbot and open port 80)"
+        help="Obtain Let's Encrypt certificate (requires certbot and open port 80)",
     )
+    tls.add_argument("--domain", metavar="DOMAIN", help="Domain for Let's Encrypt certificate")
     tls.add_argument(
-        "--domain",
-        metavar="DOMAIN",
-        help="Domain for Let's Encrypt certificate"
-    )
-    tls.add_argument(
-        "--email",
-        metavar="EMAIL",
-        help="Email for Let's Encrypt notifications (optional)"
+        "--email", metavar="EMAIL", help="Email for Let's Encrypt notifications (optional)"
     )
 
     # Authentication
@@ -154,7 +109,7 @@ Custom HTTP methods:
     auth.add_argument(
         "--auth",
         metavar="CREDS",
-        help="Basic Auth: 'user:pass', 'random', or 'user' (random password)"
+        help="Basic Auth: 'user:pass', 'random', or 'user' (random password)",
     )
 
     return parser

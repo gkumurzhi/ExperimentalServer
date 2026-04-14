@@ -22,10 +22,10 @@ class OpsecHandlersMixin(BaseHandler):
     @staticmethod
     def _urlsafe_b64decode(data: str) -> bytes:
         """Decode URL-safe or standard base64."""
-        data = data.replace('-', '+').replace('_', '/')
+        data = data.replace("-", "+").replace("_", "/")
         padding = 4 - len(data) % 4
         if padding != 4:
-            data += '=' * padding
+            data += "=" * padding
         try:
             return base64.b64decode(data)
         except (binascii.Error, ValueError):
@@ -136,10 +136,7 @@ class OpsecHandlersMixin(BaseHandler):
             if not verify_hmac(file_data, decrypt_key, hmac_value):
                 logger.warning("OPSEC HMAC verification failed")
                 response = HTTPResponse(400)
-                response.set_body(
-                    json.dumps({"ok": False, "err": "hmac"}),
-                    "application/json"
-                )
+                response.set_body(json.dumps({"ok": False, "err": "hmac"}), "application/json")
                 return response
 
         # Decrypt if key is provided
@@ -167,7 +164,10 @@ class OpsecHandlersMixin(BaseHandler):
 
         logger.debug(
             "OPSEC upload: %s, encrypted=%s, hmac=%s, transport=%s",
-            safe_filename, bool(encryption), bool(hmac_value), transport,
+            safe_filename,
+            bool(encryption),
+            bool(hmac_value),
+            transport,
         )
 
         try:

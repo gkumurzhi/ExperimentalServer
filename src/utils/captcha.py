@@ -24,7 +24,7 @@ def generate_password_captcha(password: str, width: int = 280, height: int = 80)
         Base64-encoded SVG data URI.
     """
     # Character colors (high contrast on dark background)
-    colors = ['#00d4ff', '#7b2cbf', '#4ade80', '#facc15', '#fb7185', '#f97316', '#a78bfa']
+    colors = ["#00d4ff", "#7b2cbf", "#4ade80", "#facc15", "#fb7185", "#f97316", "#a78bfa"]
 
     svg_parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
@@ -38,7 +38,7 @@ def generate_password_captcha(password: str, width: int = 280, height: int = 80)
         y1 = _rng.randint(0, height)
         x2 = _rng.randint(0, width)
         y2 = _rng.randint(0, height)
-        color = _rng.choice(['#30363d', '#21262d', '#161b22'])
+        color = _rng.choice(["#30363d", "#21262d", "#161b22"])
         stroke_width = _rng.uniform(1, 3)
         svg_parts.append(
             f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
@@ -50,7 +50,7 @@ def generate_password_captcha(password: str, width: int = 280, height: int = 80)
         cx = _rng.randint(0, width)
         cy = _rng.randint(0, height)
         r = _rng.uniform(1, 3)
-        color = _rng.choice(['#30363d', '#21262d', '#3d4450'])
+        color = _rng.choice(["#30363d", "#21262d", "#3d4450"])
         svg_parts.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{color}"/>')
 
     # Draw password characters
@@ -71,12 +71,12 @@ def generate_password_captcha(password: str, width: int = 280, height: int = 80)
         x_offset = _rng.randint(-3, 3)
 
         svg_parts.append(
-            f'<text x="{x + x_offset}" y="{y + y_offset + font_size/3}" '
+            f'<text x="{x + x_offset}" y="{y + y_offset + font_size / 3}" '
             f'font-family="Consolas, Monaco, monospace" '
             f'font-size="{font_size}" font-weight="bold" '
             f'fill="{color}" text-anchor="middle" '
             f'transform="rotate({rotation}, {x + x_offset}, {y + y_offset})">'
-            f'{_escape_xml(char)}</text>'
+            f"{_escape_xml(char)}</text>"
         )
 
     # Add wavy lines on top of text
@@ -91,27 +91,27 @@ def generate_password_captcha(password: str, width: int = 280, height: int = 80)
             y = y_base + amplitude * math.sin(frequency * x + phase)
             points.append(f"{x},{y:.1f}")
 
-        color = _rng.choice(['#30363d', '#21262d', '#2d333b'])
+        color = _rng.choice(["#30363d", "#21262d", "#2d333b"])
         svg_parts.append(
-            f'<polyline points="{" ".join(points)}" '
-            f'fill="none" stroke="{color}" stroke-width="2"/>'
+            f'<polyline points="{" ".join(points)}" fill="none" stroke="{color}" stroke-width="2"/>'
         )
 
-    svg_parts.append('</svg>')
+    svg_parts.append("</svg>")
 
-    svg_content = ''.join(svg_parts)
+    svg_content = "".join(svg_parts)
 
     # Encode to base64
-    svg_b64 = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
+    svg_b64 = base64.b64encode(svg_content.encode("utf-8")).decode("utf-8")
 
-    return f'data:image/svg+xml;base64,{svg_b64}'
+    return f"data:image/svg+xml;base64,{svg_b64}"
 
 
 def _escape_xml(text: str) -> str:
     """Escape special XML characters."""
-    return (text
-            .replace('&', '&amp;')
-            .replace('<', '&lt;')
-            .replace('>', '&gt;')
-            .replace('"', '&quot;')
-            .replace("'", '&#39;'))
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#39;")
+    )

@@ -129,7 +129,9 @@ class BaseHandler:
         return file_path
 
     def _resolve_safe_path(
-        self, clean_path: str, base_dir: Path,
+        self,
+        clean_path: str,
+        base_dir: Path,
     ) -> Path | None:
         """
         Resolve a clean (no leading slash) path against base_dir.
@@ -166,6 +168,7 @@ class BaseHandler:
         if self.opsec_mode:
             return self._not_found("/metrics")
         import json
+
         metrics = self.get_metrics()
         response = HTTPResponse(200)
         response.set_body(
@@ -183,6 +186,7 @@ class BaseHandler:
     def _error_response(self, status: int, error: str) -> HTTPResponse:
         """Unified JSON error response."""
         import json
+
         response = HTTPResponse(status)
         response.set_body(
             json.dumps({"error": error, "status": status}),
@@ -198,7 +202,8 @@ class BaseHandler:
         """405 response for unsupported method."""
         allowed = ", ".join(self.method_handlers.keys())
         response = self._error_response(
-            405, f"Method '{method}' not allowed. Allowed: {allowed}",
+            405,
+            f"Method '{method}' not allowed. Allowed: {allowed}",
         )
         response.set_header("Allow", allowed)
         return response

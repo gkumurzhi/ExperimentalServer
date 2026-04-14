@@ -33,10 +33,9 @@ class SmuggleHandlersMixin(BaseHandler):
 
         if file_path is None or not file_path.exists() or file_path.is_dir():
             response = HTTPResponse(404)
-            response.set_body(json.dumps({
-                "error": "File not found",
-                "path": request.path
-            }), "application/json")
+            response.set_body(
+                json.dumps({"error": "File not found", "path": request.path}), "application/json"
+            )
             return response
 
         # Generate random password server-side if encryption requested
@@ -45,7 +44,7 @@ class SmuggleHandlersMixin(BaseHandler):
         if encrypt:
             # 7 chars: uppercase letters and digits only
             alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-            password = ''.join(secrets.choice(alphabet) for _ in range(7))
+            password = "".join(secrets.choice(alphabet) for _ in range(7))
             # Generate captcha with the password
             password_captcha = generate_password_captcha(password)
 
@@ -60,7 +59,7 @@ class SmuggleHandlersMixin(BaseHandler):
             file_data=file_data,
             filename=file_path.name,
             password=password,
-            password_captcha=password_captcha
+            password_captcha=password_captcha,
         )
 
         # Save HTML to a temp file in uploads
@@ -75,11 +74,16 @@ class SmuggleHandlersMixin(BaseHandler):
 
         # Return URL to the temp file
         response = HTTPResponse(200)
-        response.set_body(json.dumps({
-            "url": f"/uploads/{temp_name}",
-            "file": file_path.name,
-            "encrypted": password is not None
-        }), "application/json")
+        response.set_body(
+            json.dumps(
+                {
+                    "url": f"/uploads/{temp_name}",
+                    "file": file_path.name,
+                    "encrypted": password is not None,
+                }
+            ),
+            "application/json",
+        )
         response.set_header("X-Smuggle-URL", f"/uploads/{temp_name}")
 
         return response

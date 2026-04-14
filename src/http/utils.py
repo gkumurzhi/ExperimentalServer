@@ -52,7 +52,7 @@ def sanitize_filename(filename: str, allow_cyrillic: bool = True) -> str:
         if c in safe_chars:
             return True
         # Cyrillic (U+0400 - U+04FF)
-        if allow_cyrillic and '\u0400' <= c <= '\u04FF':
+        if allow_cyrillic and "\u0400" <= c <= "\u04ff":
             return True
         return False
 
@@ -88,11 +88,7 @@ def format_file_size(size: int) -> str:
     return f"{fsize:.1f} TB"
 
 
-def get_safe_path(
-    url_path: str,
-    base_dir: Path,
-    sandbox_dir: Path | None = None
-) -> Path | None:
+def get_safe_path(url_path: str, base_dir: Path, sandbox_dir: Path | None = None) -> Path | None:
     """
     Safely convert URL path to filesystem path.
 

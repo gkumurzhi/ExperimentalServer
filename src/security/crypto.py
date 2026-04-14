@@ -99,8 +99,8 @@ def aes_decrypt(data: bytes, password: str) -> bytes | None:
     if version != _AES_VERSION:
         return None
 
-    salt = data[1:1 + _AES_SALT_LEN]
-    nonce = data[1 + _AES_SALT_LEN:header_len]
+    salt = data[1 : 1 + _AES_SALT_LEN]
+    nonce = data[1 + _AES_SALT_LEN : header_len]
     ciphertext = data[header_len:]
 
     try:
@@ -164,7 +164,7 @@ def xor_bytes(data: bytes, password: str) -> bytes:
     if not password:
         return data
 
-    key_bytes = password.encode('utf-8')
+    key_bytes = password.encode("utf-8")
     result = bytearray(len(data))
 
     for i in range(len(data)):
@@ -190,12 +190,12 @@ def xor_file(input_path: str, output_path: str, password: str) -> int:
     Returns:
         File size in bytes.
     """
-    with Path(input_path).open('rb') as f:
+    with Path(input_path).open("rb") as f:
         data = f.read()
 
     result = xor_bytes(data, password)
 
-    with Path(output_path).open('wb') as f:
+    with Path(output_path).open("wb") as f:
         f.write(result)
 
     return len(result)
@@ -217,7 +217,7 @@ def compute_hmac(data: bytes, key: str) -> str:
     Returns:
         Hex-encoded HMAC string.
     """
-    return hmac.new(key.encode('utf-8'), data, hashlib.sha256).hexdigest()
+    return hmac.new(key.encode("utf-8"), data, hashlib.sha256).hexdigest()
 
 
 def verify_hmac(data: bytes, key: str, expected_hmac: str) -> bool:

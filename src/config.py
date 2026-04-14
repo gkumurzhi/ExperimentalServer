@@ -7,23 +7,41 @@ __version__ = "2.0.0"
 
 
 # Hidden files, inaccessible via GET
-HIDDEN_FILES: frozenset[str] = frozenset({
-    ".opsec_config.json",
-    ".env",
-    ".gitignore",
-    ".git",
-    "__pycache__",
-})
+HIDDEN_FILES: frozenset[str] = frozenset(
+    {
+        ".opsec_config.json",
+        ".env",
+        ".gitignore",
+        ".git",
+        "__pycache__",
+    }
+)
 
 # Prefixes for OPSEC method name generation
 OPSEC_METHOD_PREFIXES: tuple[str, ...] = (
-    "CHECK", "SYNC", "VERIFY", "UPDATE", "QUERY",
-    "REPORT", "SUBMIT", "VALIDATE", "PROCESS", "EXECUTE"
+    "CHECK",
+    "SYNC",
+    "VERIFY",
+    "UPDATE",
+    "QUERY",
+    "REPORT",
+    "SUBMIT",
+    "VALIDATE",
+    "PROCESS",
+    "EXECUTE",
 )
 
 OPSEC_METHOD_SUFFIXES: tuple[str, ...] = (
-    "DATA", "STATUS", "INFO", "CONTENT", "RESOURCE",
-    "ITEM", "OBJECT", "RECORD", "ENTRY", ""
+    "DATA",
+    "STATUS",
+    "INFO",
+    "CONTENT",
+    "RESOURCE",
+    "ITEM",
+    "OBJECT",
+    "RECORD",
+    "ENTRY",
+    "",
 )
 
 # HTTP status codes

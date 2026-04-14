@@ -2,6 +2,7 @@
 """
 Allows running the package as: python -m src
 """
+
 import sys
 
 from .cli import main

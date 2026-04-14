@@ -79,7 +79,7 @@ class NotepadHandlersMixin(BaseHandler):
 
         # Route: /notes/{id}
         if clean.startswith("notes/"):
-            note_id = clean[len("notes/"):]
+            note_id = clean[len("notes/") :]
             if not _NOTE_ID_RE.match(note_id):
                 return self._bad_request("Invalid note ID")
             if "delete" in query:
@@ -109,7 +109,8 @@ class NotepadHandlersMixin(BaseHandler):
         mgr = getattr(self, "_ecdh_manager", None)
         if mgr is None:
             return self._error_response(
-                501, "ECDH not available (cryptography package not installed)",
+                501,
+                "ECDH not available (cryptography package not installed)",
             )
 
         try:
@@ -143,10 +144,12 @@ class NotepadHandlersMixin(BaseHandler):
 
         response = HTTPResponse(200)
         response.set_body(
-            json.dumps({
-                "sessionId": session_id,
-                "serverPublicKey": server_pub_b64,
-            }),
+            json.dumps(
+                {
+                    "sessionId": session_id,
+                    "serverPublicKey": server_pub_b64,
+                }
+            ),
             "application/json",
         )
         return response
@@ -244,14 +247,16 @@ class NotepadHandlersMixin(BaseHandler):
 
         response = HTTPResponse(201 if is_new else 200)
         response.set_body(
-            json.dumps({
-                "success": True,
-                "id": note_id,
-                "title": meta["title"],
-                "created_at": meta["created_at"],
-                "updated_at": meta["updated_at"],
-                "size": len(raw_data),
-            }),
+            json.dumps(
+                {
+                    "success": True,
+                    "id": note_id,
+                    "title": meta["title"],
+                    "created_at": meta["created_at"],
+                    "updated_at": meta["updated_at"],
+                    "size": len(raw_data),
+                }
+            ),
             "application/json",
         )
         return response
@@ -264,13 +269,15 @@ class NotepadHandlersMixin(BaseHandler):
         for meta_file in notes_dir.glob("*.meta.json"):
             try:
                 meta = json.loads(meta_file.read_text("utf-8"))
-                notes.append({
-                    "id": meta["id"],
-                    "title": meta.get("title", ""),
-                    "created_at": meta.get("created_at", ""),
-                    "updated_at": meta.get("updated_at", ""),
-                    "size": meta.get("size", 0),
-                })
+                notes.append(
+                    {
+                        "id": meta["id"],
+                        "title": meta.get("title", ""),
+                        "created_at": meta.get("created_at", ""),
+                        "updated_at": meta.get("updated_at", ""),
+                        "size": meta.get("size", 0),
+                    }
+                )
             except (json.JSONDecodeError, OSError, KeyError):
                 continue
 
@@ -314,14 +321,16 @@ class NotepadHandlersMixin(BaseHandler):
 
         response = HTTPResponse(200)
         response.set_body(
-            json.dumps({
-                "id": note_id,
-                "title": meta.get("title", ""),
-                "data": data_b64,
-                "created_at": meta.get("created_at", ""),
-                "updated_at": meta.get("updated_at", ""),
-                "size": len(raw_data),
-            }),
+            json.dumps(
+                {
+                    "id": note_id,
+                    "title": meta.get("title", ""),
+                    "data": data_b64,
+                    "created_at": meta.get("created_at", ""),
+                    "updated_at": meta.get("updated_at", ""),
+                    "size": len(raw_data),
+                }
+            ),
             "application/json",
         )
         return response

@@ -93,7 +93,7 @@ class BasicAuthenticator:
         self,
         credentials: dict[str, str] | None = None,
         auth_callback: Callable[[str, str], bool] | None = None,
-        realm: str = "Restricted Area"
+        realm: str = "Restricted Area",
     ):
         """
         Args:
@@ -196,9 +196,7 @@ class AuthRateLimiter:
             if ip not in self._failures:
                 return False
             # Clean expired entries
-            self._failures[ip] = [
-                t for t in self._failures[ip] if now - t < self.cooldown
-            ]
+            self._failures[ip] = [t for t in self._failures[ip] if now - t < self.cooldown]
             if not self._failures[ip]:
                 del self._failures[ip]
                 return False

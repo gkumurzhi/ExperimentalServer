@@ -18,8 +18,7 @@ logger = logging.getLogger("httpserver")
 
 # Pattern to remove Telegram link in OPSEC mode
 TELEGRAM_LINK_PATTERN = re.compile(
-    r'<a\s+href="https://t\.me/kgmnotes"[^>]*>.*?</a>',
-    re.DOTALL | re.IGNORECASE
+    r'<a\s+href="https://t\.me/kgmnotes"[^>]*>.*?</a>', re.DOTALL | re.IGNORECASE
 )
 
 
@@ -116,10 +115,7 @@ class FileHandlersMixin(BaseHandler):
         with self._smuggle_lock:
             is_smuggle = file_path_str in self._temp_smuggle_files
 
-        needs_full_read = (
-            is_smuggle
-            or (content_type.startswith("text/html") and self.opsec_mode)
-        )
+        needs_full_read = is_smuggle or (content_type.startswith("text/html") and self.opsec_mode)
 
         if needs_full_read:
             content = file_path.read_bytes()
@@ -186,10 +182,15 @@ class FileHandlersMixin(BaseHandler):
             file_path.resolve().relative_to(self.upload_dir.resolve())
         except ValueError:
             response = HTTPResponse(403)
-            response.set_body(json.dumps({
-                "error": "Cannot delete files outside uploads/",
-                "status": 403,
-            }), "application/json")
+            response.set_body(
+                json.dumps(
+                    {
+                        "error": "Cannot delete files outside uploads/",
+                        "status": 403,
+                    }
+                ),
+                "application/json",
+            )
             return response
 
         try:
@@ -197,11 +198,16 @@ class FileHandlersMixin(BaseHandler):
             file_path.unlink()
             logger.debug(f"DELETE {deleted_name}")
             response = HTTPResponse(200)
-            response.set_body(json.dumps({
-                "success": True,
-                "deleted": deleted_name,
-                "path": request.path,
-            }), "application/json")
+            response.set_body(
+                json.dumps(
+                    {
+                        "success": True,
+                        "deleted": deleted_name,
+                        "path": request.path,
+                    }
+                ),
+                "application/json",
+            )
             return response
         except OSError as e:
             return self._internal_error(f"Delete failed: {e}")
@@ -232,8 +238,7 @@ class FileHandlersMixin(BaseHandler):
                     allowed = f"{allowed}, {requested_method}"
             else:
                 allowed = (
-                    "GET, HEAD, POST, PUT, PATCH, DELETE,"
-                    " FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
                 )
                 if requested_method not in allowed:
                     allowed = f"{allowed}, {requested_method}"
@@ -269,10 +274,7 @@ class FileHandlersMixin(BaseHandler):
         response.set_header("X-Fetch-Status", "success")
         response.set_header("X-File-Name", file_path.name)
         response.set_header("X-File-Size", str(stat.st_size))
-        response.set_header(
-            "X-File-Modified",
-            datetime.fromtimestamp(stat.st_mtime).isoformat()
-        )
+        response.set_header("X-File-Modified", datetime.fromtimestamp(stat.st_mtime).isoformat())
 
         return response
 
@@ -294,11 +296,17 @@ class FileHandlersMixin(BaseHandler):
         if not request.body:
             response = HTTPResponse(400)
             response.set_header("X-Upload-Status", "no-data")
-            response.set_body(json.dumps({
-                "success": False,
-                "error": "No file data provided",
-                "hint": "Send file content in request body with X-File-Name header"
-            }, indent=2), "application/json")
+            response.set_body(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "No file data provided",
+                        "hint": "Send file content in request body with X-File-Name header",
+                    },
+                    indent=2,
+                ),
+                "application/json",
+            )
             return response
 
         file_path = self.upload_dir / safe_filename
@@ -334,8 +342,7 @@ class FileHandlersMixin(BaseHandler):
             logger.error(f"Upload failed: {e}")
             response = HTTPResponse(500)
             response.set_header("X-Upload-Status", "error")
-            response.set_body(json.dumps({
-                "success": False,
-                "error": str(e)
-            }, indent=2), "application/json")
+            response.set_body(
+                json.dumps({"success": False, "error": str(e)}, indent=2), "application/json"
+            )
             return response

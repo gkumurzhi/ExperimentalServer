@@ -15,7 +15,7 @@ class HandlerMixin(
     InfoHandlersMixin,
     NotepadHandlersMixin,
     OpsecHandlersMixin,
-    SmuggleHandlersMixin
+    SmuggleHandlersMixin,
 ):
     """
     Combined mixin with all HTTP method handlers.
@@ -27,6 +27,7 @@ class HandlerMixin(
     - OpsecHandlersMixin: handle_opsec_upload
     - SmuggleHandlersMixin: SMUGGLE
     """
+
     pass
 
 

@@ -93,13 +93,13 @@ def parse_ws_frame(data: bytes) -> tuple[int, bytes, int] | None:
     if masked:
         if dlen < offset + 4:
             return None
-        mask_key = data[offset:offset + 4]
+        mask_key = data[offset : offset + 4]
         offset += 4
 
     if dlen < offset + payload_len:
         return None
 
-    raw_payload = data[offset:offset + payload_len]
+    raw_payload = data[offset : offset + payload_len]
 
     if masked:
         payload = bytearray(payload_len)

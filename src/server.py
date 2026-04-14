@@ -2,7 +2,6 @@
 Main HTTP server with custom method support.
 """
 
-import atexit
 import gzip
 import json
 import logging
@@ -24,15 +23,12 @@ from .config import (
     __version__,
 )
 from .handlers import HandlerMixin
+from .handlers.registry import HandlerRegistry
 from .http import HTTPRequest, HTTPResponse
+from .http.io import receive_request as _receive_request_io
+from .metrics import MetricsCollector
 from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
-from .security.tls import (
-    check_cert_needs_renewal,
-    check_certbot_available,
-    check_openssl_available,
-    generate_self_signed_cert,
-    obtain_letsencrypt_cert,
-)
+from .security.tls_manager import TLSManager
 from .websocket import (
     WS_BINARY,
     WS_CLOSE,
@@ -115,15 +111,20 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.json_log = json_log
         self.cors_origin = cors_origin
 
-        # TLS settings
-        self.tls_enabled = tls
-        self.cert_file = cert_file
-        self.key_file = key_file
+        # TLS settings (delegated to TLSManager; these fields stay as read-only
+        # views used by status printing and request handling).
+        self._tls = TLSManager(
+            enabled=tls,
+            cert_file=cert_file,
+            key_file=key_file,
+            letsencrypt=letsencrypt,
+            domain=domain,
+            email=email,
+            host=host,
+        )
         self.letsencrypt = letsencrypt
         self.domain = domain
         self.email = email
-        self.ssl_context: ssl.SSLContext | None = None
-        self._temp_cert_files: list[str] = []  # For cleanup of temp files
 
         # Temporary SMUGGLE files (deleted after serving)
         self._temp_smuggle_files: set[str] = set()
@@ -136,17 +137,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         self._ecdh_manager = None
         try:
             from .security.keys import ECDHKeyManager
+
             self._ecdh_manager = ECDHKeyManager()
         except (ImportError, RuntimeError):
             pass
 
         # In-memory metrics
-        self._metrics_lock = threading.Lock()
-        self._start_time: float = 0.0
-        self._request_count: int = 0
-        self._error_count: int = 0
-        self._bytes_sent: int = 0
-        self._status_counts: dict[int, int] = {}
+        self._metrics = MetricsCollector()
 
         # Basic Auth
         self.authenticator: BasicAuthenticator | None = None
@@ -171,22 +168,27 @@ class ExperimentalHTTPServer(HandlerMixin):
             self._generate_opsec_methods()
             logger.debug(f"OPSEC methods generated: {self.opsec_methods}")
 
-        # Register method handlers
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "HEAD": self.handle_head,
-            "POST": self.handle_post,
-            "PUT": self.handle_none,  # PUT also handles file upload
-            "PATCH": self.handle_patch,  # PATCH also handles file upload
-            "DELETE": self.handle_delete,
-            "OPTIONS": self.handle_options,
-            "FETCH": self.handle_fetch,
-            "INFO": self.handle_info,
-            "PING": self.handle_ping,
-            "NONE": self.handle_none,
-            "NOTE": self.handle_note,
-            "SMUGGLE": self.handle_smuggle,
-        }
+        # Register method handlers via registry (exposed as a dict-like Mapping
+        # so tests and handlers that expect `self.method_handlers[...]` keep
+        # working unchanged).
+        self.method_handlers: HandlerRegistry = HandlerRegistry()
+        self.method_handlers.register_many(
+            {
+                "GET": self.handle_get,
+                "HEAD": self.handle_head,
+                "POST": self.handle_post,
+                "PUT": self.handle_none,  # PUT also handles file upload
+                "PATCH": self.handle_patch,  # PATCH also handles file upload
+                "DELETE": self.handle_delete,
+                "OPTIONS": self.handle_options,
+                "FETCH": self.handle_fetch,
+                "INFO": self.handle_info,
+                "PING": self.handle_ping,
+                "NONE": self.handle_none,
+                "NOTE": self.handle_note,
+                "SMUGGLE": self.handle_smuggle,
+            }
+        )
 
     def _setup_auth(self, auth: str | None) -> None:
         """Set up Basic Auth."""
@@ -221,10 +223,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         if self.json_log:
             handler.setFormatter(_JSONLogFormatter())
         else:
-            handler.setFormatter(logging.Formatter(
-                "%(asctime)s [%(levelname)s] %(message)s",
-                datefmt="%H:%M:%S"
-            ))
+            handler.setFormatter(
+                logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+            )
         logger.handlers = [handler]
         logger.setLevel(level)
 
@@ -250,92 +251,51 @@ class ExperimentalHTTPServer(HandlerMixin):
         return f"{prefix}{suffix}" if suffix else prefix
 
     def _setup_tls(self) -> None:
-        """Set up the TLS context."""
-        if not self.tls_enabled:
-            return
+        """Set up the TLS context (delegated to TLSManager)."""
+        self._tls.setup()
 
-        # Let's Encrypt
-        if self.letsencrypt and self.domain:
-            if not check_certbot_available():
-                print("[WARNING] certbot not found. Falling back to self-signed certificate.")
-                print("  Install certbot: https://certbot.eff.org/")
-                # fallthrough to self-signed logic below
-            else:
-                config_dir = Path.home() / ".exphttp" / "letsencrypt"
-                cert_path = config_dir / "live" / self.domain / "fullchain.pem"
-                key_path = config_dir / "live" / self.domain / "privkey.pem"
+    @property
+    def tls_enabled(self) -> bool:
+        return self._tls.enabled
 
-                if not cert_path.exists() or check_cert_needs_renewal(cert_path):
-                    print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
-                    cert_path, key_path = obtain_letsencrypt_cert(
-                        domain=self.domain, email=self.email, config_dir=config_dir,
-                    )
-                    print(f"[TLS] Certificate obtained: {cert_path}")
-                else:
-                    print(
-                        f"[TLS] Using existing Let's Encrypt"
-                        f" certificate for {self.domain}"
-                    )
+    @property
+    def ssl_context(self) -> ssl.SSLContext | None:
+        return self._tls.ssl_context
 
-                self.cert_file = str(cert_path)
-                self.key_file = str(key_path)
+    @property
+    def cert_file(self) -> str | None:
+        return self._tls.cert_file
 
-        # If no certificate provided, generate a self-signed one
-        if not self.cert_file or not self.key_file:
-            if not check_openssl_available():
-                print("[WARNING] OpenSSL not found. TLS disabled.")
-                print("  Install OpenSSL or provide --cert and --key files.")
-                self.tls_enabled = False
-                return
+    @property
+    def key_file(self) -> str | None:
+        return self._tls.key_file
 
-            print("[TLS] Generating self-signed certificate...")
-            cert_path, key_path = generate_self_signed_cert(
-                common_name=self.host if self.host != "0.0.0.0" else "localhost"
-            )
-            self.cert_file = str(cert_path)
-            self.key_file = str(key_path)
-            self._temp_cert_files = [self.cert_file, self.key_file]
-
-            # Delete temp files on exit
-            atexit.register(self._cleanup_temp_files)
-
-        # Create SSL context
-        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        self.ssl_context.load_cert_chain(self.cert_file, self.key_file)
-
-        # Modern security settings
-        self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        self.ssl_context.set_ciphers('ECDHE+AESGCM:DHE+AESGCM:ECDHE+CHACHA20:DHE+CHACHA20')
+    @property
+    def _temp_cert_files(self) -> list[str]:
+        return self._tls.temp_cert_files
 
     def _record_metric(
-        self, status_code: int, response_size: int, *, error: bool = False,
+        self,
+        status_code: int,
+        response_size: int,
+        *,
+        error: bool = False,
     ) -> None:
         """Record request metrics (thread-safe)."""
-        with self._metrics_lock:
-            self._request_count += 1
-            self._bytes_sent += response_size
-            self._status_counts[status_code] = (
-                self._status_counts.get(status_code, 0) + 1
-            )
-            if error:
-                self._error_count += 1
+        self._metrics.record(status_code, response_size, error=error)
 
     def get_metrics(self) -> dict[str, object]:
         """Return current server metrics snapshot."""
-        with self._metrics_lock:
-            uptime = time.monotonic() - self._start_time if self._start_time else 0
-            return {
-                "uptime_seconds": round(uptime, 1),
-                "total_requests": self._request_count,
-                "total_errors": self._error_count,
-                "bytes_sent": self._bytes_sent,
-                "status_counts": dict(self._status_counts),
-            }
+        return self._metrics.snapshot()
 
     # Content types eligible for gzip compression
     _COMPRESSIBLE_TYPES = (
-        "text/", "application/json", "application/javascript",
-        "application/xml", "application/xhtml+xml", "image/svg+xml",
+        "text/",
+        "application/json",
+        "application/javascript",
+        "application/xml",
+        "application/xhtml+xml",
+        "image/svg+xml",
     )
 
     def _maybe_gzip_response(self, response: HTTPResponse) -> None:
@@ -375,11 +335,7 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _cleanup_temp_files(self) -> None:
         """Clean up temporary certificate files."""
-        for path in self._temp_cert_files:
-            try:
-                Path(path).unlink()
-            except OSError:
-                pass
+        self._tls.cleanup()
 
     def _cleanup_old_smuggle_files(self) -> None:
         """Clean up stale SMUGGLE files from previous sessions."""
@@ -401,7 +357,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         if self.debug:
             logger.debug("Debug logging enabled")
 
-        self._start_time = time.monotonic()
+        self._metrics.mark_started()
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind((self.host, self.port))
@@ -417,17 +373,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  {url}")
         print()
         print(f"  Root directory: {self.root_dir}")
-        print(f"  Max upload: {self.max_upload_size // (1024*1024)} MB")
+        print(f"  Max upload: {self.max_upload_size // (1024 * 1024)} MB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
 
         if self.tls_enabled:
-            if self.letsencrypt and self.domain:
-                cert_info = f"Let's Encrypt ({self.domain})"
-            elif self._temp_cert_files:
-                cert_info = "self-signed"
-            else:
-                cert_info = self.cert_file or "unknown"
-            print(f"\n  [TLS]     certificate: {cert_info}")
+            print(f"\n  [TLS]     certificate: {self._tls.describe()}")
 
         if self.authenticator:
             print("  [AUTH]    Basic Auth enabled")
@@ -437,16 +387,21 @@ class ExperimentalHTTPServer(HandlerMixin):
 
         if self.opsec_mode:
             print("  [OPSEC]   randomized methods -> .opsec_config.json")
-            print(f"            upload: {self.opsec_methods['upload']}, "
-                  f"download: {self.opsec_methods['download']}")
-            print(f"            info: {self.opsec_methods['info']}, "
-                  f"ping: {self.opsec_methods['ping']}")
+            print(
+                f"            upload: {self.opsec_methods['upload']}, "
+                f"download: {self.opsec_methods['download']}"
+            )
+            print(
+                f"            info: {self.opsec_methods['info']}, "
+                f"ping: {self.opsec_methods['ping']}"
+            )
 
         print("\n  Ctrl+C to stop")
         print("=" * 60)
 
         if self.open_browser:
             import webbrowser
+
             webbrowser.open(url)
 
         executor = ThreadPoolExecutor(max_workers=self.max_workers)
@@ -504,9 +459,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             if self.tls_enabled and self.ssl_context:
                 try:
                     client_socket.settimeout(5.0)
-                    client_socket = self.ssl_context.wrap_socket(
-                        client_socket, server_side=True
-                    )
+                    client_socket = self.ssl_context.wrap_socket(client_socket, server_side=True)
                 except ssl.SSLError as e:
                     logger.debug(f"SSL handshake failed: {e}")
                     client_socket.close()
@@ -516,9 +469,7 @@ class ExperimentalHTTPServer(HandlerMixin):
 
             while self.running:
                 # For subsequent requests, use keep-alive idle timeout
-                idle_timeout = (
-                    self.KEEP_ALIVE_TIMEOUT if requests_on_conn > 0 else None
-                )
+                idle_timeout = self.KEEP_ALIVE_TIMEOUT if requests_on_conn > 0 else None
 
                 data = self._receive_request(client_socket, idle_timeout=idle_timeout)
                 if not data:
@@ -526,7 +477,10 @@ class ExperimentalHTTPServer(HandlerMixin):
 
                 requests_on_conn += 1
                 keep_alive = self._process_request(
-                    data, client_socket, client_address, requests_on_conn,
+                    data,
+                    client_socket,
+                    client_address,
+                    requests_on_conn,
                 )
                 if not keep_alive:
                     break
@@ -626,6 +580,59 @@ class ExperimentalHTTPServer(HandlerMixin):
         client_socket.sendall(response_bytes)
         return len(response_bytes)
 
+    def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None:
+        """Reject requests whose Content-Length exceeds the configured cap."""
+        try:
+            content_length = int(request.headers.get("content-length", 0))
+        except ValueError:
+            return None
+        if content_length <= self.max_upload_size:
+            return None
+
+        max_mb = self.max_upload_size // (1024 * 1024)
+        response = HTTPResponse(413)
+        response.set_body(
+            json.dumps(
+                {
+                    "error": f"Payload too large. Max size: {max_mb} MB",
+                    "status": 413,
+                }
+            ),
+            "application/json",
+        )
+        return response
+
+    def _resolve_keep_alive(
+        self,
+        request: HTTPRequest,
+        request_num: int,
+    ) -> tuple[bool, int]:
+        """Return ``(use_keep_alive, remaining_requests)`` for this connection."""
+        want_keep_alive = self._should_keep_alive(request)
+        remaining = self.KEEP_ALIVE_MAX - request_num
+        return want_keep_alive and remaining > 0, remaining
+
+    def _post_process_response(
+        self,
+        request: HTTPRequest,
+        response: HTTPResponse,
+        request_id: str,
+    ) -> None:
+        """Apply non-OPSEC response decorations (request-id, gzip)."""
+        if self.opsec_mode:
+            return
+        response.set_header("X-Request-Id", request_id)
+        if "gzip" in request.headers.get("accept-encoding", ""):
+            self._maybe_gzip_response(response)
+
+    def _build_error_response(self, status: int, message: str) -> HTTPResponse:
+        response = HTTPResponse(status)
+        response.set_body(
+            json.dumps({"error": message, "status": status}),
+            "application/json",
+        )
+        return response
+
     def _process_request(
         self,
         data: bytes,
@@ -633,11 +640,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         client_address: tuple[str, int],
         request_num: int,
     ) -> bool:
-        """
-        Process a single HTTP request on the connection.
-
-        Returns True if the connection should be kept alive for more requests.
-        """
+        """Process a single HTTP request; return True to keep the connection alive."""
         start_time = time.monotonic()
         request_id = secrets.token_hex(4)
         _bld = {"opsec_mode": self.opsec_mode, "cors_origin": self.cors_origin}
@@ -645,60 +648,32 @@ class ExperimentalHTTPServer(HandlerMixin):
         try:
             request = HTTPRequest(data)
 
-            # Determine keep-alive intent
-            want_keep_alive = self._should_keep_alive(request)
-            remaining = self.KEEP_ALIVE_MAX - request_num
-            use_keep_alive = want_keep_alive and remaining > 0
-
+            use_keep_alive, remaining = self._resolve_keep_alive(request, request_num)
             _bld["keep_alive"] = use_keep_alive
             if use_keep_alive:
                 _bld["keep_alive_timeout"] = self.KEEP_ALIVE_TIMEOUT
                 _bld["keep_alive_max"] = remaining
 
-            # Auth gate
             auth_error = self._authenticate_request(request, client_address)
             if auth_error:
                 client_socket.sendall(auth_error.build(**_bld))
                 return False
 
-            # WebSocket upgrade detection for notepad real-time
-            if (request.path.startswith("/notes/ws")
-                    and check_websocket_upgrade(request)):
+            if request.path.startswith("/notes/ws") and check_websocket_upgrade(request):
                 self._handle_notepad_ws(client_socket, request)
                 return False
 
-            # Payload size gate
-            try:
-                content_length = int(request.headers.get("content-length", 0))
-            except ValueError:
-                content_length = 0
-            if content_length > self.max_upload_size:
-                max_mb = self.max_upload_size // (1024 * 1024)
-                response = HTTPResponse(413)
-                response.set_body(
-                    json.dumps({
-                        "error": f"Payload too large. Max size: {max_mb} MB",
-                        "status": 413,
-                    }),
-                    "application/json",
-                )
-                client_socket.sendall(response.build(**_bld))
+            size_error = self._check_payload_size(request)
+            if size_error:
+                client_socket.sendall(size_error.build(**_bld))
                 return False
 
-            # Dispatch
             response = self._dispatch_handler(request)
+            self._post_process_response(request, response, request_id)
 
-            if not self.opsec_mode:
-                response.set_header("X-Request-Id", request_id)
-                accept_enc = request.headers.get("accept-encoding", "")
-                if "gzip" in accept_enc:
-                    self._maybe_gzip_response(response)
-
-            # Send
             bytes_sent = self._send_response(response, client_socket, _bld)
             self._record_metric(response.status_code, bytes_sent)
 
-            # Streamed responses always close
             if response.stream_path is not None:
                 use_keep_alive = False
 
@@ -706,21 +681,25 @@ class ExperimentalHTTPServer(HandlerMixin):
                 duration_ms = (time.monotonic() - start_time) * 1000
                 logger.info(
                     "[%s] %s - %s %s -> %d (%dms)",
-                    request_id, client_address[0], request.method,
-                    request.path, response.status_code, duration_ms,
+                    request_id,
+                    client_address[0],
+                    request.method,
+                    request.path,
+                    response.status_code,
+                    duration_ms,
                 )
 
             return use_keep_alive
 
         except Exception:
-            logger.exception("[%s] Request handling error from %s", request_id, client_address[0])
-            self._record_metric(500, 0, error=True)
-            error_response = HTTPResponse(500)
-            msg = "Error" if self.opsec_mode else "Internal Server Error"
-            error_response.set_body(
-                json.dumps({"error": msg, "status": 500}),
-                "application/json",
+            logger.exception(
+                "[%s] Request handling error from %s",
+                request_id,
+                client_address[0],
             )
+            self._record_metric(500, 0, error=True)
+            msg = "Error" if self.opsec_mode else "Internal Server Error"
+            error_response = self._build_error_response(500, msg)
             try:
                 client_socket.sendall(error_response.build(**_bld))
             except Exception:
@@ -732,96 +711,12 @@ class ExperimentalHTTPServer(HandlerMixin):
         client_socket: socket.socket,
         idle_timeout: float | None = None,
     ) -> bytes:
-        """
-        Receive a complete HTTP request.
-
-        Args:
-            client_socket: The client socket.
-            idle_timeout: If set, use this as the initial socket timeout
-                          (for keep-alive idle wait). None uses default 5s.
-        """
-        chunks: list[bytes] = []
-        total_size = 0
-        start_time = time.monotonic()
-        HEADER_TIMEOUT = 30.0
-        BODY_TIMEOUT = 300.0
-
-        # For keep-alive idle wait, use the specified timeout for the first recv
-        initial_timeout = idle_timeout if idle_timeout is not None else 5.0
-        client_socket.settimeout(initial_timeout)
-        headers_received = False
-        content_length = 0
-        header_end_pos = 0
-        first_recv = True
-
-        while True:
-            elapsed = time.monotonic() - start_time
-            if not headers_received and elapsed > HEADER_TIMEOUT:
-                logger.warning(f"Header receive timeout ({elapsed:.0f}s)")
-                return b""
-            if headers_received and elapsed > HEADER_TIMEOUT + BODY_TIMEOUT:
-                logger.warning(f"Body receive timeout ({elapsed:.0f}s)")
-                return b""
-
-            try:
-                chunk = client_socket.recv(65536)
-                if not chunk:
-                    break
-
-                # After first data arrives, switch to standard 5s timeout
-                if first_recv and idle_timeout is not None:
-                    client_socket.settimeout(5.0)
-                    first_recv = False
-
-                chunks.append(chunk)
-                total_size += len(chunk)
-
-                # DoS protection: max request size
-                if total_size > self.max_upload_size + 65536:
-                    logger.warning(f"Request too large ({total_size} bytes), dropping")
-                    return b""
-
-                if not headers_received:
-                    # Join to find header end (headers are small, O(n^2) is negligible)
-                    data = b"".join(chunks)
-                    if b"\r\n\r\n" in data:
-                        header_end_pos = data.find(b"\r\n\r\n")
-                        headers_part = data[:header_end_pos].decode("utf-8", errors="replace")
-
-                        cl_values = []
-                        for line in headers_part.split("\r\n"):
-                            if line.lower().startswith("content-length:"):
-                                try:
-                                    cl_values.append(int(line.split(":", 1)[1].strip()))
-                                except ValueError:
-                                    content_length = 0
-                                    break
-                        if cl_values:
-                            if len(set(cl_values)) > 1 or cl_values[0] < 0:
-                                return b""
-                            content_length = cl_values[0]
-
-                        headers_received = True
-                        body_received = total_size - header_end_pos - 4
-                        if body_received >= content_length:
-                            break
-                else:
-                    # Body phase: just count bytes, no joining needed
-                    body_received = total_size - header_end_pos - 4
-                    if body_received >= content_length:
-                        break
-
-            except TimeoutError:
-                if not headers_received:
-                    # No data within timeout during header phase — give up
-                    break
-                # During body phase, continue until total timeout
-                continue
-
-        result = b"".join(chunks)
-        if result:
-            logger.debug(f"Received {len(result)} bytes")
-        return result
+        """Delegate to :func:`src.http.io.receive_request`."""
+        return _receive_request_io(
+            client_socket,
+            max_upload_size=self.max_upload_size,
+            idle_timeout=idle_timeout,
+        )
 
     def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
         """Get the handler for OPSEC mode."""
@@ -855,7 +750,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         return None
 
     def _handle_notepad_ws(
-        self, sock: socket.socket, request: HTTPRequest,
+        self,
+        sock: socket.socket,
+        request: HTTPRequest,
     ) -> None:
         """Handle a WebSocket connection for real-time notepad streaming."""
         ws_key = request.headers.get("sec-websocket-key", "")
