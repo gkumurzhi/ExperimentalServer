@@ -7,6 +7,7 @@ and close frames.
 """
 
 import base64
+import binascii
 import hashlib
 import struct
 
@@ -27,10 +28,26 @@ WS_PONG = 0x0A
 
 def check_websocket_upgrade(request: HTTPRequest) -> bool:
     """Return True if the request is a valid WebSocket upgrade."""
+    if request.method != "GET":
+        return False
+
     upgrade = request.headers.get("upgrade", "").lower()
     connection = request.headers.get("connection", "").lower()
     ws_key = request.headers.get("sec-websocket-key", "")
-    return upgrade == "websocket" and "upgrade" in connection and len(ws_key) > 0
+    ws_version = request.headers.get("sec-websocket-version", "")
+
+    if upgrade != "websocket":
+        return False
+    if "upgrade" not in {part.strip() for part in connection.split(",")}:
+        return False
+    if ws_version != "13":
+        return False
+
+    try:
+        key_bytes = base64.b64decode(ws_key, validate=True)
+    except (binascii.Error, ValueError):
+        return False
+    return len(key_bytes) == 16
 
 
 def build_ws_accept_key(ws_key: str) -> str:
@@ -101,11 +118,12 @@ def parse_ws_frame(data: bytes) -> tuple[int, bytes, int] | None:
 
     raw_payload = data[offset : offset + payload_len]
 
+    payload: bytes
     if masked:
-        payload = bytearray(payload_len)
+        payload_bytes = bytearray(payload_len)
         for i in range(payload_len):
-            payload[i] = raw_payload[i] ^ mask_key[i % 4]
-        payload = bytes(payload)
+            payload_bytes[i] = raw_payload[i] ^ mask_key[i % 4]
+        payload = bytes(payload_bytes)
     else:
         payload = raw_payload
 

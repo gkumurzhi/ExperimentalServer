@@ -20,6 +20,9 @@ class InfoHandlersMixin(BaseHandler):
 
     def handle_info(self, request: HTTPRequest) -> HTTPResponse:
         """Custom INFO method — file/directory information."""
+        if self._is_hidden_file(request.path):
+            return self._not_found(request.path)
+
         # For INFO, don't substitute / with index.html
         url_path = request.path
         clean_path = url_path.lstrip("/")

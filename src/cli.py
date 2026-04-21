@@ -4,8 +4,11 @@ CLI entry point for ExperimentalHTTPServer.
 """
 
 import argparse
+import signal
 import sys
 from collections.abc import Sequence
+from types import FrameType
+from typing import Any
 
 from . import ExperimentalHTTPServer, __version__
 
@@ -63,9 +66,9 @@ Custom HTTP methods:
     modes.add_argument("--json-log", action="store_true", help="Structured JSON log format")
     modes.add_argument(
         "--cors-origin",
-        default="*",
+        default="",
         metavar="ORIGIN",
-        help="Access-Control-Allow-Origin (default: *)",
+        help="Enable CORS for an explicit origin (default: disabled)",
     )
 
     # Limits
@@ -115,6 +118,27 @@ Custom HTTP methods:
     return parser
 
 
+def _install_shutdown_signal_handlers(server: ExperimentalHTTPServer) -> dict[signal.Signals, Any]:
+    """Install graceful shutdown handlers for container-style termination."""
+    previous_handlers: dict[signal.Signals, Any] = {}
+    sigterm = getattr(signal, "SIGTERM", None)
+    if sigterm is None:
+        return previous_handlers
+
+    def _handle_shutdown(_signum: int, _frame: FrameType | None) -> None:
+        server.stop()
+
+    previous_handlers[sigterm] = signal.getsignal(sigterm)
+    signal.signal(sigterm, _handle_shutdown)
+    return previous_handlers
+
+
+def _restore_signal_handlers(previous_handlers: dict[signal.Signals, Any]) -> None:
+    """Restore any signal handlers replaced for graceful shutdown."""
+    for sig, handler in previous_handlers.items():
+        signal.signal(sig, handler)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Main entry point."""
     parser = create_parser()
@@ -148,7 +172,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         server = ExperimentalHTTPServer(**config)
-        server.start()
+        previous_handlers = _install_shutdown_signal_handlers(server)
+        try:
+            server.start()
+        finally:
+            _restore_signal_handlers(previous_handlers)
         return 0
     except KeyboardInterrupt:
         return 0

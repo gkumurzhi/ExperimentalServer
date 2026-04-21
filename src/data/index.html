@@ -1096,6 +1096,9 @@
                 <p style="color: #888; margin-bottom: 15px;" data-i18n="notepadDesc">
                     End-to-end encrypted notes. Encryption keys are negotiated automatically via ECDH — no password needed.
                 </p>
+                <p style="color: #888; margin-bottom: 15px; font-size: 0.9rem;" data-i18n="notepadRequirements">
+                    Requires server installation with exphttp[crypto] and a browser with Web Crypto support.
+                </p>
 
                 <div class="notepad-toolbar">
                     <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Note title</label>
@@ -1296,6 +1299,7 @@
                 tabNotepad: "Блокнот",
                 notepadTitle: "Защищённый блокнот",
                 notepadDesc: "Сквозное шифрование заметок. Ключи согласуются автоматически через ECDH — пароль не нужен.",
+                notepadRequirements: "Требуется сервер с exphttp[crypto] и браузер с поддержкой Web Crypto.",
                 notepadTitlePlaceholder: "Название заметки",
                 notepadTextareaPlaceholder: "Введите текст... (шифруется перед сохранением)",
                 notepadNewBtn: "Новая",
@@ -1314,8 +1318,9 @@
                 notepadSaveError: "Ошибка сохранения",
                 notepadLoadError: "Ошибка загрузки",
                 notepadDecryptError: "Ошибка расшифровки",
-                notepadSessionFailed: "Ошибка сессии",
-                notepadNoEncryption: "Без шифрования",
+                notepadSessionFailed: "Ошибка инициализации сессии",
+                notepadUnavailableServer: "Защищённый блокнот недоступен: установите exphttp[crypto] на сервере.",
+                notepadUnavailableBrowser: "Защищённый блокнот недоступен: браузер не поддерживает Web Crypto.",
                 notepadTransportHttp: "HTTP",
                 notepadTransportWs: "WebSocket",
                 notepadEphemeralWarning: "Сессии не сохраняются при перезагрузке сервера",
@@ -1437,6 +1442,7 @@
                 tabNotepad: "Notepad",
                 notepadTitle: "Secure Notepad",
                 notepadDesc: "End-to-end encrypted notes. Encryption keys are negotiated automatically via ECDH — no password needed.",
+                notepadRequirements: "Requires server installation with exphttp[crypto] and a browser with Web Crypto support.",
                 notepadTitlePlaceholder: "Note title",
                 notepadTextareaPlaceholder: "Enter text here... (encrypted before saving)",
                 notepadNewBtn: "New",
@@ -1455,8 +1461,9 @@
                 notepadSaveError: "Save error",
                 notepadLoadError: "Load error",
                 notepadDecryptError: "Decrypt error",
-                notepadSessionFailed: "Session failed",
-                notepadNoEncryption: "No encryption",
+                notepadSessionFailed: "Session initialization failed",
+                notepadUnavailableServer: "Secure Notepad unavailable: install exphttp[crypto] on the server.",
+                notepadUnavailableBrowser: "Secure Notepad unavailable: this browser lacks Web Crypto support.",
                 notepadTransportHttp: "HTTP",
                 notepadTransportWs: "WebSocket",
                 notepadEphemeralWarning: "Sessions are lost on server restart",
@@ -1716,6 +1723,7 @@ ${esc(method)} ${esc(path)}
                     });
                     resolve({
                         status: xhr.status,
+                        ok: xhr.status >= 200 && xhr.status < 300,
                         statusText: xhr.statusText,
                         headers: responseHeaders,
                         text: () => Promise.resolve(xhr.responseText),
@@ -2484,6 +2492,7 @@ ${t('smuggleOpened')}</div>`;
         let notepadDerivedKey = null;   // CryptoKey for AES-GCM
         let notepadHasEcdh = false;
         let notepadInitDone = false;
+        let notepadAvailable = false;
         let notepadWs = null;
 
         // WS auto-reconnect state
@@ -2503,6 +2512,42 @@ ${t('smuggleOpened')}</div>`;
         const notepadCharCount = document.getElementById('notepadCharCount');
         const notepadDeleteBtnEl = document.getElementById('notepadDeleteBtn');
         const notepadConnStatus = document.getElementById('notepadConnStatus');
+        const notepadTransportInputs = Array.from(document.querySelectorAll('input[name="notepadTransport"]'));
+
+        function notepadSetEditingEnabled(enabled) {
+            notepadTitleInput.disabled = !enabled;
+            notepadTextarea.disabled = !enabled;
+            notepadDeleteBtnEl.disabled = !enabled || !notepadCurrentId;
+            notepadTransportInputs.forEach(input => {
+                input.disabled = !enabled;
+            });
+        }
+
+        function notepadRenderUnavailable(message) {
+            const listEl = document.getElementById('notepadNoteList');
+            listEl.innerHTML = '<div class="notepad-no-notes">' + esc(message) + '</div>';
+        }
+
+        function notepadMarkUnavailable(state) {
+            const message = t(state);
+            notepadAvailable = false;
+            notepadHasEcdh = false;
+            notepadInitDone = true;
+            notepadSessionId = null;
+            notepadDerivedKey = null;
+            notepadCurrentId = null;
+            notepadTitleInput.value = '';
+            notepadTextarea.value = '';
+            notepadCharCount.textContent = '0 chars';
+            notepadIsDirty = false;
+            document.body.classList.remove('notepad-dirty');
+            clearTimeout(notepadAutoSaveTimer);
+            notepadDisconnectWs(true);
+            notepadSetEditingEnabled(false);
+            notepadSetStatus(state);
+            notepadSetConnStatus('disconnected', message);
+            notepadRenderUnavailable(message);
+        }
 
         function notepadGetTransport() {
             const el = document.querySelector('input[name="notepadTransport"]:checked');
@@ -2516,6 +2561,7 @@ ${t('smuggleOpened')}</div>`;
         // Transport toggle handlers
         document.querySelectorAll('input[name="notepadTransport"]').forEach(el => {
             el.addEventListener('change', () => {
+                if (!notepadAvailable) return;
                 if (el.value === 'ws' && el.checked) {
                     notepadConnectWs();
                 } else if (el.value === 'http' && el.checked) {
@@ -2561,7 +2607,8 @@ ${t('smuggleOpened')}</div>`;
                 'loadError': { class: 'error', text: t('notepadLoadError') },
                 'decryptError': { class: 'error', text: t('notepadDecryptError') },
                 'sessionFailed': { class: 'error', text: t('notepadSessionFailed') },
-                'noEncryption': { class: '', text: t('notepadNoEncryption') },
+                'unavailableServer': { class: 'error', text: t('notepadUnavailableServer') },
+                'unavailableBrowser': { class: 'error', text: t('notepadUnavailableBrowser') },
             };
             const s = stateMap[state] || { class: '', text: state };
             notepadSaveIndicator.className = 'save-indicator ' + s.class;
@@ -2595,7 +2642,9 @@ ${t('smuggleOpened')}</div>`;
 
         async function notepadInit() {
             if (notepadInitDone) {
-                notepadRefreshList();
+                if (notepadAvailable) {
+                    notepadRefreshList();
+                }
                 return;
             }
             notepadSetStatus('connecting');
@@ -2603,39 +2652,41 @@ ${t('smuggleOpened')}</div>`;
 
             try {
                 await notepadInitSession();
+                notepadAvailable = true;
                 notepadInitDone = true;
-                notepadTitleInput.disabled = false;
-                notepadTextarea.disabled = false;
-                if (notepadHasEcdh) {
-                    notepadSetStatus('connected');
-                    notepadSetConnStatus('connected', t('notepadConnected'));
-                } else {
-                    notepadSetStatus('noEncryption');
-                    notepadSetConnStatus('no-encryption', t('notepadNoEncryption'));
-                }
+                notepadSetEditingEnabled(true);
+                notepadSetStatus('connected');
+                notepadSetConnStatus('connected', t('notepadConnected'));
                 notepadRefreshList();
             } catch (e) {
-                console.error('[Notepad] Session init failed:', e);
-                // Fall back to unencrypted mode
-                notepadInitDone = true;
-                notepadHasEcdh = false;
-                notepadTitleInput.disabled = false;
-                notepadTextarea.disabled = false;
-                notepadSetStatus('noEncryption');
-                notepadSetConnStatus('no-encryption', t('notepadNoEncryption'));
-                notepadRefreshList();
+                if (e && e.message === 'server-crypto-unavailable') {
+                    console.warn('[Notepad] Secure Notepad unavailable on server:', e);
+                    notepadMarkUnavailable('unavailableServer');
+                } else if (e && e.message === 'browser-crypto-unavailable') {
+                    console.warn('[Notepad] Secure Notepad unavailable in browser:', e);
+                    notepadMarkUnavailable('unavailableBrowser');
+                } else {
+                    console.error('[Notepad] Session init failed:', e);
+                    notepadMarkUnavailable('sessionFailed');
+                }
             }
         }
 
         async function notepadInitSession() {
+            if (!window.crypto || !window.crypto.subtle) {
+                throw new Error('browser-crypto-unavailable');
+            }
+
             // 1. Get server public key
             const keyResp = await sendCustomRequest('NOTE', SERVER_URL + '/notes/key');
             const keyText = await keyResp.text();
+            if (!keyResp.ok) {
+                throw new Error(keyResp.status === 501 ? 'server-crypto-unavailable' : 'session-init-failed');
+            }
             const keyData = JSON.parse(keyText);
 
-            if (!keyData.hasEcdh) {
-                notepadHasEcdh = false;
-                return;
+            if (!keyData.hasEcdh || typeof keyData.publicKey !== 'string' || !keyData.publicKey) {
+                throw new Error('server-crypto-unavailable');
             }
 
             // 2. Generate client ECDH key pair
@@ -2654,7 +2705,15 @@ ${t('smuggleOpened')}</div>`;
                 { 'Content-Type': 'application/json' }
             );
             const exchangeText = await exchangeResp.text();
+            if (!exchangeResp.ok) {
+                throw new Error(
+                    exchangeResp.status === 501 ? 'server-crypto-unavailable' : 'session-init-failed'
+                );
+            }
             const exchangeData = JSON.parse(exchangeText);
+            if (typeof exchangeData.sessionId !== 'string' || typeof exchangeData.serverPublicKey !== 'string') {
+                throw new Error('session-init-failed');
+            }
             notepadSessionId = exchangeData.sessionId;
 
             // 4. Import server public key
@@ -2739,6 +2798,7 @@ ${t('smuggleOpened')}</div>`;
         }
 
         function notepadConnectWs() {
+            if (!notepadAvailable) return;
             notepadDisconnectWs(true);
             wsIntentionalClose = false;
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -2747,7 +2807,7 @@ ${t('smuggleOpened')}</div>`;
 
             notepadWs.onopen = () => {
                 wsReconnectAttempt = 0;
-                notepadSetConnStatus('connected', notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption'));
+                notepadSetConnStatus('connected', t('notepadConnected'));
             };
 
             notepadWs.onmessage = (evt) => {
@@ -2781,10 +2841,7 @@ ${t('smuggleOpened')}</div>`;
                 notepadWs = null;
             }
             if (!skipStatus) {
-                notepadSetConnStatus(
-                    notepadHasEcdh ? 'connected' : 'no-encryption',
-                    notepadHasEcdh ? t('notepadConnected') : t('notepadNoEncryption')
-                );
+                notepadSetConnStatus('connected', t('notepadConnected'));
             }
         }
 
@@ -2821,6 +2878,10 @@ ${t('smuggleOpened')}</div>`;
         // ── CRUD operations ─────────────────────────────────────
 
         async function notepadSave() {
+            if (!notepadAvailable || !notepadDerivedKey) {
+                notepadSetStatus('sessionFailed');
+                return;
+            }
             const text = notepadTextarea.value;
             const title = notepadTitleInput.value.trim() || t('notepadUntitled');
 
@@ -2829,14 +2890,8 @@ ${t('smuggleOpened')}</div>`;
             notepadSetStatus('saving');
 
             try {
-                let dataB64;
-                if (notepadHasEcdh && notepadDerivedKey) {
-                    const encrypted = await notepadEncrypt(text);
-                    dataB64 = uint8ToBase64(encrypted);
-                } else {
-                    // Fallback: send plaintext as base64
-                    dataB64 = btoa(unescape(encodeURIComponent(text)));
-                }
+                const encrypted = await notepadEncrypt(text);
+                const dataB64 = uint8ToBase64(encrypted);
 
                 if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
                     // WebSocket save
@@ -2877,6 +2932,7 @@ ${t('smuggleOpened')}</div>`;
         }
 
         async function notepadRefreshList() {
+            if (!notepadAvailable) return;
             if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
                 notepadSendWs({ type: 'list' });
                 return;
@@ -2910,6 +2966,10 @@ ${t('smuggleOpened')}</div>`;
         }
 
         async function notepadLoadNote(id) {
+            if (!notepadAvailable || !notepadDerivedKey) {
+                notepadSetStatus('sessionFailed');
+                return;
+            }
             notepadSetStatus('loading');
 
             try {
@@ -2931,15 +2991,12 @@ ${t('smuggleOpened')}</div>`;
 
         async function notepadHandleLoadResult(result) {
             try {
-                const encryptedBytes = base64ToUint8(result.data);
-                let plaintext;
-
-                if (notepadHasEcdh && notepadDerivedKey) {
-                    plaintext = await notepadDecrypt(encryptedBytes);
-                } else {
-                    // Fallback: treat as plaintext base64
-                    plaintext = decodeURIComponent(escape(atob(result.data)));
+                if (!notepadAvailable || !notepadDerivedKey) {
+                    notepadSetStatus('sessionFailed');
+                    return;
                 }
+                const encryptedBytes = base64ToUint8(result.data);
+                const plaintext = await notepadDecrypt(encryptedBytes);
 
                 notepadCurrentId = result.id;
                 notepadTitleInput.value = result.title || '';
@@ -2969,11 +3026,13 @@ ${t('smuggleOpened')}</div>`;
             notepadIsDirty = false;
             document.body.classList.remove('notepad-dirty');
             clearTimeout(notepadAutoSaveTimer);
-            if (notepadInitDone) {
+            if (!notepadInitDone) {
+                notepadSetStatus('connecting');
+            } else if (!notepadAvailable) {
+                notepadSetStatus('sessionFailed');
+            } else {
                 notepadSetStatus('ready');
                 notepadTitleInput.focus();
-            } else {
-                notepadSetStatus('connecting');
             }
             notepadRefreshList();
         }

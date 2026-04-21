@@ -1,4 +1,4 @@
-"""Tests for src.http.io.receive_request and _parse_content_length."""
+"""Tests for src.http.io.receive_request and header framing guards."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import time
 
 import pytest
 
-from src.http.io import _parse_content_length, receive_request
+from src.http.io import _has_transfer_encoding, _parse_content_length, receive_request
 
 
 class TestParseContentLength:
@@ -35,6 +35,20 @@ class TestParseContentLength:
     def test_case_insensitive(self) -> None:
         assert _parse_content_length("content-length: 5") == 5
         assert _parse_content_length("CONTENT-LENGTH: 7") == 7
+
+
+class TestTransferEncodingDetection:
+    def test_detects_transfer_encoding(self) -> None:
+        headers = "Host: x\r\nTransfer-Encoding: chunked\r\nConnection: close"
+        assert _has_transfer_encoding(headers) is True
+
+    def test_case_insensitive(self) -> None:
+        headers = "Host: x\r\nTRANSFER-ENCODING: chunked"
+        assert _has_transfer_encoding(headers) is True
+
+    def test_absent_header_returns_false(self) -> None:
+        headers = "Host: x\r\nContent-Length: 0"
+        assert _has_transfer_encoding(headers) is False
 
 
 @pytest.fixture
@@ -103,6 +117,34 @@ class TestReceiveRequest:
         server, client = socket_pair
         request = (
             b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\nContent-Length: 10\r\n\r\nhello"
+        )
+        client.sendall(request)
+
+        result = receive_request(server, max_upload_size=1024 * 1024)
+        assert result == b""
+
+    def test_rejects_transfer_encoding_without_content_length(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        request = (
+            b"POST / HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n"
+            b"5\r\nhello\r\n0\r\n\r\n"
+        )
+        client.sendall(request)
+
+        result = receive_request(server, max_upload_size=1024 * 1024)
+        assert result == b""
+
+    def test_rejects_transfer_encoding_with_content_length(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        request = (
+            b"POST / HTTP/1.1\r\nHost: x\r\nContent-Length: 5\r\n"
+            b"Transfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n0\r\n\r\n"
         )
         client.sendall(request)
 

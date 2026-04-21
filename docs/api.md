@@ -1,6 +1,10 @@
+<!-- Generated from ../API.md by tools/sync_docs.py. Edit API.md and rerun the sync tool. -->
+
 # API Reference
 
-All responses include standard headers: `Server`, `Date`, `Connection: close`, CORS headers.
+All responses include standard headers: `Server`, `Date`, and `Connection`
+(`close` by default, `keep-alive` when the server keeps the socket open).
+CORS headers are only emitted when CORS is explicitly enabled.
 Error responses use JSON format: `{"error": "message", "status": NNN}`.
 
 ---
@@ -163,22 +167,25 @@ PING / HTTP/1.1
 ```json
 {
   "status": "pong",
-  "timestamp": "2025-01-15T10:30:00.123456",
-  "uptime_seconds": 3600.5,
-  "version": "2.0.0",
-  "server_time": "2025-01-15T10:30:00",
-  "methods": ["GET", "POST", "PUT", ...],
-  "features": {
-    "tls": false,
-    "auth": false,
-    "sandbox": false,
-    "opsec": false
-  },
-  "total_requests": 150,
-  "total_bytes_sent": 524288,
-  "error_count": 2
+  "server": "ExperimentalHTTPServer/2.0.0",
+  "timestamp": "2025-01-15T10:30:00.123456+00:00",
+  "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
+  "sandbox_mode": false,
+  "opsec_mode": false,
+  "metrics": {
+    "uptime_seconds": 3600.5,
+    "total_requests": 150,
+    "total_errors": 2,
+    "bytes_sent": 524288,
+    "status_counts": {
+      "200": 148,
+      "404": 2
+    }
+  }
 }
 ```
+
+The response also includes the header `X-Ping-Response: pong`.
 
 ---
 
@@ -204,7 +211,7 @@ SMUGGLE /uploads/file.txt?encrypt=1 HTTP/1.1
 
 ## NOTE
 
-Secure Notepad with end-to-end AES-256-GCM encryption. The server stores opaque encrypted blobs — plaintext is never visible server-side. ECDH P-256 key exchange is used for automatic session key negotiation (requires the `cryptography` package). Notes are stored in `uploads/notes/` as `<id>.enc` + `<id>.meta.json` pairs.
+Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow requires the `cryptography` package; when the server is installed without `exphttp[crypto]`, NOTE operations fail closed with `501`. Notes are stored in `uploads/notes/` as `<id>.enc` + `<id>.meta.json` pairs.
 
 ### NOTE /notes/key
 
@@ -223,13 +230,13 @@ NOTE /notes/key HTTP/1.1
 }
 ```
 
-If the `cryptography` package is not installed, `hasEcdh` is `false` and `publicKey` is absent.
+If the `cryptography` package is not installed, `hasEcdh` is `false` and `publicKey` is absent. In that mode, save/load/list/delete NOTE operations are unavailable and return `501`.
 
 ---
 
 ### NOTE /notes/exchange
 
-Exchange ECDH keys to establish a session. The client sends its ephemeral P-256 public key; the server returns a `sessionId` and its own public key. Both sides independently derive the same AES-256-GCM session key via HKDF-SHA256.
+Exchange ECDH keys to establish a session. The client sends its ephemeral P-256 public key; the server returns a short-lived `sessionId` and its own public key. Both sides independently derive the same AES-256-GCM session key via HKDF-SHA256.
 
 **Request:**
 ```
@@ -243,9 +250,12 @@ Content-Type: application/json
 ```json
 {
   "sessionId": "<32-char hex>",
-  "serverPublicKey": "<base64 of 65-byte uncompressed P-256 point>"
+  "serverPublicKey": "<base64 of 65-byte uncompressed P-256 point>",
+  "sessionTtlSeconds": 3600
 }
 ```
+
+`sessionId` is audit-only server state: if an active session ID is later sent with a save request, the server records that the note write came from a recent ECDH exchange. It is not an authorization token for reads or writes.
 
 **Status codes:** `200` OK, `400` Missing/invalid key, `501` ECDH unavailable
 
@@ -278,13 +288,13 @@ NOTE /notes HTTP/1.1
 
 ### NOTE /notes — save note
 
-Send a JSON body to create or update a note. `data` must be a base64-encoded AES-256-GCM ciphertext (encrypted client-side). Include `id` to update an existing note; omit to create a new one.
+Send a JSON body to create or update a note. `data` must be a base64-encoded AES-256-GCM ciphertext (encrypted client-side). Include `id` to update an existing note; omit to create a new one. The encrypted blob is the source of truth, so malformed metadata sidecars are ignored or rebuilt as needed.
 
 **Request:**
 ```
 NOTE /notes HTTP/1.1
 Content-Type: application/json
-X-Session-Id: <sessionId>   (optional, for audit trail)
+X-Session-Id: <sessionId>   (optional, audit-only; ignored when expired)
 
 {
   "title": "My Note",
@@ -305,7 +315,7 @@ X-Session-Id: <sessionId>   (optional, for audit trail)
 }
 ```
 
-**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update)
+**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `501` Secure Notepad unavailable without `exphttp[crypto]`
 
 ---
 
@@ -328,7 +338,7 @@ NOTE /notes/a1b2c3d4... HTTP/1.1
 }
 ```
 
-**Status codes:** `200` OK, `404` Not Found
+**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad unavailable without `exphttp[crypto]`
 
 ---
 
@@ -347,13 +357,13 @@ NOTE /notes/a1b2c3d4...?delete HTTP/1.1
 }
 ```
 
-**Status codes:** `200` OK, `404` Not Found
+**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad unavailable without `exphttp[crypto]`
 
 ---
 
 ## WebSocket — /notes/ws
 
-Real-time notepad sync over WebSocket (RFC 6455). The server detects an upgrade request on any path starting with `/notes/ws` and performs the handshake inline, before the normal HTTP handler runs. The connection uses a 60-second idle timeout; the server sends a ping frame when idle to keep the connection alive.
+Real-time notepad sync over WebSocket (RFC 6455). The server detects an upgrade request on any path starting with `/notes/ws` and performs the handshake inline, before the normal HTTP handler runs. The connection uses a 60-second idle timeout; the server sends a ping frame when idle to keep the connection alive. When the server is installed without `exphttp[crypto]`, the upgrade is rejected with `501`.
 
 **Upgrade request:**
 ```
@@ -378,7 +388,7 @@ All WebSocket messages are UTF-8 JSON text frames. The client sends masked frame
 
 | `type` | Fields | Description |
 |--------|--------|-------------|
-| `save` | `title`, `data`, `noteId?`, `sessionId?` | Save a note |
+| `save` | `title`, `data`, `noteId?`, `sessionId?` | Save a note (`sessionId` is optional audit-only state) |
 | `load` | `id` | Load a note by ID |
 | `list` | — | List all notes |
 | `delete` | `id` | Delete a note |
@@ -405,19 +415,40 @@ CORS preflight handler. Returns allowed methods.
 
 ## OPSEC Mode
 
-When `--opsec` is enabled, standard custom methods (FETCH, INFO, PING, NONE, SMUGGLE) are replaced with randomized method names. The mapping is saved to `.opsec_config.json` in the root directory.
+When `--opsec` is enabled, the server generates randomized aliases for the
+OPSEC-sensitive upload, download, info, ping, and notepad flows. The
+mapping is saved to `.opsec_config.json` in the root directory. Standard
+methods remain routable for compatibility, but OPSEC mode hides the custom
+surface in CORS and error responses.
 
-The server masquerades as nginx and does not expose custom method names in CORS or error responses.
+The server masquerades as nginx and does not expose custom method names in
+CORS or error responses. Any non-standard method that carries OPSEC upload
+data is also treated as an upload request.
 
-OPSEC-specific upload endpoint accepts XOR-obfuscated data with HMAC integrity verification:
+OPSEC-specific upload endpoint accepts encoded payloads via JSON body, HTTP headers, or query parameters. Common fields are:
+
+- `d` / `data`: base64-encoded payload
+- `e`: encryption mode
+- `k`: decryption key
+- `kb64`: whether `k` is base64-encoded
+- `n` / `name`: suggested filename
+- `h` / `hmac`: integrity tag
+
+Header transport also supports chunked payload headers `X-D-0`, `X-D-1`, ... for long values.
+
+**Header transport example:**
 
 **Request:**
 ```
 <RANDOM_METHOD> /filename HTTP/1.1
-X-Enc-Key: <password>
-X-HMAC: <hmac-sha256-hex>
+X-D: <base64-payload>
+X-E: xor
+X-K: <password>
+X-Kb64: 0
+X-N: file.bin
+X-H: <hmac-sha256-hex>
 
-<XOR-obfuscated bytes>
+<optional raw body if not using structured fields>
 ```
 
 ---

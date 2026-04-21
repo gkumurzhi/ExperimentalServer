@@ -13,6 +13,7 @@ import threading
 import time
 
 from src.server import ExperimentalHTTPServer
+from tests.conftest import find_free_port
 
 
 def _start_server(port: int) -> ExperimentalHTTPServer:
@@ -59,7 +60,7 @@ class TestContentLengthSmuggling:
 
     def test_duplicate_different_content_lengths_rejected(self):
         """Two different Content-Length values should be rejected (empty response)."""
-        port = 19871
+        port = find_free_port()
         server = _start_server(port)
         try:
             raw = (
@@ -79,7 +80,7 @@ class TestContentLengthSmuggling:
 
     def test_negative_content_length_rejected(self):
         """Negative Content-Length should be rejected."""
-        port = 19872
+        port = find_free_port()
         server = _start_server(port)
         try:
             raw = b"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Length: -1\r\n\r\n"
@@ -90,7 +91,7 @@ class TestContentLengthSmuggling:
 
     def test_duplicate_same_content_length_accepted(self):
         """Duplicate identical Content-Length values should be accepted."""
-        port = 19873
+        port = find_free_port()
         server = _start_server(port)
         try:
             raw = (
@@ -108,11 +109,48 @@ class TestContentLengthSmuggling:
 
     def test_normal_single_content_length_accepted(self):
         """Normal request with single Content-Length should work fine."""
-        port = 19874
+        port = find_free_port()
         server = _start_server(port)
         try:
             raw = b"PING / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n"
             response = _send_raw(port, raw)
             assert b"HTTP/1.1 200" in response
+        finally:
+            server.stop()
+
+    def test_transfer_encoding_chunked_rejected(self):
+        """Transfer-Encoding is unsupported and should be dropped."""
+        port = find_free_port()
+        server = _start_server(port)
+        try:
+            raw = (
+                b"POST / HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Transfer-Encoding: chunked\r\n"
+                b"X-File-Name: te.bin\r\n"
+                b"\r\n"
+                b"5\r\nhello\r\n0\r\n\r\n"
+            )
+            response = _send_raw(port, raw)
+            assert response == b""
+        finally:
+            server.stop()
+
+    def test_transfer_encoding_with_content_length_rejected(self):
+        """Transfer-Encoding plus Content-Length must also be dropped."""
+        port = find_free_port()
+        server = _start_server(port)
+        try:
+            raw = (
+                b"POST / HTTP/1.1\r\n"
+                b"Host: localhost\r\n"
+                b"Content-Length: 5\r\n"
+                b"Transfer-Encoding: chunked\r\n"
+                b"X-File-Name: te-cl.bin\r\n"
+                b"\r\n"
+                b"5\r\nhello\r\n0\r\n\r\n"
+            )
+            response = _send_raw(port, raw)
+            assert response == b""
         finally:
             server.stop()

@@ -50,6 +50,7 @@ nav:
   - Home: index.md
   - API reference: api.md
   - Architecture:
+      - ADR index: ADR/README.md
       - Overview: architecture.md
       - ADR-001 · Handler registry: ADR/ADR-001-handler-registry.md
       - ADR-002 · OPSEC cipher: ADR/ADR-002-opsec-xor-hmac.md

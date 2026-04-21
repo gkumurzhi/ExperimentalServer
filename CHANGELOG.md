@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Infrastructure:** `security.yml` workflow running `pip-audit` and `bandit` weekly and on every PR
 - **Infrastructure:** `dependabot.yml` for weekly pip and github-actions updates
 - **Infrastructure:** `.pre-commit-config.yaml` mirroring CI checks locally
+- **Docs:** `tools/sync_docs.py` generates the MkDocs mirrors for `API.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, and `SECURITY.md`, with CI drift checks
 - **Docs:** standalone `LICENSE` (MIT) file in repo root
 - **Docs:** `SECURITY.md` — disclosure policy, supported versions, response SLA
 - **Docs:** five ADRs in `docs/ADR/` documenting key design decisions
@@ -29,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Refactor:** introduced `HandlerRegistry` in `src/handlers/registry.py` (Mapping-compatible) to replace the plain dict while keeping backwards-compatible lookups
 - **Refactor:** extracted `receive_request()` to `src/http/io.py` with unit tests
 - **Refactor:** split `_process_request` into guard functions (`_check_payload_size`, `_resolve_keep_alive`, `_post_process_response`, `_build_error_response`)
+- **Docs:** architecture and threat-model docs now describe `RequestPipeline`, `NotepadService`, `TLSManager`, PBKDF2 auth, and the shared descendant-path resolver that exist in the codebase today
 - **Size:** `src/server.py` reduced from 1,000 LOC to 869 LOC
 
 - NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption

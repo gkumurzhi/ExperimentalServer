@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from src.handlers import HandlerMixin
-from src.http import HTTPRequest
+from src.handlers import HandlerMixin, NotepadHandlersMixin
 from src.security.keys import HAS_ECDH
-from src.websocket import build_ws_frame, parse_ws_frame
+from src.websocket import parse_ws_frame
+from tests.conftest import make_request
 
 
 class _MockSocket:
@@ -43,8 +43,24 @@ class _MockSocket:
         return msgs[-1]
 
 
+class _FailingSocket:
+    def sendall(self, _data: bytes) -> None:
+        raise OSError("send failed")
+
+
+class _InvalidResult:
+    def to_dict(self) -> list[object]:
+        return []
+
+
 class WSServerStub(HandlerMixin):
     """Minimal server with notepad + WS message handling."""
+
+    _handle_ws_message = NotepadHandlersMixin._handle_ws_message
+    _ws_handle_save = NotepadHandlersMixin._ws_handle_save
+    _ws_handle_load = NotepadHandlersMixin._ws_handle_load
+    _ws_run_note_operation = NotepadHandlersMixin._ws_run_note_operation
+    _ws_send_json = staticmethod(NotepadHandlersMixin._ws_send_json)
 
     def __init__(self, root_dir: Path, upload_dir: Path):
         self.root_dir = root_dir
@@ -74,83 +90,6 @@ class WSServerStub(HandlerMixin):
             "status_counts": {},
         }
 
-    # Mirror of server._handle_ws_message
-    def _handle_ws_message(self, sock, payload: bytes) -> None:
-        import re as _re
-
-        _NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
-
-        try:
-            msg = json.loads(payload.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"})
-            return
-
-        msg_type = msg.get("type", "")
-
-        if msg_type == "save":
-            self._ws_handle_save(sock, msg)
-        elif msg_type == "load":
-            self._ws_handle_load(sock, msg)
-        elif msg_type == "list":
-            resp = self._note_list()
-            result = json.loads(resp.body)
-            result["type"] = "list"
-            self._ws_send_json(sock, result)
-        elif msg_type == "delete":
-            note_id = msg.get("id", "")
-            if note_id and _NOTE_ID_RE_WS.match(note_id):
-                resp = self._note_delete(note_id)
-                result = json.loads(resp.body)
-                result["type"] = "deleted"
-                self._ws_send_json(sock, result)
-            else:
-                self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
-        else:
-            self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
-
-    def _ws_handle_save(self, sock, msg: dict) -> None:
-        title = msg.get("title", "")
-        data = msg.get("data", "")
-        note_id = msg.get("noteId", "")
-        session_id = msg.get("sessionId", "")
-
-        payload = {"title": title, "data": data}
-        if note_id:
-            payload["id"] = note_id
-
-        body = json.dumps(payload).encode("utf-8")
-        headers = f"NOTE /notes HTTP/1.1\r\nContent-Length: {len(body)}\r\n"
-        if session_id:
-            headers += f"X-Session-Id: {session_id}\r\n"
-        raw = headers.encode() + b"\r\n" + body
-        req = HTTPRequest(raw)
-        resp = self.handle_note(req)
-        result = json.loads(resp.body)
-        result["type"] = "saved"
-        self._ws_send_json(sock, result)
-
-    def _ws_handle_load(self, sock, msg: dict) -> None:
-        import re as _re
-
-        _NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
-        note_id = msg.get("id", "")
-        if not note_id or not _NOTE_ID_RE_WS.match(note_id):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
-            return
-        resp = self._note_load(note_id)
-        result = json.loads(resp.body)
-        result["type"] = "loaded"
-        self._ws_send_json(sock, result)
-
-    @staticmethod
-    def _ws_send_json(sock, data: dict) -> None:
-        frame = build_ws_frame(json.dumps(data).encode("utf-8"))
-        try:
-            sock.sendall(frame)
-        except Exception:
-            pass
-
 
 @pytest.fixture
 def ws_server(temp_dir, upload_dir):
@@ -172,8 +111,19 @@ class TestWSInvalidInput:
         assert mock_socket.last_json["type"] == "error"
         assert "Invalid JSON" in mock_socket.last_json["error"]
 
+    def test_json_array_returns_object_error(self, ws_server, mock_socket):
+        ws_server._handle_ws_message(mock_socket, b"[]")
+        assert mock_socket.last_json["type"] == "error"
+        assert "Expected JSON object" in mock_socket.last_json["error"]
+
     def test_unknown_type_returns_error(self, ws_server, mock_socket):
         payload = json.dumps({"type": "bogus"}).encode()
+        ws_server._handle_ws_message(mock_socket, payload)
+        assert mock_socket.last_json["type"] == "error"
+        assert "Unknown type" in mock_socket.last_json["error"]
+
+    def test_non_string_type_returns_unknown_type_error(self, ws_server, mock_socket):
+        payload = json.dumps({"type": 123}).encode()
         ws_server._handle_ws_message(mock_socket, payload)
         assert mock_socket.last_json["type"] == "error"
         assert "Unknown type" in mock_socket.last_json["error"]
@@ -318,3 +268,83 @@ class TestWSDelete:
         payload = json.dumps({"type": "delete", "id": ""}).encode()
         ws_server._handle_ws_message(mock_socket, payload)
         assert mock_socket.last_json["type"] == "error"
+
+
+class TestNoteTransportParity:
+    def test_http_and_ws_save_have_same_contract(self, ws_server, mock_socket):
+        http_body = json.dumps(
+            {
+                "title": "HTTP Save",
+                "data": base64.b64encode(b"same-shape").decode(),
+            }
+        ).encode()
+        http_resp = ws_server.handle_note(make_request("NOTE", "/notes", body=http_body))
+        http_data = json.loads(http_resp.body)
+
+        ws_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "WS Save",
+                "data": base64.b64encode(b"same-shape").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, ws_payload)
+        ws_data = mock_socket.last_json
+
+        assert http_data["success"] is True
+        assert ws_data["type"] == "saved"
+        assert ws_data["success"] is True
+        assert http_data["size"] == ws_data["size"] == len(b"same-shape")
+        assert len(http_data["id"]) == len(ws_data["id"]) == 32
+
+    def test_http_and_ws_list_match(self, ws_server, mock_socket):
+        save_body = json.dumps(
+            {
+                "title": "Parity Note",
+                "data": base64.b64encode(b"ciphertext").decode(),
+            }
+        ).encode()
+        save_resp = ws_server.handle_note(make_request("NOTE", "/notes", body=save_body))
+        note_id = json.loads(save_resp.body)["id"]
+
+        http_resp = ws_server.handle_note(make_request("NOTE", "/notes?list"))
+        http_data = json.loads(http_resp.body)
+
+        ws_server._handle_ws_message(mock_socket, json.dumps({"type": "list"}).encode())
+        ws_data = mock_socket.last_json
+
+        assert ws_data["type"] == "list"
+        assert ws_data["count"] == http_data["count"]
+        assert ws_data["notes"] == http_data["notes"]
+        assert ws_data["notes"][0]["id"] == note_id
+
+    def test_http_and_ws_load_match(self, ws_server, mock_socket):
+        save_body = json.dumps(
+            {
+                "title": "Load Parity",
+                "data": base64.b64encode(b"load-parity").decode(),
+            }
+        ).encode()
+        save_resp = ws_server.handle_note(make_request("NOTE", "/notes", body=save_body))
+        note_id = json.loads(save_resp.body)["id"]
+
+        http_resp = ws_server.handle_note(make_request("NOTE", f"/notes/{note_id}"))
+        http_data = json.loads(http_resp.body)
+
+        ws_server._handle_ws_message(
+            mock_socket,
+            json.dumps({"type": "load", "id": note_id}).encode(),
+        )
+        ws_data = mock_socket.last_json
+
+        expected_ws = {"type": "loaded", **http_data}
+        assert ws_data == expected_ws
+
+
+class TestWSHelpers:
+    def test_ws_run_note_operation_falls_back_for_non_object_payload(self, ws_server):
+        result = ws_server._ws_run_note_operation("saved", _InvalidResult)
+        assert result == {"error": "Invalid JSON response", "status": 500, "type": "saved"}
+
+    def test_ws_send_json_ignores_socket_send_failures(self) -> None:
+        NotepadHandlersMixin._ws_send_json(_FailingSocket(), {"type": "noop"})

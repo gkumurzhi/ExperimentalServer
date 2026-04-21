@@ -37,6 +37,14 @@ def _parse_content_length(headers_part: str) -> int | None:
     return values[0]
 
 
+def _has_transfer_encoding(headers_part: str) -> bool:
+    """Return True when the request advertises any Transfer-Encoding."""
+    for line in headers_part.split("\r\n"):
+        if line.lower().startswith("transfer-encoding:"):
+            return True
+    return False
+
+
 def receive_request(
     client_socket: socket.socket,
     *,
@@ -98,6 +106,9 @@ def receive_request(
                 if b"\r\n\r\n" in data:
                     header_end_pos = data.find(b"\r\n\r\n")
                     headers_part = data[:header_end_pos].decode("utf-8", errors="replace")
+                    if _has_transfer_encoding(headers_part):
+                        logger.warning("Transfer-Encoding is not supported; dropping request")
+                        return b""
                     parsed = _parse_content_length(headers_part)
                     if parsed is None:
                         return b""

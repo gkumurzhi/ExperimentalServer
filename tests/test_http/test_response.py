@@ -69,13 +69,20 @@ class TestHTTPResponse:
 
         assert b"Server: ExperimentalHTTPServer/2.0.0\r\n" in built
 
-    def test_cors_headers(self):
-        """Test CORS headers are included."""
+    def test_cors_headers_disabled_by_default(self):
+        """CORS should be opt-in."""
         response = HTTPResponse(200)
         response.set_body("OK", "text/plain")
         built = response.build()
 
-        assert b"Access-Control-Allow-Origin: *\r\n" in built
+        assert b"Access-Control-Allow-Origin:" not in built
+
+    def test_cors_headers_when_enabled(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(cors_origin="https://app.example")
+
+        assert b"Access-Control-Allow-Origin: https://app.example\r\n" in built
 
     def test_set_file_streaming(self, tmp_path: Path):
         """Test set_file sets stream_path and correct headers."""

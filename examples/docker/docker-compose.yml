@@ -12,7 +12,7 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/data
-    environment:
-      EXPHTTP_ROOT: /data
-    # Override the default CMD if you need TLS / auth:
-    # command: ["--host", "0.0.0.0", "--port", "8080", "--tls", "--auth", "random"]
+    # The default image command already serves /data over plain HTTP on :8080.
+    # If you override `command` to enable TLS or auth, also override or disable
+    # the image healthcheck so it probes the matching protocol/credentials.
+    # command: ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data", "--tls", "--auth", "random"]

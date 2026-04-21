@@ -6,29 +6,31 @@
 src/
   __main__.py          # python -m src entry point
   cli.py               # argparse
-  server.py            # ExperimentalHTTPServer: socket + dispatch
+  server.py            # ExperimentalHTTPServer: socket lifecycle + WS helpers
   metrics.py           # MetricsCollector (thread-safe counters)
+  notepad_service.py   # NOTE domain logic shared by HTTP and WebSocket
+  request_pipeline.py  # auth/dispatch/send orchestration
   config.py            # constants: hidden files, OPSEC prefixes, status map
   websocket.py         # RFC 6455 frame parser and handshake
   http/
     request.py         # HTTPRequest parser
     response.py        # HTTPResponse builder
     io.py              # socket reader with Content-Length enforcement
-    utils.py           # path helpers
+    utils.py           # path helpers + shared descendant resolver
   handlers/
     base.py            # BaseHandler (shared utilities)
     registry.py        # HandlerRegistry (method -> callable)
     files.py           # GET/POST/PUT/DELETE/FETCH/NONE
     info.py            # INFO, PING
-    notepad.py         # NOTE + WebSocket realtime
+    notepad.py         # NOTE HTTP handlers
     opsec.py           # randomised upload method
     smuggle.py         # SMUGGLE (HTML smuggling demo)
   security/
     auth.py            # Basic Auth + rate limiter
     crypto.py          # XOR/HMAC/AES-GCM OPSEC payload
     keys.py            # ECDH P-256 for Secure Notepad
-    tls.py             # cert generation, Let's Encrypt
-    tls_manager.py     # TLSManager: SSL context lifecycle
+    tls.py             # cert generation helpers + Let's Encrypt integration
+    tls_manager.py     # TLSManager: SSL context lifecycle + temp files
   utils/
     captcha.py         # PIL-free CAPTCHA renderer
     smuggling.py       # HTML smuggling template
@@ -42,15 +44,17 @@ sequenceDiagram
     Server->>TLSManager: wrap_socket (if TLS)
     Server->>IO: receive_request()
     IO-->>Server: raw bytes
-    Server->>HTTPRequest: parse
-    Server->>Auth: _authenticate_request()
-    Server->>WS: check_websocket_upgrade() for /notes/ws
-    Server->>Server: _check_payload_size()
-    Server->>HandlerRegistry: dispatch
+    Server->>RequestPipeline: process()
+    RequestPipeline->>HTTPRequest: parse
+    RequestPipeline->>Auth: _authenticate_request()
+    RequestPipeline->>WS: check_websocket_upgrade() for /notes/ws
+    RequestPipeline->>RequestPipeline: _check_payload_size()
+    RequestPipeline->>HandlerRegistry: dispatch
     HandlerRegistry-->>Handler: bound method
-    Handler-->>Server: HTTPResponse
-    Server->>MetricsCollector: record()
-    Server-->>Client: response bytes
+    Handler->>NotepadService: NOTE/WS note operations (when applicable)
+    Handler-->>RequestPipeline: HTTPResponse
+    RequestPipeline->>MetricsCollector: record()
+    RequestPipeline-->>Client: response bytes
 ```
 
 ## Concurrency
@@ -61,10 +65,12 @@ See [ADR-005](ADR/ADR-005-threadpool-over-asyncio.md). One accept loop,
 ## Security layers
 
 1. **Transport** — TLS 1.2+ via `TLSManager`.
-2. **Authentication** — Basic Auth with SHA-256 + salt
+2. **Authentication** — Basic Auth with PBKDF2-SHA256
    (`BasicAuthenticator`), rate-limited (`AuthRateLimiter`).
-3. **Authorisation** — sandbox mode in `BaseHandler._safe_join`,
-   `HIDDEN_FILES` frozenset in `config.py`.
+3. **Authorisation** — path containment via
+   `src.http.utils.resolve_descendant_path()` under
+   `BaseHandler._get_file_path()` / `_resolve_safe_path()`, plus
+   `HIDDEN_FILES` checks in handler policy.
 4. **Obfuscation** — OPSEC mode (random method names, nginx header spoof,
    XOR+HMAC or AES-GCM payload encryption).
 

@@ -3,17 +3,21 @@ Base class for HTTP method handlers.
 """
 
 import importlib.resources
+import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from ..config import HIDDEN_FILES
 from ..http import HTTPResponse, format_file_size
+from ..http.utils import resolve_descendant_path
 
 if TYPE_CHECKING:
     import threading
-    from typing import Any
+
+    from ..security.keys import ECDHKeyManager
+    from .registry import Handler
 
 logger = logging.getLogger("httpserver")
 
@@ -57,12 +61,12 @@ class BaseHandler:
     # Attributes set from the server
     root_dir: Path
     upload_dir: Path
-    method_handlers: dict[str, Callable[..., "HTTPResponse"]]
+    method_handlers: Mapping[str, "Handler"]
     sandbox_mode: bool
     opsec_mode: bool
     _temp_smuggle_files: set[str]
     _smuggle_lock: "threading.Lock"
-    _ecdh_manager: "Any"  # ECDHKeyManager | None
+    _ecdh_manager: "ECDHKeyManager | None"
 
     @staticmethod
     def format_size(size: int) -> str:
@@ -90,31 +94,21 @@ class BaseHandler:
                 clean_path = clean_path[8:]  # len("uploads/") = 8
             elif clean_path.startswith("static/"):
                 # static/ — first look in root_dir, then in package
-                file_path = (self.root_dir / clean_path).resolve()
-                try:
-                    file_path.relative_to(self.root_dir / "static")
-                except ValueError:
-                    pass
-                else:
-                    if file_path.exists():
-                        return file_path
+                file_path = resolve_descendant_path(
+                    clean_path.removeprefix("static/"),
+                    self.root_dir / "static",
+                )
+                if file_path and file_path.exists():
+                    return file_path
                 # Fallback to package resources
                 return get_package_resource(clean_path)
-            file_path = (self.upload_dir / clean_path).resolve()
-
-            # Verify path is inside upload_dir
-            try:
-                file_path.relative_to(self.upload_dir)
-            except ValueError:
+            file_path = resolve_descendant_path(clean_path, self.upload_dir)
+            if file_path is None:
                 logger.warning(f"Path traversal blocked: {url_path}")
                 return None
         else:
-            file_path = (self.root_dir / clean_path).resolve()
-
-            # Verify path is inside root_dir (path traversal protection)
-            try:
-                file_path.relative_to(self.root_dir)
-            except ValueError:
+            file_path = resolve_descendant_path(clean_path, self.root_dir)
+            if file_path is None:
                 logger.warning(f"Path traversal blocked: {url_path}")
                 return None
 
@@ -139,23 +133,17 @@ class BaseHandler:
         Returns resolved Path if it's inside base_dir, or None on traversal
         or symlink access.
         """
-        if clean_path:
-            raw_path = base_dir / clean_path
-            file_path = raw_path.resolve()
-        else:
-            raw_path = base_dir
-            file_path = base_dir.resolve()
-
-        try:
-            file_path.relative_to(base_dir)
-        except ValueError:
-            logger.warning("Path traversal blocked: %s", clean_path)
-            return None
-
-        # Block symlinks (defense-in-depth: resolve already catches escapes,
-        # but we also refuse to serve symlinks themselves)
-        if clean_path and raw_path.is_symlink():
-            logger.warning("Symlink access blocked: %s", clean_path)
+        file_path = resolve_descendant_path(
+            clean_path,
+            base_dir,
+            block_symlinks=True,
+        )
+        if file_path is None:
+            raw_path = base_dir / clean_path if clean_path else base_dir
+            if clean_path and raw_path.is_symlink():
+                logger.warning("Symlink access blocked: %s", clean_path)
+            else:
+                logger.warning("Path traversal blocked: %s", clean_path)
             return None
 
         return file_path
@@ -185,8 +173,6 @@ class BaseHandler:
 
     def _error_response(self, status: int, error: str) -> HTTPResponse:
         """Unified JSON error response."""
-        import json
-
         response = HTTPResponse(status)
         response.set_body(
             json.dumps({"error": error, "status": status}),
@@ -215,3 +201,28 @@ class BaseHandler:
     def _internal_error(self, message: str) -> HTTPResponse:
         """500 response."""
         return self._error_response(500, message)
+
+    @staticmethod
+    def _coerce_json_object(value: object) -> dict[str, object] | None:
+        """Return *value* as a JSON object mapping, else ``None``."""
+        if not isinstance(value, dict):
+            return None
+        if not all(isinstance(key, str) for key in value):
+            return None
+        return cast(dict[str, object], value)
+
+    def _load_json_object(
+        self,
+        body: bytes,
+    ) -> tuple[dict[str, object] | None, HTTPResponse | None]:
+        """Decode *body* as UTF-8 JSON and require an object at the top level."""
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None, self._bad_request("Invalid JSON body")
+
+        payload_obj = self._coerce_json_object(payload)
+        if payload_obj is None:
+            return None, self._bad_request("Expected JSON object")
+
+        return payload_obj, None

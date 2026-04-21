@@ -22,9 +22,11 @@ htmlcov/
 
 # Claude Code session state
 .remember/
+.claude/
+.codex/
 
 # Build artifacts
-site/                 # MkDocs output
+site/
 
 # Environment
 .env
@@ -44,6 +46,7 @@ Thumbs.db
 
 # Playwright MCP logs
 .playwright-mcp/
+.playwright-cli/
 
 # Runtime config
 .opsec_config.json

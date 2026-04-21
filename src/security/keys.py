@@ -14,6 +14,11 @@ Requires the ``cryptography`` package.
 import logging
 import os
 import secrets
+import threading
+from collections import OrderedDict
+from collections.abc import Callable
+from dataclasses import dataclass
+from time import monotonic
 
 logger = logging.getLogger("httpserver")
 
@@ -36,16 +41,72 @@ except ImportError:
 _HKDF_SALT = b"\x00" * 32
 _HKDF_INFO = b"notepad-e2e-key"
 _NONCE_LEN = 12
+_DEFAULT_SESSION_TTL_SECONDS = 3600.0
+_DEFAULT_MAX_SESSIONS = 1024
+
+
+@dataclass
+class _SessionRecord:
+    """In-memory ECDH session state."""
+
+    key: bytes
+    last_seen: float
 
 
 class ECDHKeyManager:
-    """Manages ECDH key pairs and per-session derived AES-256-GCM keys."""
+    """Manages ECDH key pairs and bounded per-session derived AES-256-GCM keys."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        session_ttl_seconds: float = _DEFAULT_SESSION_TTL_SECONDS,
+        max_sessions: int = _DEFAULT_MAX_SESSIONS,
+        time_fn: Callable[[], float] = monotonic,
+    ) -> None:
         if not HAS_ECDH:
             raise RuntimeError("cryptography package required for ECDH")
+        if session_ttl_seconds <= 0:
+            raise ValueError("session_ttl_seconds must be positive")
+        if max_sessions <= 0:
+            raise ValueError("max_sessions must be positive")
         self._private_key = ec.generate_private_key(ec.SECP256R1())
-        self._sessions: dict[str, bytes] = {}
+        self._session_ttl_seconds = session_ttl_seconds
+        self._max_sessions = max_sessions
+        self._time_fn = time_fn
+        self._lock = threading.RLock()
+        self._sessions: OrderedDict[str, _SessionRecord] = OrderedDict()
+
+    @property
+    def session_ttl_seconds(self) -> float:
+        """Return the idle TTL applied to derived sessions."""
+        return self._session_ttl_seconds
+
+    def active_session_count(self) -> int:
+        """Return the number of currently active sessions after cleanup."""
+        with self._lock:
+            self._cleanup_sessions_unlocked()
+            return len(self._sessions)
+
+    def _cleanup_sessions(self, now: float | None = None) -> None:
+        """Expire idle sessions and cap the in-memory session store."""
+        with self._lock:
+            self._cleanup_sessions_unlocked(now)
+
+    def _cleanup_sessions_unlocked(self, now: float | None = None) -> None:
+        """Expire idle sessions and cap the in-memory session store while holding ``_lock``."""
+        current_time = self._time_fn() if now is None else now
+        expiry_cutoff = current_time - self._session_ttl_seconds
+
+        while self._sessions:
+            oldest_session_id, oldest_session = next(iter(self._sessions.items()))
+            if oldest_session.last_seen > expiry_cutoff:
+                break
+            self._sessions.popitem(last=False)
+            logger.debug("ECDH session expired: %s", oldest_session_id)
+
+        while len(self._sessions) > self._max_sessions:
+            evicted_session_id, _evicted = self._sessions.popitem(last=False)
+            logger.debug("ECDH session evicted by LRU cap: %s", evicted_session_id)
 
     def get_public_key_raw(self) -> bytes:
         """Return the server's public key as 65-byte uncompressed point."""
@@ -64,6 +125,7 @@ class ECDHKeyManager:
         Returns:
             (session_id, derived_aes_key) — 32-byte AES key.
         """
+        current_time = self._time_fn()
         client_pub = ec.EllipticCurvePublicKey.from_encoded_point(
             ec.SECP256R1(),
             client_pub_raw,
@@ -78,17 +140,34 @@ class ECDHKeyManager:
         ).derive(shared_secret)
 
         session_id = secrets.token_hex(16)
-        self._sessions[session_id] = derived_key
+        with self._lock:
+            self._cleanup_sessions_unlocked(current_time)
+            self._sessions[session_id] = _SessionRecord(
+                key=derived_key,
+                last_seen=current_time,
+            )
+            self._cleanup_sessions_unlocked(current_time)
         logger.debug("ECDH session created: %s", session_id)
         return session_id, derived_key
 
     def get_session_key(self, session_id: str) -> bytes | None:
-        """Return the AES key for a session, or None if unknown."""
-        return self._sessions.get(session_id)
+        """Return the AES key for an active session, or None if unknown/expired."""
+        current_time = self._time_fn()
+        with self._lock:
+            self._cleanup_sessions_unlocked(current_time)
+
+            session = self._sessions.get(session_id)
+            if session is None:
+                return None
+
+            session.last_seen = current_time
+            self._sessions.move_to_end(session_id)
+            return session.key
 
     def remove_session(self, session_id: str) -> None:
         """Remove a session (e.g. on disconnect)."""
-        self._sessions.pop(session_id, None)
+        with self._lock:
+            self._sessions.pop(session_id, None)
 
     def encrypt(self, session_id: str, plaintext: bytes) -> bytes:
         """
@@ -97,7 +176,7 @@ class ECDHKeyManager:
         Returns:
             nonce(12) + ciphertext + tag(16).
         """
-        key = self._sessions.get(session_id)
+        key = self.get_session_key(session_id)
         if key is None:
             raise ValueError(f"Unknown session: {session_id}")
         nonce = os.urandom(_NONCE_LEN)
@@ -112,7 +191,7 @@ class ECDHKeyManager:
         Args:
             data: nonce(12) + ciphertext + tag(16).
         """
-        key = self._sessions.get(session_id)
+        key = self.get_session_key(session_id)
         if key is None:
             raise ValueError(f"Unknown session: {session_id}")
         if len(data) < _NONCE_LEN + 16:

@@ -59,4 +59,5 @@ HTTP_STATUS_MESSAGES: dict[int, str] = {
     413: "Payload Too Large",
     429: "Too Many Requests",
     500: "Internal Server Error",
+    501: "Not Implemented",
 }

@@ -39,7 +39,7 @@ class HTTPResponse:
     def build_headers(
         self,
         opsec_mode: bool = False,
-        cors_origin: str = "*",
+        cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -65,7 +65,7 @@ class HTTPResponse:
     def build(
         self,
         opsec_mode: bool = False,
-        cors_origin: str = "*",
+        cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -85,7 +85,7 @@ class HTTPResponse:
     def _finalize_headers(
         self,
         opsec_mode: bool,
-        cors_origin: str = "*",
+        cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -106,8 +106,11 @@ class HTTPResponse:
 
         self._set_cors_headers(opsec_mode, cors_origin)
 
-    def _set_cors_headers(self, opsec_mode: bool, cors_origin: str = "*") -> None:
+    def _set_cors_headers(self, opsec_mode: bool, cors_origin: str | None = None) -> None:
         """Set CORS headers."""
+        if not cors_origin:
+            return
+
         if "Access-Control-Allow-Origin" not in self.headers:
             self.set_header("Access-Control-Allow-Origin", cors_origin)
 

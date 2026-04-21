@@ -18,29 +18,38 @@ import base64
 import binascii
 import json
 import logging
-import re
-import secrets
+import socket
 import threading
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING
+from collections.abc import Callable
 
 from ..http import HTTPRequest, HTTPResponse
+from ..notepad_service import (
+    NotepadService,
+    NotepadServiceError,
+    SaveNoteRequest,
+    is_valid_note_id,
+)
+from ..websocket import build_ws_frame
 from .base import BaseHandler
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger("httpserver")
 
-_NOTE_ID_RE = re.compile(r"^[a-f0-9]{1,32}$")
+_NOTE_CRYPTO_REQUIRED_ERROR = (
+    "Secure Notepad requires the cryptography package; install exphttp[crypto]"
+)
 
 
 class NotepadHandlersMixin(BaseHandler):
-    """Mixin for the NOTE HTTP method — encrypted note CRUD + ECDH."""
+    """Mixin for the NOTE HTTP method — encrypted note CRUD + ECDH.
+
+    NOTE session IDs are short-lived, audit-only state. They confirm that a
+    client recently completed an ECDH exchange, but they are not authorization
+    tokens and they are not required to load or decrypt stored note blobs.
+    """
 
     # Set by ExperimentalHTTPServer.__init__
     _notes_lock: threading.Lock
+    _notepad_service: NotepadService | None
 
     # ── public entry point ────────────────────────────────────────
 
@@ -68,6 +77,8 @@ class NotepadHandlersMixin(BaseHandler):
             return self._note_get_key()
         if clean == "notes/exchange":
             return self._note_exchange(request)
+        if self._ecdh_manager is None:
+            return self._note_crypto_required()
 
         # Route: /notes  (root)
         if clean == "notes" or clean == "notes/":
@@ -80,7 +91,7 @@ class NotepadHandlersMixin(BaseHandler):
         # Route: /notes/{id}
         if clean.startswith("notes/"):
             note_id = clean[len("notes/") :]
-            if not _NOTE_ID_RE.match(note_id):
+            if not is_valid_note_id(note_id):
                 return self._bad_request("Invalid note ID")
             if "delete" in query:
                 return self._note_delete(note_id)
@@ -88,15 +99,17 @@ class NotepadHandlersMixin(BaseHandler):
 
         return self._bad_request("Invalid notepad path")
 
+    def _note_crypto_required(self) -> HTTPResponse:
+        """Return the NOTE feature-unavailable response."""
+        return self._error_response(501, _NOTE_CRYPTO_REQUIRED_ERROR)
+
     # ── ECDH key exchange ─────────────────────────────────────────
 
     def _note_get_key(self) -> HTTPResponse:
         """Return the server's ECDH public key (base64 of raw 65 bytes)."""
-        mgr = getattr(self, "_ecdh_manager", None)
-        has_ecdh = mgr is not None
-
-        result: dict = {"hasEcdh": has_ecdh}
-        if has_ecdh:
+        mgr = self._ecdh_manager
+        result: dict[str, object] = {"hasEcdh": mgr is not None}
+        if mgr is not None:
             raw = mgr.get_public_key_raw()
             result["publicKey"] = base64.b64encode(raw).decode("ascii")
 
@@ -106,24 +119,21 @@ class NotepadHandlersMixin(BaseHandler):
 
     def _note_exchange(self, request: HTTPRequest) -> HTTPResponse:
         """Perform ECDH key exchange: receive client pubkey, return session."""
-        mgr = getattr(self, "_ecdh_manager", None)
+        mgr = self._ecdh_manager
         if mgr is None:
-            return self._error_response(
-                501,
-                "ECDH not available (cryptography package not installed)",
-            )
+            return self._note_crypto_required()
 
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return self._bad_request("Invalid JSON body")
+        payload, error = self._load_json_object(request.body)
+        if error:
+            return error
+        assert payload is not None
 
-        client_key_b64 = payload.get("clientPublicKey", "")
-        if not client_key_b64:
+        client_key_b64 = payload.get("clientPublicKey")
+        if not isinstance(client_key_b64, str) or not client_key_b64:
             return self._bad_request("Missing 'clientPublicKey'")
 
         try:
-            client_pub_raw = base64.b64decode(client_key_b64)
+            client_pub_raw = base64.b64decode(client_key_b64, validate=True)
         except (ValueError, binascii.Error):
             return self._bad_request("Invalid base64 in 'clientPublicKey'")
 
@@ -148,6 +158,7 @@ class NotepadHandlersMixin(BaseHandler):
                 {
                     "sessionId": session_id,
                     "serverPublicKey": server_pub_b64,
+                    "sessionTtlSeconds": int(mgr.session_ttl_seconds),
                 }
             ),
             "application/json",
@@ -156,213 +167,180 @@ class NotepadHandlersMixin(BaseHandler):
 
     # ── internal helpers ──────────────────────────────────────────
 
-    def _get_notes_dir(self) -> Path:
-        """Return (and lazily create) the ``uploads/notes/`` directory."""
-        notes_dir = self.upload_dir / "notes"
-        notes_dir.mkdir(parents=True, exist_ok=True)
-        return notes_dir
+    def _get_notepad_service(self) -> NotepadService:
+        """Return the lazily created note-domain service."""
+        service = getattr(self, "_notepad_service", None)
+        if service is None:
+            session_exists = (
+                self._note_session_is_active if self._ecdh_manager is not None else None
+            )
+            service = NotepadService(
+                self.upload_dir,
+                self._notes_lock,
+                session_exists=session_exists,
+            )
+            self._notepad_service = service
+        return service
+
+    def _note_session_is_active(self, session_id: str) -> bool:
+        """Return ``True`` when *session_id* is still active in the ECDH manager."""
+        mgr = self._ecdh_manager
+        return mgr is not None and mgr.get_session_key(session_id) is not None
+
+    @staticmethod
+    def _note_json_response(payload: dict[str, object], status_code: int = 200) -> HTTPResponse:
+        """Build a JSON HTTP response for note operations."""
+        response = HTTPResponse(status_code)
+        response.set_body(json.dumps(payload), "application/json")
+        return response
+
+    def _note_error_response(self, error: NotepadServiceError) -> HTTPResponse:
+        """Map a note-domain error to the existing HTTP error contract."""
+        return self._error_response(error.status_code, error.message)
 
     def _note_save(self, request: HTTPRequest) -> HTTPResponse:
         """Save (create or update) a note."""
-        try:
-            payload = json.loads(request.body.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return self._bad_request("Invalid JSON body")
+        payload, error = self._load_json_object(request.body)
+        if error:
+            return error
+        assert payload is not None
 
-        if not isinstance(payload, dict):
-            return self._bad_request("Expected JSON object")
-
-        title = payload.get("title", "").strip()
+        title_value = payload.get("title")
         data_b64 = payload.get("data")
-
-        if not title:
-            return self._bad_request("Missing or empty 'title'")
-        if not data_b64:
-            return self._bad_request("Missing 'data' (base64-encoded encrypted blob)")
-
-        # Validate that data is valid base64
-        try:
-            raw_data = base64.b64decode(data_b64)
-        except (ValueError, binascii.Error):
-            return self._bad_request("Invalid base64 in 'data'")
-
-        if len(raw_data) == 0:
-            return self._bad_request("Empty encrypted data")
-
-        note_id = payload.get("id", "")
-        notes_dir = self._get_notes_dir()
-        is_new = False
-
-        if note_id:
-            if not _NOTE_ID_RE.match(note_id):
-                return self._bad_request("Invalid note ID format")
-            # Verify the note actually exists for updates
-            enc_path = notes_dir / f"{note_id}.enc"
-            if not enc_path.exists():
-                return self._error_response(404, "Note not found for update")
-        else:
-            note_id = secrets.token_hex(16)
-            is_new = True
-
-        # Path-traversal check (belt + suspenders)
-        enc_path = (notes_dir / f"{note_id}.enc").resolve()
-        meta_path = (notes_dir / f"{note_id}.meta.json").resolve()
-        try:
-            enc_path.relative_to(notes_dir.resolve())
-            meta_path.relative_to(notes_dir.resolve())
-        except ValueError:
-            return self._bad_request("Invalid note ID")
-
-        now = datetime.now(timezone.utc).isoformat()
-        meta = {
-            "id": note_id,
-            "title": title[:200],
-            "created_at": now,
-            "updated_at": now,
-            "size": len(raw_data),
-        }
-
-        # Load existing meta for created_at preservation on update
-        if not is_new and meta_path.exists():
-            try:
-                existing = json.loads(meta_path.read_text("utf-8"))
-                meta["created_at"] = existing.get("created_at", now)
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        # Store session ID in meta if present (for audit trail)
-        session_id = request.get_header("x-session-id")
-        if session_id:
-            meta["session"] = True
-
-        with self._notes_lock:
-            try:
-                enc_path.write_bytes(raw_data)
-                meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
-            except Exception as e:
-                logger.error("Note save failed: %s", e)
-                return self._internal_error("Failed to save note")
-
-        logger.debug("Note saved: %s (%d bytes)", note_id, len(raw_data))
-
-        response = HTTPResponse(201 if is_new else 200)
-        response.set_body(
-            json.dumps(
-                {
-                    "success": True,
-                    "id": note_id,
-                    "title": meta["title"],
-                    "created_at": meta["created_at"],
-                    "updated_at": meta["updated_at"],
-                    "size": len(raw_data),
-                }
-            ),
-            "application/json",
+        note_id_value = payload.get("id", "")
+        if not isinstance(note_id_value, str):
+            return self._bad_request("Invalid note ID format")
+        save_request = SaveNoteRequest(
+            title=title_value if isinstance(title_value, str) else "",
+            data_b64=data_b64 if isinstance(data_b64, str) else "",
+            note_id=note_id_value,
+            session_id=request.get_header("x-session-id") or None,
         )
-        return response
+        try:
+            result = self._get_notepad_service().save_note(save_request)
+        except NotepadServiceError as exc:
+            return self._note_error_response(exc)
+        return self._note_json_response(result.to_dict(), 201 if result.created else 200)
 
     def _note_list(self) -> HTTPResponse:
-        """List all notes sorted by updated_at descending."""
-        notes_dir = self._get_notes_dir()
-        notes: list[dict] = []
+        """List all notes sorted by updated_at descending.
 
-        for meta_file in notes_dir.glob("*.meta.json"):
-            try:
-                meta = json.loads(meta_file.read_text("utf-8"))
-                notes.append(
-                    {
-                        "id": meta["id"],
-                        "title": meta.get("title", ""),
-                        "created_at": meta.get("created_at", ""),
-                        "updated_at": meta.get("updated_at", ""),
-                        "size": meta.get("size", 0),
-                    }
-                )
-            except (json.JSONDecodeError, OSError, KeyError):
-                continue
-
-        notes.sort(key=lambda n: n.get("updated_at", ""), reverse=True)
-
-        response = HTTPResponse(200)
-        response.set_body(
-            json.dumps({"notes": notes, "count": len(notes)}),
-            "application/json",
-        )
-        return response
+        The encrypted blob is the source of truth; malformed sidecars fall back
+        to filename- and filesystem-derived metadata instead of hiding the note.
+        """
+        result = self._get_notepad_service().list_notes()
+        return self._note_json_response(result.to_dict())
 
     def _note_load(self, note_id: str) -> HTTPResponse:
         """Load a single note (encrypted blob + metadata)."""
-        notes_dir = self._get_notes_dir()
-        enc_path = (notes_dir / f"{note_id}.enc").resolve()
-        meta_path = (notes_dir / f"{note_id}.meta.json").resolve()
-
-        # Path-traversal guard
         try:
-            enc_path.relative_to(notes_dir.resolve())
-        except ValueError:
-            return self._bad_request("Invalid note ID")
-
-        if not enc_path.exists():
-            return self._error_response(404, "Note not found")
-
-        try:
-            raw_data = enc_path.read_bytes()
-            data_b64 = base64.b64encode(raw_data).decode("ascii")
-        except OSError as e:
-            logger.error("Note load failed: %s", e)
-            return self._internal_error("Failed to read note")
-
-        meta: dict = {"id": note_id}
-        if meta_path.exists():
-            try:
-                meta = json.loads(meta_path.read_text("utf-8"))
-            except (json.JSONDecodeError, OSError):
-                pass
-
-        response = HTTPResponse(200)
-        response.set_body(
-            json.dumps(
-                {
-                    "id": note_id,
-                    "title": meta.get("title", ""),
-                    "data": data_b64,
-                    "created_at": meta.get("created_at", ""),
-                    "updated_at": meta.get("updated_at", ""),
-                    "size": len(raw_data),
-                }
-            ),
-            "application/json",
-        )
-        return response
+            result = self._get_notepad_service().load_note(note_id)
+        except NotepadServiceError as exc:
+            return self._note_error_response(exc)
+        return self._note_json_response(result.to_dict())
 
     def _note_delete(self, note_id: str) -> HTTPResponse:
         """Delete a note (both .enc and .meta.json)."""
-        notes_dir = self._get_notes_dir()
-        enc_path = (notes_dir / f"{note_id}.enc").resolve()
-        meta_path = (notes_dir / f"{note_id}.meta.json").resolve()
-
-        # Path-traversal guard
         try:
-            enc_path.relative_to(notes_dir.resolve())
-        except ValueError:
-            return self._bad_request("Invalid note ID")
+            result = self._get_notepad_service().delete_note(note_id)
+        except NotepadServiceError as exc:
+            return self._note_error_response(exc)
+        return self._note_json_response(result.to_dict())
 
-        if not enc_path.exists():
-            return self._error_response(404, "Note not found")
+    def _handle_ws_message(self, sock: socket.socket, payload: bytes) -> None:
+        """Process a single WebSocket JSON message for notepad ops."""
+        try:
+            msg = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"})
+            return
 
-        with self._notes_lock:
-            try:
-                enc_path.unlink(missing_ok=True)
-                meta_path.unlink(missing_ok=True)
-            except OSError as e:
-                logger.error("Note delete failed: %s", e)
-                return self._internal_error("Failed to delete note")
+        msg_obj = self._coerce_json_object(msg)
+        if msg_obj is None:
+            self._ws_send_json(sock, {"type": "error", "error": "Expected JSON object"})
+            return
 
-        logger.debug("Note deleted: %s", note_id)
+        msg_type = msg_obj.get("type")
+        if not isinstance(msg_type, str):
+            msg_type = ""
 
-        response = HTTPResponse(200)
-        response.set_body(
-            json.dumps({"success": True, "id": note_id}),
-            "application/json",
+        if msg_type == "save":
+            self._ws_handle_save(sock, msg_obj)
+        elif msg_type == "load":
+            self._ws_handle_load(sock, msg_obj)
+        elif msg_type == "list":
+            result = self._get_notepad_service().list_notes().to_dict()
+            result["type"] = "list"
+            self._ws_send_json(sock, result)
+        elif msg_type == "delete":
+            note_id = msg_obj.get("id")
+            if isinstance(note_id, str) and note_id and is_valid_note_id(note_id):
+                result = self._ws_run_note_operation(
+                    "deleted",
+                    lambda: self._get_notepad_service().delete_note(note_id),
+                )
+                result["type"] = "deleted"
+                self._ws_send_json(sock, result)
+            else:
+                self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+        else:
+            self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
+
+    def _ws_run_note_operation(
+        self,
+        result_type: str,
+        operation: Callable[[], object],
+    ) -> dict[str, object]:
+        """Run a note-domain operation and map errors into the existing WS payload shape."""
+        try:
+            result = operation()
+        except NotepadServiceError as exc:
+            payload = exc.to_dict()
+        else:
+            to_dict = getattr(result, "to_dict", None)
+            payload = to_dict() if callable(to_dict) else {}
+
+        payload_obj = self._coerce_json_object(payload)
+        if payload_obj is None:
+            payload_obj = {"error": "Invalid JSON response", "status": 500}
+        payload_obj["type"] = result_type
+        return payload_obj
+
+    def _ws_handle_save(self, sock: socket.socket, msg: dict[str, object]) -> None:
+        """Handle a WS save message through the shared note-domain service."""
+        title = msg.get("title")
+        data = msg.get("data")
+        note_id = msg.get("noteId")
+        session_id = msg.get("sessionId")
+        save_request = SaveNoteRequest(
+            title=title if isinstance(title, str) else "",
+            data_b64=data if isinstance(data, str) else "",
+            note_id=note_id if isinstance(note_id, str) else "",
+            session_id=session_id if isinstance(session_id, str) and session_id else None,
         )
-        return response
+        result = self._ws_run_note_operation(
+            "saved",
+            lambda: self._get_notepad_service().save_note(save_request),
+        )
+        self._ws_send_json(sock, result)
+
+    def _ws_handle_load(self, sock: socket.socket, msg: dict[str, object]) -> None:
+        """Handle a WS load message."""
+        note_id = msg.get("id")
+        if not isinstance(note_id, str) or not note_id or not is_valid_note_id(note_id):
+            self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+            return
+        result = self._ws_run_note_operation(
+            "loaded",
+            lambda: self._get_notepad_service().load_note(note_id),
+        )
+        self._ws_send_json(sock, result)
+
+    @staticmethod
+    def _ws_send_json(sock: socket.socket, data: dict[str, object]) -> None:
+        """Send a JSON message over WebSocket."""
+        frame = build_ws_frame(json.dumps(data).encode("utf-8"))
+        try:
+            sock.sendall(frame)
+        except Exception:
+            pass

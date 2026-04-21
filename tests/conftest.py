@@ -1,5 +1,6 @@
 """Pytest fixtures for ExperimentalHTTPServer tests."""
 
+import socket
 import tempfile
 from pathlib import Path
 
@@ -29,6 +30,13 @@ def upload_dir(temp_dir: Path) -> Path:
     uploads = temp_dir / "uploads"
     uploads.mkdir(exist_ok=True)
     return uploads
+
+
+def find_free_port() -> int:
+    """Reserve an ephemeral local port and return it."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def make_request(

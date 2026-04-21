@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from src.http.utils import get_safe_path
+from src.http.utils import get_safe_path, resolve_descendant_path
 
 
 class TestPathTraversalPrefixAttack:
@@ -98,3 +98,29 @@ class TestPathTraversalPrefixAttack:
         evil_file = evil / "foo.txt"
         with pytest.raises(ValueError):
             evil_file.relative_to(uploads)
+
+
+class TestResolveDescendantPath:
+    """Verify the shared descendant resolver keeps handler policy intact."""
+
+    def test_blocks_traversal(self, tmp_path: Path):
+        base = tmp_path / "root"
+        base.mkdir()
+
+        result = resolve_descendant_path("../etc/passwd", base)
+        assert result is None
+
+    def test_optionally_blocks_symlink_targets(self, tmp_path: Path):
+        base = tmp_path / "root"
+        base.mkdir()
+        target = base / "real.txt"
+        target.write_text("ok")
+        link = base / "alias.txt"
+
+        try:
+            link.symlink_to(target)
+        except OSError:
+            pytest.skip("Cannot create symlink")
+
+        assert resolve_descendant_path("alias.txt", base) == target.resolve()
+        assert resolve_descendant_path("alias.txt", base, block_symlinks=True) is None

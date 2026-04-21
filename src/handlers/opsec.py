@@ -8,12 +8,29 @@ import hashlib
 import json
 import logging
 import secrets
+from typing import Literal, TypedDict
 
 from ..http import HTTPRequest, HTTPResponse
 from ..security.crypto import decrypt, verify_hmac
 from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
+
+Transport = Literal["body", "headers", "url"]
+
+
+class OpsecPayload(TypedDict, total=False):
+    d: str
+    data: str
+    e: str
+    k: str
+    kb64: bool
+    n: str
+    name: str
+    h: str
+    hmac: str
+    _transport: Transport
+    _raw_body: bytes
 
 
 class OpsecHandlersMixin(BaseHandler):
@@ -31,32 +48,78 @@ class OpsecHandlersMixin(BaseHandler):
         except (binascii.Error, ValueError):
             return b""
 
-    def _extract_opsec_payload(self, request: HTTPRequest) -> dict:
+    def _extract_opsec_payload(
+        self,
+        request: HTTPRequest,
+    ) -> tuple[OpsecPayload | None, HTTPResponse | None]:
         """Extract OPSEC payload from body, headers, or URL params (in priority order)."""
 
-        # 1. Try JSON body (existing behavior)
+        # 1. Try JSON body.
         if request.body:
             try:
                 payload = json.loads(request.body.decode("utf-8"))
-                if isinstance(payload, dict) and (payload.get("d") or payload.get("data")):
-                    payload["_transport"] = "body"
-                    return payload
             except (json.JSONDecodeError, UnicodeDecodeError):
-                pass
-            # Non-JSON body → return as raw body transport
-            return {"_transport": "body"}
+                return {"_transport": "body", "_raw_body": request.body}, None
+
+            payload_obj = self._coerce_json_object(payload)
+            if payload_obj is None:
+                return None, self._bad_request("Expected JSON object")
+
+            data_field = payload_obj.get("d")
+            if not isinstance(data_field, str) or not data_field:
+                data_field = payload_obj.get("data")
+                if not isinstance(data_field, str) or not data_field:
+                    return None, self._bad_request("Missing 'd' or 'data' in JSON body")
+
+            result: OpsecPayload = {
+                "_transport": "body",
+                "d": data_field,
+            }
+            encryption = payload_obj.get("e")
+            if isinstance(encryption, str):
+                result["e"] = encryption
+            decrypt_key = payload_obj.get("k")
+            if isinstance(decrypt_key, str):
+                result["k"] = decrypt_key
+            filename = payload_obj.get("n")
+            if isinstance(filename, str):
+                result["n"] = filename
+            else:
+                alt_filename = payload_obj.get("name")
+                if isinstance(alt_filename, str):
+                    result["name"] = alt_filename
+            hmac_value = payload_obj.get("h")
+            if isinstance(hmac_value, str):
+                result["h"] = hmac_value
+            else:
+                alt_hmac = payload_obj.get("hmac")
+                if isinstance(alt_hmac, str):
+                    result["hmac"] = alt_hmac
+            key_is_base64 = payload_obj.get("kb64")
+            if isinstance(key_is_base64, bool):
+                result["kb64"] = key_is_base64
+            return result, None
 
         # 2. Try HTTP headers (x-d, x-e, x-k, x-n, x-h, x-kb64)
         if request.headers.get("x-d"):
-            return {
+            header_payload: OpsecPayload = {
                 "d": request.headers["x-d"],
-                "e": request.headers.get("x-e"),
-                "k": request.headers.get("x-k"),
                 "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
-                "n": request.headers.get("x-n"),
-                "h": request.headers.get("x-h"),
                 "_transport": "headers",
             }
+            encryption = request.headers.get("x-e")
+            if encryption is not None:
+                header_payload["e"] = encryption
+            decrypt_key = request.headers.get("x-k")
+            if decrypt_key is not None:
+                header_payload["k"] = decrypt_key
+            filename = request.headers.get("x-n")
+            if filename is not None:
+                header_payload["n"] = filename
+            hmac_value = request.headers.get("x-h")
+            if hmac_value is not None:
+                header_payload["h"] = hmac_value
+            return header_payload, None
 
         # 2b. Try chunked headers (x-d-0, x-d-1, ..., x-d-N)
         if request.headers.get("x-d-0"):
@@ -65,33 +128,53 @@ class OpsecHandlersMixin(BaseHandler):
             while request.headers.get(f"x-d-{i}") is not None:
                 chunks.append(request.headers[f"x-d-{i}"])
                 i += 1
-            return {
-                "d": "".join(chunks),
-                "e": request.headers.get("x-e"),
-                "k": request.headers.get("x-k"),
-                "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
-                "n": request.headers.get("x-n"),
-                "h": request.headers.get("x-h"),
-                "_transport": "headers",
-            }
+            chunked_payload = OpsecPayload(
+                d="".join(chunks),
+                kb64=request.headers.get("x-kb64", "").lower() in ("1", "true"),
+                _transport="headers",
+            )
+            encryption = request.headers.get("x-e")
+            if encryption is not None:
+                chunked_payload["e"] = encryption
+            decrypt_key = request.headers.get("x-k")
+            if decrypt_key is not None:
+                chunked_payload["k"] = decrypt_key
+            filename = request.headers.get("x-n")
+            if filename is not None:
+                chunked_payload["n"] = filename
+            hmac_value = request.headers.get("x-h")
+            if hmac_value is not None:
+                chunked_payload["h"] = hmac_value
+            return chunked_payload, None
 
         # 3. Try URL query params (?d=...&e=...&k=...)
         if request.query_params.get("d"):
-            return {
-                "d": request.query_params["d"],
-                "e": request.query_params.get("e"),
-                "k": request.query_params.get("k"),
-                "kb64": request.query_params.get("kb64", "").lower() in ("1", "true"),
-                "n": request.query_params.get("n"),
-                "h": request.query_params.get("h"),
-                "_transport": "url",
-            }
+            query_payload = OpsecPayload(
+                d=request.query_params["d"],
+                kb64=request.query_params.get("kb64", "").lower() in ("1", "true"),
+                _transport="url",
+            )
+            encryption = request.query_params.get("e")
+            if encryption is not None:
+                query_payload["e"] = encryption
+            decrypt_key = request.query_params.get("k")
+            if decrypt_key is not None:
+                query_payload["k"] = decrypt_key
+            filename = request.query_params.get("n")
+            if filename is not None:
+                query_payload["n"] = filename
+            hmac_value = request.query_params.get("h")
+            if hmac_value is not None:
+                query_payload["h"] = hmac_value
+            return query_payload, None
 
-        return {}  # No data found
+        return None, None  # No data found
 
     def handle_opsec_upload(self, request: HTTPRequest) -> HTTPResponse:
         """OPSEC file upload — covert mode."""
-        payload = self._extract_opsec_payload(request)
+        payload, error = self._extract_opsec_payload(request)
+        if error:
+            return error
 
         if not payload:
             response = HTTPResponse(400)
@@ -99,37 +182,39 @@ class OpsecHandlersMixin(BaseHandler):
             return response
 
         transport = payload.get("_transport", "body")
-        filename = None
-        file_data = None
-        encryption = None
-        decrypt_key = None
-        hmac_value = None
+        filename = payload.get("n") or payload.get("name")
+        file_data = payload.get("_raw_body")
+        encryption = payload.get("e")
+        decrypt_key = payload.get("k")
+        hmac_value = payload.get("h") or payload.get("hmac")
 
         data_field = payload.get("d") or payload.get("data")
         if data_field:
-            filename = payload.get("n") or payload.get("name")
-            encryption = payload.get("e")
-            decrypt_key = payload.get("k")
             key_is_base64 = payload.get("kb64", False)
-            hmac_value = payload.get("h") or payload.get("hmac")
 
             # Decode key from base64 if flag is set
             if decrypt_key and key_is_base64:
-                decrypt_key = base64.b64decode(decrypt_key).decode("utf-8")
+                try:
+                    decrypt_key = base64.b64decode(decrypt_key, validate=True).decode("utf-8")
+                except (ValueError, binascii.Error, UnicodeDecodeError):
+                    return self._bad_request("Invalid base64 in 'k'")
 
             # Decode data using appropriate base64 variant
             if transport == "url":
                 file_data = self._urlsafe_b64decode(data_field)
             else:
-                file_data = base64.b64decode(data_field)
+                try:
+                    file_data = base64.b64decode(data_field, validate=True)
+                except (ValueError, binascii.Error):
+                    return self._bad_request("Invalid base64 in 'd'")
+
+            if not file_data:
+                return self._bad_request("Empty or invalid OPSEC payload")
 
         if file_data is None:
-            if request.body:
-                file_data = request.body
-            else:
-                response = HTTPResponse(400)
-                response.set_body("", "text/plain")
-                return response
+            response = HTTPResponse(400)
+            response.set_body("", "text/plain")
+            return response
 
         # Verify HMAC if provided
         if hmac_value and decrypt_key:

@@ -1,11 +1,10 @@
 # Experimental HTTP Server
 
-![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![Python 3.10-3.13](https://img.shields.io/badge/Python-3.10--3.13-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)
 [![CI](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml/badge.svg)](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml)
 [![Security](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/security.yml/badge.svg)](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/security.yml)
-![Tests](https://img.shields.io/badge/tests-393%20passed-brightgreen.svg)
 ![Type checked](https://img.shields.io/badge/mypy-strict-blue.svg)
 ![Lint](https://img.shields.io/badge/ruff-passing-blue.svg)
 
@@ -36,11 +35,11 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 
 ## Возможности
 
-- Кастомные HTTP-методы: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `FETCH`, `INFO`, `PING`, `NONE`, `NOTE`, `OPTIONS`
+- Кастомные HTTP-методы: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `FETCH`, `INFO`, `PING`, `NONE`, `NOTE`, `SMUGGLE`, `OPTIONS`
 - Загрузка файлов через методы `NONE`, `POST`, `PUT`, `PATCH`
 - Скачивание файлов через метод `FETCH` с заголовками для загрузки
 - Получение метаданных файлов/директорий через `INFO` (JSON)
-- **Secure Notepad** — метод `NOTE` с end-to-end шифрованием AES-256-GCM и ECDH P-256
+- **Secure Notepad** — метод `NOTE` с end-to-end шифрованием AES-256-GCM и ECDH P-256 (требует `exphttp[crypto]`)
 - **WebSocket** — реал-тайм синхронизация блокнота (RFC 6455) по `/notes/ws`
 - **HTTPS/TLS** — самоподписные сертификаты на лету или свои
 - **Basic Auth** — HTTP аутентификация с генерацией паролей
@@ -54,7 +53,7 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 
 ## Требования
 
-- Python 3.10 — 3.14 (используются type hints с `|` синтаксисом)
+- Python 3.10 — 3.13 (эта матрица проверяется в CI; используются type hints с `|` синтаксисом)
 - Стандартная библиотека (без внешних зависимостей для runtime)
 - OpenSSL (опционально, для генерации TLS сертификатов)
 - Typed package (PEP 561) — поддержка статической типизации
@@ -87,29 +86,35 @@ ExperimentalHTTPServer/
 │   ├── __init__.py
 │   ├── __main__.py        # python -m src
 │   ├── cli.py             # CLI интерфейс
-│   ├── server.py          # ExperimentalHTTPServer
+│   ├── server.py          # socket lifecycle, keep-alive, WebSocket helpers
 │   ├── config.py          # Константы и конфигурация
+│   ├── metrics.py         # thread-safe метрики сервера
+│   ├── notepad_service.py # NOTE-домен, общий для HTTP и WebSocket
+│   ├── request_pipeline.py# auth/dispatch/send orchestration
 │   ├── websocket.py       # WebSocket RFC 6455
 │   ├── py.typed           # PEP 561 marker
 │   │
 │   ├── http/              # HTTP модули
 │   │   ├── request.py     # HTTPRequest
 │   │   ├── response.py    # HTTPResponse
-│   │   └── utils.py       # Утилиты (sanitize, etc)
+│   │   ├── io.py          # приём запроса + лимиты/таймауты
+│   │   └── utils.py       # path helpers, sanitize, etc
 │   │
 │   ├── handlers/          # Обработчики методов
 │   │   ├── base.py        # BaseHandler
 │   │   ├── files.py       # GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE
 │   │   ├── info.py        # INFO, PING
-│   │   ├── notepad.py     # NOTE (Secure Notepad, ECDH)
+│   │   ├── notepad.py     # NOTE HTTP handlers
 │   │   ├── opsec.py       # OPSEC upload
+│   │   ├── registry.py    # HandlerRegistry
 │   │   └── smuggle.py     # HTML Smuggling
 │   │
 │   ├── security/          # Безопасность
 │   │   ├── auth.py        # Basic Auth + rate limiting
 │   │   ├── crypto.py      # XOR/HMAC/AES-256-GCM
 │   │   ├── keys.py        # ECDH P-256 key exchange
-│   │   └── tls.py         # TLS сертификаты
+│   │   ├── tls.py         # генерация/получение сертификатов
+│   │   └── tls_manager.py # SSL context lifecycle + temp cert cleanup
 │   │
 │   ├── utils/             # Утилиты
 │   │   ├── captcha.py
@@ -126,7 +131,9 @@ ExperimentalHTTPServer/
 │   └── test_handlers/
 │
 ├── tools/                 # CLI утилиты
-│   └── decrypt.py
+│   ├── browser_smoke.py
+│   ├── decrypt.py
+│   └── sync_docs.py
 │
 └── uploads/               # Загруженные файлы
 ```
@@ -154,6 +161,7 @@ exphttp [опции]
 | `--debug` | Debug режим (подробное логирование) | выключен |
 | `--open` | Открыть в браузере после запуска | выключен |
 | `--json-log` | Структурированный JSON формат логов | выключен |
+| `--cors-origin ORIGIN` | Разрешить CORS для указанного origin | выключен |
 | `--tls` | Включить HTTPS (самоподписный сертификат) | выключен |
 | `--cert FILE` | Путь к сертификату (PEM) | - |
 | `--key FILE` | Путь к приватному ключу (PEM) | - |
@@ -213,7 +221,7 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 | `INFO` | Метаданные файла/директории (JSON) | Только uploads/ |
 | `PING` | Проверка доступности сервера | Да |
 | `NONE` | Загрузка файлов на сервер | Да |
-| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM) | Только uploads/notes/ |
+| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM, требует `exphttp[crypto]`) | Только uploads/notes/ |
 | `SMUGGLE` | HTML Smuggling — генерация страницы со встроенным файлом | Только uploads/ |
 
 ### Заголовки ответов
@@ -227,17 +235,18 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 | `X-Upload-Status` | NONE | success / error / no-data |
 | `X-Fetch-Status` | FETCH | success / file-not-found |
 | `X-Ping-Response` | PING | pong |
-| `X-Request-Id` | Все | 8-символьный hex ID для корреляции логов |
+| `X-Request-Id` | Все вне OPSEC | 8-символьный hex ID для корреляции логов |
 | `Content-Security-Policy` | GET (HTML) | CSP заголовок для HTML ответов |
 
 ## Веб-интерфейс
 
 Откройте `http://localhost:8080` в браузере. Вкладки:
 
-1. **Запросы** — отправка GET/POST/FETCH/INFO/PING
-2. **Загрузка файлов (NONE)** — drag & drop интерфейс
-3. **OPSEC Mode** — зашифрованная загрузка
-4. **Файлы на сервере** — просмотр uploads/
+1. **Запросы** — отправка `GET`, `FETCH`, `INFO`, `PING` по произвольному пути
+2. **Загрузка файлов** — drag & drop интерфейс с переключателем метода `POST` / `NONE` / `PUT` / `PATCH`
+3. **OPSEC Mode** — скрытая загрузка через JSON body, заголовки или URL-параметры, с опциональным XOR-шифрованием
+4. **Файлы на сервере** — обзор `uploads/`, переход по директориям, `INFO`, `FETCH`, `SMUGGLE`, удаление файлов
+5. **Secure Notepad** — ECDH/AES-GCM блокнот с автошифрованием и переключением транспорта `HTTP` / `WebSocket`
 
 ## OPSEC-режим
 
@@ -245,11 +254,11 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 
 ### Особенности
 
-- **Случайные имена методов** — при каждом запуске генерируются новые
-- **Скрытые имена файлов** — имя не передаётся в URL/заголовках
-- **Base64-кодирование** — данные в теле запроса как JSON
-- **XOR-шифрование** — опциональное шифрование перед передачей
-- **Хеш-именование** — файлы сохраняются с SHA256-хешем вместо имени
+- **Случайные алиасы методов** — для upload/download/info/ping/notepad при каждом запуске генерируются новые имена
+- **Несколько транспортов** — payload можно передать через JSON body, HTTP headers или URL query
+- **Base64-кодирование** — данные передаются как `d` / `data`
+- **XOR или AES-GCM** — при наличии ключа payload можно шифровать перед передачей
+- **Имя файла опционально** — если `n` / `name` не передано, сервер сохранит `<sha256[:12]>.bin`
 
 ### Генерируемые методы
 
@@ -260,7 +269,8 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
   "upload": "VALIDATESTATUS",
   "download": "SYNCRECORD",
   "info": "QUERYRECORD",
-  "ping": "CHECKDATA"
+  "ping": "CHECKDATA",
+  "notepad": "PROCESSENTRY"
 }
 ```
 
@@ -320,7 +330,7 @@ python tools/decrypt.py secret.txt mykey -e -o secret.enc
 # 2. Закодировать в Base64
 base64 secret.enc > secret.b64
 
-# 3. Отправить с произвольным методом (имя метода игнорируется в OPSEC)
+# 3. Отправить с рандомизированным или любым нестандартным методом, который несёт payload
 curl -X SYNCDATA -H "Content-Type: application/json" \
   -d '{"d":"'$(cat secret.b64)'","n":"secret.txt","e":"xor","k":"mykey"}' \
   http://localhost:8080/
@@ -585,8 +595,9 @@ curl -X NONE -H "X-File-Name: test.txt" \
 curl -X PUT -H "X-File-Name: data.bin" \
   --data-binary @data.bin http://localhost:8080/
 
-# POST — echo данных
-curl -X POST -d "test data" http://localhost:8080/
+# POST — загрузка файла как NONE
+curl -X POST -H "X-File-Name: post.txt" \
+  --data-binary @post.txt http://localhost:8080/
 
 # OPSEC загрузка (в OPSEC-режиме)
 curl -X CHECKDATA -H "Content-Type: application/json" \
@@ -613,15 +624,14 @@ async function uploadFile(file) {
     return response.json();
 }
 
-// OPSEC загрузка с шифрованием (требует crypto-js)
-async function opsecUpload(data, filename, key) {
-    const encrypted = CryptoJS.AES.encrypt(data, key); // или XOR
-    const base64 = btoa(encrypted);
+// OPSEC загрузка текстового payload (в OPSEC-режиме)
+async function opsecUpload(data, filename) {
+    const base64 = btoa(data);
 
     const response = await fetch('http://localhost:8080/', {
         method: 'SYNCDATA',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ d: base64, n: filename, e: 'xor', k: key })
+        body: JSON.stringify({ d: base64, n: filename })
     });
     return response.json();
 }
@@ -651,9 +661,10 @@ with open('test.txt', 'rb') as f:
     )
 print(response.json())
 
-# OPSEC загрузка
+# OPSEC загрузка (в OPSEC-режиме: используйте рандомизированный или любой нестандартный метод с payload)
 data = base64.b64encode(b"Secret data").decode()
-response = requests.post(
+response = requests.request(
+    'SYNCDATA',
     'http://localhost:8080/',
     json={'d': data, 'n': 'secret.txt'},
     headers={'Content-Type': 'application/json'}
@@ -671,9 +682,9 @@ print(response.json())
 - **Санитизация имён** — удаление опасных символов из имён файлов
 - **CORS** — настроенные заголовки для кросс-доменных запросов
 - **Sandbox** — ограничение доступа к файловой системе
-- **Таймауты** — защита от Slowloris (30s заголовки, 300s тело, per-request deadline)
+- **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
 - **Лимит размера** — ограничение размера загружаемых файлов (413 Payload Too Large)
-- **Скрытые файлы** — `.opsec_config.json`, `.env`, `.gitignore` недоступны через GET
+- **Скрытые файлы** — `.opsec_config.json`, `.env`, `.gitignore` недоступны через GET и INFO
 - **HMAC** — опциональная проверка целостности данных в OPSEC режиме
 
 ### OPSEC маскировка
@@ -714,15 +725,42 @@ XOR-шифрование используется для **обфускации*
 # Базовая установка
 pip install -e .
 
-# С тестами
+# Базово для pytest
 pip install -e ".[dev]"
 
 # С линтерами
 pip install -e ".[lint]"
 
+# Локально как в CI (pytest + hypothesis + benchmark + mypy + ruff + crypto)
+pip install -e ".[crypto,dev,lint,test]"
+
+# Документация сайта
+pip install -e ".[docs]"
+
 # Всё вместе
 pip install -e ".[all]"
 ```
+
+Для воспроизводимой установки теми же версиями инструментов, что и в CI,
+security workflow и Docker wheel build, используйте общий constraints-файл:
+
+```bash
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+```
+
+`Dockerfile` теперь также фиксирует базовый образ `python:3.12-slim` по digest.
+Обновить pin можно так:
+
+```bash
+docker buildx imagetools inspect python:3.12-slim --format '{{json .Manifest.Digest}}'
+```
+
+`README.md` остаётся корневым guide-файлом, а `docs/index.md`,
+`docs/architecture.md`, `docs/threat-model.md` и `docs/ADR/*` живут как
+страницы MkDocs. Зеркальные пары `API.md` -> `docs/api.md`,
+`CHANGELOG.md` -> `docs/changelog.md`, `CONTRIBUTING.md` ->
+`docs/contributing.md` и `SECURITY.md` -> `docs/security.md`
+генерируются через `tools/sync_docs.py`.
 
 ### Тестирование
 
@@ -735,19 +773,31 @@ pytest --cov=src
 
 # Конкретный тест
 pytest tests/test_http/test_request.py
+
+# Минимальный browser smoke (нужен Node.js/npm с npx)
+python tools/browser_smoke.py
 ```
 
 ### Проверка кода
 
 ```bash
 # Линтер
-ruff check src
+ruff check src tests
 
 # Форматирование
-ruff format src
+ruff format --check src tests
 
 # Статическая типизация
 mypy src
+
+# Проверка зеркальных Markdown-файлов
+python tools/sync_docs.py --check
+
+# Пересборка docs/ из root-canonical файлов
+python tools/sync_docs.py --write
+
+# Сборка сайта документации
+mkdocs build --strict
 ```
 
 ## Лицензия

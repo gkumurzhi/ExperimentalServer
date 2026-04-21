@@ -6,15 +6,13 @@ import gzip
 import json
 import logging
 import os
-import re as _re
 import secrets
 import socket
 import ssl
 import threading
-import time
-from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .config import (
     HIDDEN_FILES,
@@ -23,10 +21,11 @@ from .config import (
     __version__,
 )
 from .handlers import HandlerMixin
-from .handlers.registry import HandlerRegistry
+from .handlers.registry import Handler, HandlerRegistry
 from .http import HTTPRequest, HTTPResponse
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
+from .request_pipeline import RequestPipeline, ResponseBuildArgs
 from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
 from .security.tls_manager import TLSManager
 from .websocket import (
@@ -38,11 +37,8 @@ from .websocket import (
     build_ws_close_frame,
     build_ws_frame,
     build_ws_handshake_response,
-    check_websocket_upgrade,
     parse_ws_frame,
 )
-
-_NOTE_ID_RE_WS = _re.compile(r"^[a-f0-9]{1,32}$")
 
 # Logging setup
 logger = logging.getLogger("httpserver")
@@ -95,7 +91,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Logging
         json_log: bool = False,
         # CORS
-        cors_origin: str = "*",
+        cors_origin: str | None = None,
     ):
         self.host = host
         self.port = port
@@ -109,7 +105,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.debug = debug
         self.open_browser = open_browser
         self.json_log = json_log
-        self.cors_origin = cors_origin
+        self.cors_origin = cors_origin or None
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
         # views used by status printing and request handling).
@@ -171,8 +167,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Register method handlers via registry (exposed as a dict-like Mapping
         # so tests and handlers that expect `self.method_handlers[...]` keep
         # working unchanged).
-        self.method_handlers: HandlerRegistry = HandlerRegistry()
-        self.method_handlers.register_many(
+        method_handlers = HandlerRegistry()
+        method_handlers.register_many(
             {
                 "GET": self.handle_get,
                 "HEAD": self.handle_head,
@@ -189,6 +185,8 @@ class ExperimentalHTTPServer(HandlerMixin):
                 "SMUGGLE": self.handle_smuggle,
             }
         )
+        self.method_handlers = method_handlers
+        self._request_pipeline = RequestPipeline(self)
 
     def _setup_auth(self, auth: str | None) -> None:
         """Set up Basic Auth."""
@@ -231,13 +229,16 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _generate_opsec_methods(self) -> None:
         """Generate random method names for OPSEC mode."""
-        self.opsec_methods = {
-            "upload": self._random_method_name(),
-            "download": self._random_method_name(),
-            "info": self._random_method_name(),
-            "ping": self._random_method_name(),
-            "notepad": self._random_method_name(),
-        }
+        method_keys = ("upload", "download", "info", "ping", "notepad")
+        name_pool = [
+            f"{prefix}{suffix}" if suffix else prefix
+            for prefix in OPSEC_METHOD_PREFIXES
+            for suffix in OPSEC_METHOD_SUFFIXES
+        ]
+        if len(name_pool) < len(method_keys):
+            raise RuntimeError("Not enough unique OPSEC method names configured")
+        chosen_names = secrets.SystemRandom().sample(name_pool, k=len(method_keys))
+        self.opsec_methods = dict(zip(method_keys, chosen_names, strict=True))
         config_path = self.root_dir / ".opsec_config.json"
         fd = os.open(str(config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as f:
@@ -555,7 +556,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self,
         response: HTTPResponse,
         client_socket: socket.socket,
-        _bld: dict,
+        _bld: ResponseBuildArgs,
     ) -> int:
         """Send *response* to *client_socket* and return bytes sent.
 
@@ -563,7 +564,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         For streamed responses, ``_bld`` is overridden to close the connection.
         """
         if response.stream_path is not None:
-            _bld_close = {**_bld, "keep_alive": False}
+            _bld_close: ResponseBuildArgs = {**_bld, "keep_alive": False}
             header_bytes = response.build_headers(**_bld_close)
             client_socket.sendall(header_bytes)
             bytes_sent = len(header_bytes)
@@ -633,6 +634,52 @@ class ExperimentalHTTPServer(HandlerMixin):
         )
         return response
 
+    def _is_websocket_origin_allowed(self, request: HTTPRequest) -> bool:
+        """Allow same-origin upgrades by default; cross-origin requires explicit opt-in."""
+        origin = request.headers.get("origin", "")
+        if not origin:
+            return True
+
+        configured_origin = self.cors_origin
+        if configured_origin == "*":
+            return True
+
+        if configured_origin:
+            allowed_origins = {
+                item.strip()
+                for item in configured_origin.split(",")
+                if item.strip()
+            }
+            if origin in allowed_origins:
+                return True
+
+        host = request.headers.get("host", "")
+        if not host:
+            return False
+
+        expected_scheme = "https" if self.tls_enabled else "http"
+        parsed = urlsplit(origin)
+        expected_origin = f"{expected_scheme}://{host}"
+        return (
+            parsed.scheme == expected_scheme
+            and parsed.netloc == host
+            and parsed.path in ("", "/")
+            and expected_origin == origin.rstrip("/")
+        )
+
+    @staticmethod
+    def _is_websocket_upgrade_attempt(request: HTTPRequest) -> bool:
+        """Return True when the request appears to target the WebSocket handshake path."""
+        return request.path.startswith("/notes/ws") and any(
+            (
+                request.headers.get("upgrade"),
+                request.headers.get("connection"),
+                request.headers.get("sec-websocket-key"),
+                request.headers.get("sec-websocket-version"),
+                request.headers.get("origin"),
+            )
+        )
+
     def _process_request(
         self,
         data: bytes,
@@ -640,71 +687,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         client_address: tuple[str, int],
         request_num: int,
     ) -> bool:
-        """Process a single HTTP request; return True to keep the connection alive."""
-        start_time = time.monotonic()
-        request_id = secrets.token_hex(4)
-        _bld = {"opsec_mode": self.opsec_mode, "cors_origin": self.cors_origin}
-
-        try:
-            request = HTTPRequest(data)
-
-            use_keep_alive, remaining = self._resolve_keep_alive(request, request_num)
-            _bld["keep_alive"] = use_keep_alive
-            if use_keep_alive:
-                _bld["keep_alive_timeout"] = self.KEEP_ALIVE_TIMEOUT
-                _bld["keep_alive_max"] = remaining
-
-            auth_error = self._authenticate_request(request, client_address)
-            if auth_error:
-                client_socket.sendall(auth_error.build(**_bld))
-                return False
-
-            if request.path.startswith("/notes/ws") and check_websocket_upgrade(request):
-                self._handle_notepad_ws(client_socket, request)
-                return False
-
-            size_error = self._check_payload_size(request)
-            if size_error:
-                client_socket.sendall(size_error.build(**_bld))
-                return False
-
-            response = self._dispatch_handler(request)
-            self._post_process_response(request, response, request_id)
-
-            bytes_sent = self._send_response(response, client_socket, _bld)
-            self._record_metric(response.status_code, bytes_sent)
-
-            if response.stream_path is not None:
-                use_keep_alive = False
-
-            if not self.opsec_mode:
-                duration_ms = (time.monotonic() - start_time) * 1000
-                logger.info(
-                    "[%s] %s - %s %s -> %d (%dms)",
-                    request_id,
-                    client_address[0],
-                    request.method,
-                    request.path,
-                    response.status_code,
-                    duration_ms,
-                )
-
-            return use_keep_alive
-
-        except Exception:
-            logger.exception(
-                "[%s] Request handling error from %s",
-                request_id,
-                client_address[0],
-            )
-            self._record_metric(500, 0, error=True)
-            msg = "Error" if self.opsec_mode else "Internal Server Error"
-            error_response = self._build_error_response(500, msg)
-            try:
-                client_socket.sendall(error_response.build(**_bld))
-            except Exception:
-                pass
-            return False
+        """Delegate request orchestration to the extracted request pipeline."""
+        return self._request_pipeline.process(
+            data,
+            client_socket,
+            client_address,
+            request_num,
+        )
 
     def _receive_request(
         self,
@@ -718,7 +707,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             idle_timeout=idle_timeout,
         )
 
-    def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
+    def _get_opsec_handler(self, request: HTTPRequest) -> Handler | None:
         """Get the handler for OPSEC mode."""
         method = request.method
 
@@ -820,78 +809,3 @@ class ExperimentalHTTPServer(HandlerMixin):
                 sock.sendall(build_ws_close_frame())
             except Exception:
                 pass
-
-    def _handle_ws_message(self, sock: socket.socket, payload: bytes) -> None:
-        """Process a single WebSocket JSON message for notepad ops."""
-        try:
-            msg = json.loads(payload.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"})
-            return
-
-        msg_type = msg.get("type", "")
-
-        if msg_type == "save":
-            self._ws_handle_save(sock, msg)
-        elif msg_type == "load":
-            self._ws_handle_load(sock, msg)
-        elif msg_type == "list":
-            # Reuse the existing list handler
-            resp = self._note_list()
-            result = json.loads(resp.body)
-            result["type"] = "list"
-            self._ws_send_json(sock, result)
-        elif msg_type == "delete":
-            note_id = msg.get("id", "")
-            if note_id and _NOTE_ID_RE_WS.match(note_id):
-                resp = self._note_delete(note_id)
-                result = json.loads(resp.body)
-                result["type"] = "deleted"
-                self._ws_send_json(sock, result)
-            else:
-                self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
-        else:
-            self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
-
-    def _ws_handle_save(self, sock: socket.socket, msg: dict) -> None:
-        """Handle a WS save message by building a fake HTTP request."""
-        title = msg.get("title", "")
-        data = msg.get("data", "")
-        note_id = msg.get("noteId", "")
-        session_id = msg.get("sessionId", "")
-
-        payload = {"title": title, "data": data}
-        if note_id:
-            payload["id"] = note_id
-
-        body = json.dumps(payload).encode("utf-8")
-        # Build minimal raw HTTP for HTTPRequest parser
-        headers = f"NOTE /notes HTTP/1.1\r\nContent-Length: {len(body)}\r\n"
-        if session_id:
-            headers += f"X-Session-Id: {session_id}\r\n"
-        raw = headers.encode() + b"\r\n" + body
-        req = HTTPRequest(raw)
-        resp = self.handle_note(req)
-        result = json.loads(resp.body)
-        result["type"] = "saved"
-        self._ws_send_json(sock, result)
-
-    def _ws_handle_load(self, sock: socket.socket, msg: dict) -> None:
-        """Handle a WS load message."""
-        note_id = msg.get("id", "")
-        if not note_id or not _NOTE_ID_RE_WS.match(note_id):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
-            return
-        resp = self._note_load(note_id)
-        result = json.loads(resp.body)
-        result["type"] = "loaded"
-        self._ws_send_json(sock, result)
-
-    @staticmethod
-    def _ws_send_json(sock: socket.socket, data: dict) -> None:
-        """Send a JSON message over WebSocket."""
-        frame = build_ws_frame(json.dumps(data).encode("utf-8"))
-        try:
-            sock.sendall(frame)
-        except Exception:
-            pass

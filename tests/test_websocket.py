@@ -29,6 +29,7 @@ class TestWsUpgradeDetection:
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is True
@@ -40,6 +41,7 @@ class TestWsUpgradeDetection:
             headers={
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is False
@@ -51,6 +53,7 @@ class TestWsUpgradeDetection:
             headers={
                 "Upgrade": "websocket",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is False
@@ -62,6 +65,7 @@ class TestWsUpgradeDetection:
             headers={
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is False
@@ -74,6 +78,7 @@ class TestWsUpgradeDetection:
                 "Upgrade": "WebSocket",
                 "Connection": "upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is True
@@ -86,9 +91,74 @@ class TestWsUpgradeDetection:
                 "Upgrade": "websocket",
                 "Connection": "keep-alive, Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
             },
         )
         assert check_websocket_upgrade(req) is True
+
+    def test_post_method_rejected(self):
+        req = make_request(
+            "POST",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
+
+    def test_missing_ws_version_rejected(self):
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
+
+    def test_wrong_ws_version_rejected(self):
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "12",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
+
+    def test_invalid_ws_key_base64_rejected(self):
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "not-base64!!!",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
+
+    def test_wrong_ws_key_length_rejected(self):
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "eA==",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
 
 
 # ── Accept key (RFC 6455 Section 4.2.2) ──────────────────────────

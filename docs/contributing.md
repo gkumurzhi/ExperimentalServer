@@ -1,3 +1,5 @@
+<!-- Generated from ../CONTRIBUTING.md by tools/sync_docs.py. Edit CONTRIBUTING.md and rerun the sync tool. -->
+
 # Contributing
 
 Thanks for your interest! This project welcomes focused contributions.
@@ -12,6 +14,13 @@ cd ExperimentalHTTPServer
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[crypto,dev,lint]"
 pre-commit install           # recommended: runs ruff/mypy/yaml checks on commit
+```
+
+To reproduce the pinned CI/docs/security toolchain locally, use the shared
+constraints file:
+
+```bash
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 ```
 
 ## Branching
@@ -57,14 +66,31 @@ footer.
 The CI (`.github/workflows/ci.yml`) runs all of these — run them locally
 first to avoid round-trips.
 
+When you need to reproduce CI package resolution exactly, prefix the install
+step with `PIP_CONSTRAINT=constraints/ci.txt`.
+
 ```bash
 ruff check src tests
 ruff format --check src tests
 mypy src
 pytest --cov=src --cov-report=term-missing
+python tools/sync_docs.py --check
+# optional when docs extras are installed
+mkdocs build --strict
 ```
 
 Coverage gate in CI is 65 %; aim higher.
+
+## Documentation ownership
+
+- `README.md` is the repository landing page and stays root-only.
+- `docs/index.md`, `docs/architecture.md`, `docs/threat-model.md`, and
+  `docs/ADR/*` are docs-site pages and stay `docs/`-canonical.
+- `API.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, and `SECURITY.md` are
+  root-canonical and are generated into `docs/` by `tools/sync_docs.py`.
+- After editing a root-canonical document, run
+  `python tools/sync_docs.py --write` and commit both the root file and its
+  generated `docs/` mirror.
 
 ## Pull request checklist
 
@@ -77,6 +103,7 @@ restates this):
 - [ ] `CHANGELOG.md` updated under `[Unreleased]` with the appropriate
       section (`Added`, `Changed`, `Fixed`, `Security`, `Performance`,
       `Deprecated`, `Removed`).
+- [ ] Root-canonical docs regenerated with `python tools/sync_docs.py --check`.
 - [ ] Documentation updated when behavior changes:
       `README.md`, `API.md`, or a new `docs/ADR/` entry.
 - [ ] Security impact statement in the PR body (say "none" explicitly if

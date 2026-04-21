@@ -29,6 +29,7 @@ class StubServer(HandlerMixin):
     def __init__(self, root_dir: Path, upload_dir: Path, **kwargs):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.cors_origin = kwargs.get("cors_origin")
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
         self.method_handlers = {
@@ -247,6 +248,12 @@ class TestHandleInfo:
         resp = sandbox_server.handle_info(req)
         assert resp.status_code == 200
 
+    def test_info_hidden_file_returns_404(self, server, temp_dir):
+        (temp_dir / ".env").write_text("SECRET=x")
+        req = make_request("INFO", "/.env")
+        resp = server.handle_info(req)
+        assert resp.status_code == 404
+
     def test_info_traversal_blocked(self, server):
         req = make_request("INFO", "/../../etc/passwd")
         resp = server.handle_info(req)
@@ -301,9 +308,10 @@ class TestHandleOptions:
         )
         resp = server.handle_options(req)
         assert resp.status_code == 204
+        assert "Access-Control-Allow-Methods" not in resp.headers
 
     def test_options_opsec_hides_custom_methods(self, temp_dir, upload_dir):
-        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        srv = StubServer(temp_dir, upload_dir, opsec=True, cors_origin="https://app.example")
         req = make_request(
             "OPTIONS",
             "/",
@@ -313,6 +321,18 @@ class TestHandleOptions:
         assert resp.status_code == 204
         allowed = resp.headers.get("Access-Control-Allow-Methods", "")
         assert "FETCH" not in allowed  # custom methods hidden in OPSEC
+
+    def test_options_with_explicit_cors_origin_sets_allow_methods(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, cors_origin="https://app.example")
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={"Access-Control-Request-Method": "NOTE"},
+        )
+        resp = srv.handle_options(req)
+        assert resp.status_code == 204
+        allowed = resp.headers.get("Access-Control-Allow-Methods", "")
+        assert "NOTE" in allowed
 
 
 # ── OPSEC upload tests ─────────────────────────────────────────────
@@ -340,6 +360,47 @@ class TestHandleOpsecUpload:
         req = make_request("OPSEC", "/")
         resp = srv.handle_opsec_upload(req)
         assert resp.status_code == 400
+
+    def test_opsec_json_array_returns_400_without_writing(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        req = make_request("OPSEC", "/", body=b"[]")
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_json_object_missing_data_returns_400_without_writing(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        payload = json.dumps({"n": "missing.bin"}).encode()
+        req = make_request("OPSEC", "/", body=payload)
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_invalid_base64_returns_400_without_writing(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        req = make_request("XUPLOAD", "/", headers={"X-D": "not!!!base64"})
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_invalid_kb64_returns_400_without_writing(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = base64.b64encode(b"ciphertext").decode()
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": raw,
+                "X-E": "xor",
+                "X-K": "%%%invalid%%%",
+                "X-Kb64": "true",
+            },
+        )
+        resp = srv.handle_opsec_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
 
     def test_opsec_headers_transport(self, temp_dir, upload_dir):
         """X-D header with no body → 200, file saved correctly."""

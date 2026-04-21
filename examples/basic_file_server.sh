@@ -11,8 +11,8 @@ PORT="${PORT:-8443}"
 exec exphttp \
   --host 127.0.0.1 \
   --port "${PORT}" \
-  --root "${ROOT_DIR}" \
+  --dir "${ROOT_DIR}" \
   --tls \
   --auth random \
   --sandbox \
-  --max-upload 100
+  --max-size 100

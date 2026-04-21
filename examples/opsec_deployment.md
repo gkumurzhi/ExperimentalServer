@@ -17,8 +17,9 @@ exphttp \
 ```
 
 On startup, `exphttp` writes the randomised method mapping to
-`./.opsec_config.json`. Clients load that file to discover the current
-method names (they change on each server restart).
+`./.opsec_config.json`. Treat that file as local operator state: read it on
+the server (or distribute the mapping out of band) so clients know the
+current method names after each restart.
 
 ## 2. nginx configuration
 

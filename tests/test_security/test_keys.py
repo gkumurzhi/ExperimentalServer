@@ -117,3 +117,46 @@ class TestECDHKeyManager:
         """Same manager returns the same public key each time."""
         mgr = ECDHKeyManager()
         assert mgr.get_public_key_raw() == mgr.get_public_key_raw()
+
+    def test_expired_sessions_cleaned_on_access(self):
+        current_time = [1000.0]
+
+        def fake_time() -> float:
+            return current_time[0]
+
+        mgr = ECDHKeyManager(session_ttl_seconds=10.0, time_fn=fake_time)
+        client = ECDHKeyManager()
+        session_id, _ = mgr.derive_session(client.get_public_key_raw())
+
+        assert mgr.active_session_count() == 1
+
+        current_time[0] += 11.0
+
+        assert mgr.get_session_key(session_id) is None
+        assert mgr.active_session_count() == 0
+
+    def test_lru_session_cap_evicts_oldest_active_session(self):
+        current_time = [2000.0]
+
+        def fake_time() -> float:
+            return current_time[0]
+
+        mgr = ECDHKeyManager(max_sessions=2, time_fn=fake_time)
+        client1 = ECDHKeyManager()
+        sid1, _ = mgr.derive_session(client1.get_public_key_raw())
+
+        current_time[0] += 1.0
+        client2 = ECDHKeyManager()
+        sid2, _ = mgr.derive_session(client2.get_public_key_raw())
+
+        current_time[0] += 1.0
+        assert mgr.get_session_key(sid1) is not None
+
+        current_time[0] += 1.0
+        client3 = ECDHKeyManager()
+        sid3, _ = mgr.derive_session(client3.get_public_key_raw())
+
+        assert mgr.active_session_count() == 2
+        assert mgr.get_session_key(sid1) is not None
+        assert mgr.get_session_key(sid2) is None
+        assert mgr.get_session_key(sid3) is not None

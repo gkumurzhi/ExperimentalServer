@@ -101,6 +101,11 @@ class TestNotepadSave:
         resp = server.handle_note(req)
         assert resp.status_code == 400
 
+    def test_save_json_array_returns_400(self, server):
+        req = make_request("NOTE", "/notes", body=b"[]")
+        resp = server.handle_note(req)
+        assert resp.status_code == 400
+
     def test_save_missing_title_returns_400(self, server):
         payload = json.dumps({"data": base64.b64encode(b"x").decode()}).encode()
         req = make_request("NOTE", "/notes", body=payload)
@@ -355,6 +360,11 @@ class TestECDHKeyExchange:
         resp = server.handle_note(req)
         assert resp.status_code == 400
 
+    def test_exchange_json_array_returns_400(self, server):
+        req = make_request("NOTE", "/notes/exchange", body=b"[]")
+        resp = server.handle_note(req)
+        assert resp.status_code == 400
+
     def test_exchange_no_body_returns_400(self, server):
         req = make_request("NOTE", "/notes/exchange")
         resp = server.handle_note(req)
@@ -383,6 +393,44 @@ class TestECDHKeyExchangeNoEcdh:
         body = json.dumps({"clientPublicKey": "anything"}).encode()
         req = make_request("NOTE", "/notes/exchange", body=body)
         resp = srv.handle_note(req)
+        assert resp.status_code == 501
+
+
+class TestNotepadRequiresCrypto:
+    def test_list_without_ecdh_manager_returns_501(self, temp_dir, upload_dir):
+        srv = NotepadStubServer(temp_dir, upload_dir)
+        srv._ecdh_manager = None
+
+        req = make_request("NOTE", "/notes?list")
+        resp = srv.handle_note(req)
+
+        assert resp.status_code == 501
+
+    def test_save_without_ecdh_manager_returns_501(self, temp_dir, upload_dir):
+        srv = NotepadStubServer(temp_dir, upload_dir)
+        srv._ecdh_manager = None
+
+        req = make_request("NOTE", "/notes", body=_make_note_payload())
+        resp = srv.handle_note(req)
+
+        assert resp.status_code == 501
+
+    def test_load_without_ecdh_manager_returns_501(self, temp_dir, upload_dir):
+        srv = NotepadStubServer(temp_dir, upload_dir)
+        srv._ecdh_manager = None
+
+        req = make_request("NOTE", "/notes/" + ("a" * 32))
+        resp = srv.handle_note(req)
+
+        assert resp.status_code == 501
+
+    def test_delete_without_ecdh_manager_returns_501(self, temp_dir, upload_dir):
+        srv = NotepadStubServer(temp_dir, upload_dir)
+        srv._ecdh_manager = None
+
+        req = make_request("NOTE", "/notes/" + ("a" * 32) + "?delete")
+        resp = srv.handle_note(req)
+
         assert resp.status_code == 501
 
 
@@ -423,8 +471,93 @@ class TestNotepadSaveWithSession:
         assert meta.get("session") is True
 
     def test_save_without_session_still_works(self, server):
-        """Save without session header still works (fallback)."""
+        """Save without session header still works."""
         body = _make_note_payload("No Session", b"plain-encrypted-data")
         req = make_request("NOTE", "/notes", body=body)
         resp = server.handle_note(req)
         assert resp.status_code == 201
+
+    def test_save_with_unknown_session_header_is_ignored(self, server):
+        body = _make_note_payload("Unknown Session", b"encrypted-data")
+        req = make_request(
+            "NOTE",
+            "/notes",
+            body=body,
+            headers={"X-Session-Id": "deadbeefdeadbeefdeadbeefdeadbeef"},
+        )
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 201
+        data = json.loads(resp.body)
+
+        notes_dir = server.upload_dir / "notes"
+        meta_path = notes_dir / f"{data['id']}.meta.json"
+        meta = json.loads(meta_path.read_text())
+        assert "session" not in meta
+
+
+class TestNotepadCorruptMetadata:
+    def test_list_skips_non_object_metadata(self, server, upload_dir):
+        notes_dir = upload_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / "broken.meta.json").write_text("[]")
+
+        req = make_request("NOTE", "/notes?list")
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["count"] == 0
+        assert data["notes"] == []
+
+    def test_list_includes_note_when_metadata_is_corrupt(self, server, upload_dir):
+        note_id = "b" * 32
+        notes_dir = upload_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / f"{note_id}.enc").write_bytes(b"ciphertext")
+        (notes_dir / f"{note_id}.meta.json").write_text("[]")
+
+        req = make_request("NOTE", "/notes?list")
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["count"] == 1
+        assert data["notes"][0]["id"] == note_id
+        assert data["notes"][0]["title"] == ""
+        assert data["notes"][0]["size"] == len(b"ciphertext")
+
+    def test_load_with_non_object_metadata_falls_back(self, server, upload_dir):
+        note_id = "a" * 32
+        notes_dir = upload_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / f"{note_id}.enc").write_bytes(b"ciphertext")
+        (notes_dir / f"{note_id}.meta.json").write_text("[]")
+
+        req = make_request("NOTE", f"/notes/{note_id}")
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["id"] == note_id
+        assert data["title"] == ""
+
+    def test_update_rewrites_corrupt_metadata_sidecar(self, server, upload_dir):
+        note_id = "c" * 32
+        notes_dir = upload_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / f"{note_id}.enc").write_bytes(b"old")
+        (notes_dir / f"{note_id}.meta.json").write_text("{not json")
+
+        req = make_request(
+            "NOTE",
+            "/notes",
+            body=_make_note_payload("Recovered", b"new-ciphertext", note_id=note_id),
+        )
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 200
+        meta = json.loads((notes_dir / f"{note_id}.meta.json").read_text())
+        assert meta["id"] == note_id
+        assert meta["title"] == "Recovered"
+        assert meta["size"] == len(b"new-ciphertext")

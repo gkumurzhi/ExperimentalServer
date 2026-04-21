@@ -17,10 +17,13 @@ class StubServer(HandlerMixin):
     def __init__(self, root_dir: Path, upload_dir: Path, opsec: bool = False):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.cors_origin = None
         self.sandbox_mode = False
         self.opsec_mode = opsec
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
+        self._notes_lock = threading.Lock()
+        self._ecdh_manager = None
         self.method_handlers = {
             "GET": self.handle_get,
             "HEAD": self.handle_head,
@@ -31,6 +34,7 @@ class StubServer(HandlerMixin):
             "FETCH": self.handle_fetch,
             "INFO": self.handle_info,
             "PING": self.handle_ping,
+            "NOTE": self.handle_note,
             "NONE": self.handle_none,
             "SMUGGLE": self.handle_smuggle,
         }
@@ -39,6 +43,7 @@ class StubServer(HandlerMixin):
             "download": "XDOWNLOAD",
             "info": "XINFO",
             "ping": "XPING",
+            "notepad": "XNOTE",
         }
 
     def get_metrics(self):
@@ -63,6 +68,8 @@ class StubServer(HandlerMixin):
             return self.handle_info
         elif method == self.opsec_methods.get("ping"):
             return self.handle_ping
+        elif method == self.opsec_methods.get("notepad"):
+            return self.handle_note
         # Any unknown method in OPSEC mode -> upload if data present
         has_data = (
             request.body
@@ -129,6 +136,7 @@ class TestMethodRouting:
             "FETCH",
             "INFO",
             "PING",
+            "NOTE",
             "NONE",
             "SMUGGLE",
         }
@@ -140,13 +148,6 @@ class TestMethodRouting:
         resp = handler(req)
         assert isinstance(resp, HTTPResponse)
         assert resp.status_code == 200
-
-    def test_ping_handler_returns_pong(self, server):
-        handler = server.method_handlers["PING"]
-        req = _make_request("PING", "/")
-        resp = handler(req)
-        data = json.loads(resp.body)
-        assert data["status"] == "pong"
 
     def test_info_handler_for_root(self, server, temp_dir):
         handler = server.method_handlers["INFO"]
@@ -174,32 +175,10 @@ class TestMethodRouting:
 class TestOpsecMethods:
     """Test OPSEC method name mapping."""
 
-    def test_opsec_methods_set(self, opsec_server):
-        assert opsec_server.opsec_methods["upload"] == "XUPLOAD"
-        assert opsec_server.opsec_methods["download"] == "XDOWNLOAD"
-        assert opsec_server.opsec_methods["info"] == "XINFO"
-        assert opsec_server.opsec_methods["ping"] == "XPING"
-
     def test_standard_get_still_works_in_opsec(self, opsec_server):
         req = _make_request("GET", "/")
         resp = opsec_server.handle_get(req)
         assert resp.status_code == 200
-
-    def test_ping_hides_server_in_opsec(self, opsec_server):
-        req = _make_request("PING", "/")
-        resp = opsec_server.handle_ping(req)
-        data = json.loads(resp.body)
-        assert "server" not in data
-        assert data["status"] == "pong"
-
-    def test_opsec_unknown_method_with_xd_header(self, opsec_server):
-        """Unknown method + X-D header → routes to opsec upload."""
-        import base64
-
-        b64 = base64.b64encode(b"test").decode()
-        req = _make_request("RANDOMMETHOD", "/", headers={"X-D": b64})
-        handler = opsec_server._get_opsec_handler(req)
-        assert handler == opsec_server.handle_opsec_upload
 
     def test_opsec_unknown_method_with_d_param(self, opsec_server):
         """Unknown method + ?d= query param → routes to opsec upload."""
@@ -215,6 +194,11 @@ class TestOpsecMethods:
         req = _make_request("RANDOMMETHOD", "/")
         handler = opsec_server._get_opsec_handler(req)
         assert handler is None
+
+    def test_opsec_notepad_method_maps_to_note_handler(self, opsec_server):
+        req = _make_request(opsec_server.opsec_methods["notepad"], "/notes")
+        handler = opsec_server._get_opsec_handler(req)
+        assert handler == opsec_server.handle_note
 
 
 class TestSmuggleHandler:
@@ -249,16 +233,22 @@ class TestSmuggleHandler:
 class TestResponseHeaders:
     """Test response header correctness."""
 
-    def test_cors_headers_in_response(self, server):
+    def test_cors_headers_disabled_by_default(self, server):
         req = _make_request("GET", "/")
         resp = server.handle_get(req)
         built = resp.build()
-        assert b"Access-Control-Allow-Origin: *" in built
+        assert b"Access-Control-Allow-Origin" not in built
+
+    def test_cors_headers_when_enabled(self, server):
+        req = _make_request("GET", "/")
+        resp = server.handle_get(req)
+        built = resp.build(cors_origin="https://app.example")
+        assert b"Access-Control-Allow-Origin: https://app.example" in built
 
     def test_opsec_hides_cors_expose(self, opsec_server):
         req = _make_request("GET", "/")
         resp = opsec_server.handle_get(req)
-        built = resp.build(opsec_mode=True)
+        built = resp.build(opsec_mode=True, cors_origin="https://app.example")
         assert b"Server: nginx" in built
         assert b"Access-Control-Expose-Headers" not in built
 

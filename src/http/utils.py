@@ -88,6 +88,43 @@ def format_file_size(size: int) -> str:
     return f"{fsize:.1f} TB"
 
 
+def resolve_descendant_path(
+    clean_path: str,
+    base_dir: Path,
+    *,
+    block_symlinks: bool = False,
+) -> Path | None:
+    """
+    Resolve *clean_path* under *base_dir* and reject traversal escapes.
+
+    Args:
+        clean_path: Relative path without a leading slash
+        base_dir: Directory the resolved path must remain under
+        block_symlinks: Reject when the direct target path is a symlink
+
+    Returns:
+        Resolved descendant path, or None when blocked
+    """
+    resolved_base = base_dir.resolve()
+
+    if clean_path:
+        raw_path = base_dir / clean_path
+        file_path = raw_path.resolve()
+    else:
+        raw_path = base_dir
+        file_path = resolved_base
+
+    try:
+        file_path.relative_to(resolved_base)
+    except ValueError:
+        return None
+
+    if block_symlinks and clean_path and raw_path.is_symlink():
+        return None
+
+    return file_path
+
+
 def get_safe_path(url_path: str, base_dir: Path, sandbox_dir: Path | None = None) -> Path | None:
     """
     Safely convert URL path to filesystem path.
@@ -107,23 +144,9 @@ def get_safe_path(url_path: str, base_dir: Path, sandbox_dir: Path | None = None
         # In sandbox mode, restrict to sandbox_dir
         if clean_path.startswith("uploads/"):
             clean_path = clean_path[8:]  # len("uploads/") = 8
-        file_path = (sandbox_dir / clean_path).resolve()
+        return resolve_descendant_path(clean_path, sandbox_dir)
 
-        # Verify path is inside sandbox_dir
-        try:
-            file_path.relative_to(sandbox_dir.resolve())
-        except ValueError:
-            return None
-    else:
-        file_path = (base_dir / clean_path).resolve()
-
-        # Verify path is inside base_dir (path traversal protection)
-        try:
-            file_path.relative_to(base_dir.resolve())
-        except ValueError:
-            return None
-
-    return file_path
+    return resolve_descendant_path(clean_path, base_dir)
 
 
 def make_unique_filename(file_path: Path) -> Path:

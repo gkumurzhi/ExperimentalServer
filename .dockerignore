@@ -4,6 +4,9 @@
 .github/
 .idea/
 .vscode/
+.claude/
+.codex/
+.playwright-cli/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -12,10 +15,13 @@ coverage.xml
 htmlcov/
 dist/
 build/
+site/
 *.egg-info/
 
 __pycache__/
+**/__pycache__/
 *.pyc
+**/*.pyc
 *.pyo
 *.pyd
 
@@ -26,4 +32,5 @@ uploads/
 tools/
 
 *.md
+!README.md
 !pyproject.toml

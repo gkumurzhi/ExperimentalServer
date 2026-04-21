@@ -227,6 +227,8 @@ class FileHandlersMixin(BaseHandler):
     def handle_options(self, request: HTTPRequest) -> HTTPResponse:
         """Handle OPTIONS request for CORS preflight."""
         response = HTTPResponse(204)
+        if not getattr(self, "cors_origin", None):
+            return response
 
         requested_method = request.headers.get("access-control-request-method", "")
         logger.debug(f"OPTIONS preflight: {requested_method}")

@@ -1,3 +1,5 @@
+<!-- Generated from ../SECURITY.md by tools/sync_docs.py. Edit SECURITY.md and rerun the sync tool. -->
+
 # Security Policy
 
 ## Scope
@@ -48,7 +50,7 @@ unless the reporter requests anonymity.
 
 ## Threat Model
 
-A full threat model lives in [`docs/threat-model.md`](docs/threat-model.md).
+A full threat model lives in [`docs/threat-model.md`](threat-model.md).
 High-level assumptions:
 
 - **In scope:** path traversal, auth bypass, timing side channels on Basic

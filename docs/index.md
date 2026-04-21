@@ -14,7 +14,7 @@ and controlled red/blue team exercises.
   `NONE`, `NOTE`, `SMUGGLE`, plus randomised OPSEC methods.
 - Full TLS 1.2+ with self-signed, user-supplied, or Let's Encrypt
   certificates.
-- Basic Auth with salted SHA-256 hashing and rate-limited brute-force
+- Basic Auth with PBKDF2-SHA256 hashing and rate-limited brute-force
   protection.
 - Secure Notepad with ECDH P-256 + AES-256-GCM when `cryptography` is
   installed.
@@ -29,6 +29,9 @@ and controlled red/blue team exercises.
 pip install exphttp            # core only, stdlib
 pip install "exphttp[crypto]"  # adds AES-GCM + ECDH features
 ```
+
+The NOTE API and `/notes/ws` fail closed with `501` when the server is
+installed without `exphttp[crypto]`.
 
 ## Quick start
 
