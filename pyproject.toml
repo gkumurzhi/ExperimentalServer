@@ -78,6 +78,7 @@ exclude = ["src*.__pycache__"]
 "src" = [
     "data/*.html",
     "data/static/*",
+    "data/static/ui/*",
     "py.typed",
 ]
 

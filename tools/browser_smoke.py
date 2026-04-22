@@ -138,7 +138,17 @@ def run_browser_smoke() -> dict[str, object]:
         work_dir.mkdir(parents=True, exist_ok=True)
         config_path = work_dir / "cli.config.json"
         local_smoke_script = work_dir / smoke_script.name
+        upload_fixture = work_dir / "browser-smoke-upload.txt"
+        opsec_upload_url_boundary_fixture = work_dir / "browser-smoke-opsec-url-no-switch-boundary.bin"
+        opsec_upload_fixture = work_dir / "browser-smoke-opsec-auto-switch-small.bin"
+        opsec_upload_boundary_fixture = work_dir / "browser-smoke-opsec-no-switch-boundary.bin"
+        opsec_upload_large_fixture = work_dir / "browser-smoke-opsec-auto-switch-large.bin"
         _write_cli_config(config_path)
+        upload_fixture.write_text("browser smoke upload\n", encoding="utf-8")
+        opsec_upload_url_boundary_fixture.write_bytes(b"U" * 1125)
+        opsec_upload_fixture.write_bytes(b"A" * 1126)
+        opsec_upload_boundary_fixture.write_bytes(b"C" * 18000)
+        opsec_upload_large_fixture.write_bytes(b"B" * 18001)
 
         live = _LiveServer(normal_root)
         unavailable_live = _LiveServer(unavailable_root, disable_ecdh=True)
@@ -150,6 +160,31 @@ def run_browser_smoke() -> dict[str, object]:
             smoke_source = smoke_script.read_text(encoding="utf-8").replace(
                 "__EXPHTTP_UNAVAILABLE_URL__",
                 json.dumps(unavailable_url),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_UPLOAD_FILE__",
+                json.dumps(str(upload_fixture)),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_OPSEC_UPLOAD_URL_BOUNDARY_FILE__",
+                json.dumps(str(opsec_upload_url_boundary_fixture)),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_OPSEC_UPLOAD_FILE__",
+                json.dumps(str(opsec_upload_fixture)),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_OPSEC_UPLOAD_BOUNDARY_FILE__",
+                json.dumps(str(opsec_upload_boundary_fixture)),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_OPSEC_UPLOAD_LARGE_FILE__",
+                json.dumps(str(opsec_upload_large_fixture)),
                 1,
             )
             local_smoke_script.write_text(smoke_source, encoding="utf-8")
