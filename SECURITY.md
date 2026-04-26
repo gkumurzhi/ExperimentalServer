@@ -53,33 +53,32 @@ High-level assumptions:
 
 - **In scope:** path traversal, auth bypass, timing side channels on Basic
   Auth, WebSocket frame smuggling, Content-Length/Transfer-Encoding
-  smuggling, TLS misconfiguration, OPSEC payload forgery.
-- **Out of scope:** advanced traffic analysis of the OPSEC mode, timing
+  smuggling, TLS misconfiguration, advanced upload payload forgery.
+- **Out of scope:** advanced traffic analysis of the advanced upload flow, timing
   attacks below microsecond resolution, DoS via resource exhaustion from
   authenticated users, vulnerabilities in `cryptography` / OpenSSL / Python
   stdlib (report upstream).
 
-## OPSEC Mode Caveats
+## Advanced Upload Caveats
 
-The OPSEC mode provides **obfuscation, not cryptographic secrecy**:
+Advanced upload is a transport convenience with optional payload obfuscation,
+not a replacement for TLS or authentication:
 
-- XOR + HMAC is *not* a substitute for AES-GCM. The AES-GCM path requires
-  the optional `cryptography` dependency; without it, XOR is used as a
-  compatibility fallback.
-- Random method names mask intent from casual observers but do not defeat
-  traffic analysis by a capable adversary.
-- Nginx header spoofing is decorative — fingerprinting (timing, TLS
-  handshake, body sizes) still reveals the server.
+- XOR + HMAC is *not* a substitute for authenticated encryption.
+- Any unknown non-standard method carrying `d`/`data`, `X-D`, `X-D-0`, or
+  `?d=` payload data is treated as an upload request.
+- Payload placement in headers or URL parameters may be logged by upstream
+  proxies; use JSON body transport for sensitive data and pair it with TLS.
 
-Do not rely on OPSEC mode as sole defense against a motivated attacker.
+Do not rely on advanced upload as the sole defense against a motivated attacker.
 
 ## Hardening Recommendations
 
-When running the server outside a sandbox:
+When running the server outside a trusted lab:
 
 - Always use `--tls` with a real certificate (Let's Encrypt or internal CA).
 - Always use `--auth random` or supply a strong `user:password`.
-- Use `--sandbox` to restrict file operations to `uploads/`.
+- Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.
 

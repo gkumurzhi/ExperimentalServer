@@ -17,33 +17,6 @@ HIDDEN_FILES: frozenset[str] = frozenset(
     }
 )
 
-# Prefixes for OPSEC method name generation
-OPSEC_METHOD_PREFIXES: tuple[str, ...] = (
-    "CHECK",
-    "SYNC",
-    "VERIFY",
-    "UPDATE",
-    "QUERY",
-    "REPORT",
-    "SUBMIT",
-    "VALIDATE",
-    "PROCESS",
-    "EXECUTE",
-)
-
-OPSEC_METHOD_SUFFIXES: tuple[str, ...] = (
-    "DATA",
-    "STATUS",
-    "INFO",
-    "CONTENT",
-    "RESOURCE",
-    "ITEM",
-    "OBJECT",
-    "RECORD",
-    "ENTRY",
-    "",
-)
-
 # HTTP status codes
 HTTP_STATUS_MESSAGES: dict[int, str] = {
     101: "Switching Protocols",

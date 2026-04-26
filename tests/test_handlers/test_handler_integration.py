@@ -29,6 +29,8 @@ class StubServer(HandlerMixin):
     def __init__(self, root_dir: Path, upload_dir: Path, **kwargs):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.notes_dir = root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
         self.cors_origin = kwargs.get("cors_origin")
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
@@ -45,6 +47,7 @@ class StubServer(HandlerMixin):
         }
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
+        self._notes_lock = threading.Lock()
 
     def get_metrics(self):
         return {
@@ -77,12 +80,12 @@ class TestHandleGet:
         req = make_request("GET", "/")
         resp = server.handle_get(req)
         assert resp.status_code == 200
-        # index.html is text/html — may be full-read (OPSEC) or streamed
+        # The bundled web UI is served outside uploads so the browser can load.
         content = resp.body or (resp.stream_path.read_bytes() if resp.stream_path else b"")
-        assert b"hello" in content
+        assert b"Experimental HTTP Server" in content
 
-    def test_get_existing_file(self, server, temp_dir):
-        (temp_dir / "readme.txt").write_text("content here")
+    def test_get_existing_file(self, server, upload_dir):
+        (upload_dir / "readme.txt").write_text("content here")
         req = make_request("GET", "/readme.txt")
         resp = server.handle_get(req)
         assert resp.status_code == 200
@@ -109,8 +112,8 @@ class TestHandleGet:
         assert resp.stream_path is not None
         assert resp.stream_path.read_bytes() == b"\xde\xad"
 
-    def test_get_directory_serves_index(self, server, temp_dir):
-        sub = temp_dir / "sub"
+    def test_get_directory_serves_index(self, server, upload_dir):
+        sub = upload_dir / "sub"
         sub.mkdir()
         (sub / "index.html").write_text("<p>sub</p>")
         req = make_request("GET", "/sub")
@@ -211,8 +214,8 @@ class TestHandleFetch:
 
 
 class TestHandleInfo:
-    def test_info_existing_file(self, server, temp_dir):
-        (temp_dir / "info_target.txt").write_text("data")
+    def test_info_existing_file(self, server, upload_dir):
+        (upload_dir / "info_target.txt").write_text("data")
         req = make_request("INFO", "/info_target.txt")
         resp = server.handle_info(req)
         assert resp.status_code == 200
@@ -228,8 +231,8 @@ class TestHandleInfo:
         data = json.loads(resp.body)
         assert data["exists"] is False
 
-    def test_info_directory_listing(self, server, temp_dir):
-        sub = temp_dir / "mydir"
+    def test_info_directory_listing(self, server, upload_dir):
+        sub = upload_dir / "mydir"
         sub.mkdir()
         (sub / "a.txt").write_text("a")
         (sub / "b.txt").write_text("b")
@@ -260,8 +263,8 @@ class TestHandleInfo:
         # Should get 400 (invalid path) from traversal block
         assert resp.status_code == 400
 
-    def test_info_directory_pagination(self, server, temp_dir):
-        sub = temp_dir / "pagedir"
+    def test_info_directory_pagination(self, server, upload_dir):
+        sub = upload_dir / "pagedir"
         sub.mkdir()
         for i in range(5):
             (sub / f"file{i}.txt").write_text(str(i))
@@ -288,12 +291,13 @@ class TestHandlePing:
         assert "server" in data
         assert "timestamp" in data
 
-    def test_ping_opsec_hides_server(self, temp_dir, upload_dir):
-        srv = StubServer(temp_dir, upload_dir, opsec=True)
+    def test_ping_reports_uploads_only_and_advanced_upload(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir)
         req = make_request("PING", "/")
         resp = srv.handle_ping(req)
         data = json.loads(resp.body)
-        assert "server" not in data  # OPSEC hides server info
+        assert data["access_scope"] == "uploads"
+        assert data["advanced_upload"] is True
 
 
 # ── OPTIONS tests ──────────────────────────────────────────────────
@@ -310,8 +314,8 @@ class TestHandleOptions:
         assert resp.status_code == 204
         assert "Access-Control-Allow-Methods" not in resp.headers
 
-    def test_options_opsec_hides_custom_methods(self, temp_dir, upload_dir):
-        srv = StubServer(temp_dir, upload_dir, opsec=True, cors_origin="https://app.example")
+    def test_options_with_explicit_cors_origin_includes_custom_methods(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, cors_origin="https://app.example")
         req = make_request(
             "OPTIONS",
             "/",
@@ -320,7 +324,7 @@ class TestHandleOptions:
         resp = srv.handle_options(req)
         assert resp.status_code == 204
         allowed = resp.headers.get("Access-Control-Allow-Methods", "")
-        assert "FETCH" not in allowed  # custom methods hidden in OPSEC
+        assert "FETCH" in allowed
 
     def test_options_with_explicit_cors_origin_sets_allow_methods(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir, cors_origin="https://app.example")
@@ -350,7 +354,7 @@ class TestHandleOpsecUpload:
             }
         ).encode()
         req = make_request("OPSEC", "/", body=payload)
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         data = json.loads(resp.body)
         assert data["ok"] is True
@@ -358,13 +362,13 @@ class TestHandleOpsecUpload:
     def test_opsec_empty_body_returns_400(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         req = make_request("OPSEC", "/")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
 
     def test_opsec_json_array_returns_400_without_writing(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         req = make_request("OPSEC", "/", body=b"[]")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
@@ -372,14 +376,14 @@ class TestHandleOpsecUpload:
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         payload = json.dumps({"n": "missing.bin"}).encode()
         req = make_request("OPSEC", "/", body=payload)
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
     def test_opsec_invalid_base64_returns_400_without_writing(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         req = make_request("XUPLOAD", "/", headers={"X-D": "not!!!base64"})
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
@@ -398,7 +402,7 @@ class TestHandleOpsecUpload:
                 "X-Kb64": "true",
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
@@ -410,7 +414,7 @@ class TestHandleOpsecUpload:
         raw_data = b"headers transport data"
         b64 = base64.b64encode(raw_data).decode()
         req = make_request("XUPLOAD", "/", headers={"X-D": b64})
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["ok"] is True
@@ -429,7 +433,7 @@ class TestHandleOpsecUpload:
         # URL-safe base64
         b64 = base64.urlsafe_b64encode(raw_data).decode().rstrip("=")
         req = make_request("XUPLOAD", f"/?d={b64}")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["ok"] is True
@@ -457,7 +461,7 @@ class TestHandleOpsecUpload:
                 "X-K": key,
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
         assert any(f.read_bytes() == original for f in saved)
@@ -474,7 +478,7 @@ class TestHandleOpsecUpload:
         encrypted = xor_bytes(original, key)
         b64 = base64.urlsafe_b64encode(encrypted).decode().rstrip("=")
         req = make_request("XUPLOAD", f"/?d={b64}&e=xor&k={key}")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
         assert any(f.read_bytes() == original for f in saved)
@@ -500,7 +504,7 @@ class TestHandleOpsecUpload:
                 "X-H": hmac_val,
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         assert json.loads(resp.body)["ok"] is True
 
@@ -521,7 +525,7 @@ class TestHandleOpsecUpload:
                 "X-H": "deadbeef",
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
         assert json.loads(resp.body)["err"] == "hmac"
 
@@ -545,7 +549,7 @@ class TestHandleOpsecUpload:
             },
             body=payload,
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["transport"] == "body"
@@ -568,7 +572,7 @@ class TestHandleOpsecUpload:
                 "X-D": h_b64,
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["transport"] == "headers"
@@ -579,7 +583,7 @@ class TestHandleOpsecUpload:
         """No body, no X-D, no ?d= → 400."""
         srv = StubServer(temp_dir, upload_dir, opsec=True)
         req = make_request("XUPLOAD", "/")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 400
 
     def test_opsec_transport_in_response(self, temp_dir, upload_dir):
@@ -593,15 +597,15 @@ class TestHandleOpsecUpload:
 
         # Body
         body_payload = json.dumps({"d": b64_std}).encode()
-        resp = srv.handle_opsec_upload(make_request("X", "/", body=body_payload))
+        resp = srv.handle_advanced_upload(make_request("X", "/", body=body_payload))
         assert json.loads(resp.body)["transport"] == "body"
 
         # Headers
-        resp = srv.handle_opsec_upload(make_request("X", "/", headers={"X-D": b64_std}))
+        resp = srv.handle_advanced_upload(make_request("X", "/", headers={"X-D": b64_std}))
         assert json.loads(resp.body)["transport"] == "headers"
 
         # URL
-        resp = srv.handle_opsec_upload(make_request("X", f"/?d={b64_url}"))
+        resp = srv.handle_advanced_upload(make_request("X", f"/?d={b64_url}"))
         assert json.loads(resp.body)["transport"] == "url"
 
     def test_urlsafe_b64decode(self, temp_dir, upload_dir):
@@ -630,7 +634,7 @@ class TestHandleOpsecUpload:
                 "X-N": "custom_name.txt",
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         assert (upload_dir / "custom_name.txt").exists()
         assert (upload_dir / "custom_name.txt").read_bytes() == raw
@@ -657,7 +661,7 @@ class TestHandleOpsecUpload:
                 "X-Kb64": "true",
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
         assert any(f.read_bytes() == original for f in saved)
@@ -675,7 +679,7 @@ class TestHandleOpsecUpload:
         for i in range(0, len(b64), chunk_size):
             chunks[f"X-D-{i // chunk_size}"] = b64[i : i + chunk_size]
         req = make_request("XUPLOAD", "/", headers=chunks)
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["ok"] is True
@@ -691,7 +695,7 @@ class TestHandleOpsecUpload:
         raw = b"single chunk"
         b64 = base64.b64encode(raw).decode()
         req = make_request("XUPLOAD", "/", headers={"X-D-0": b64})
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         result = json.loads(resp.body)
         assert result["ok"] is True
@@ -749,17 +753,17 @@ class TestHandleHead:
         assert resp.body == b""
         assert resp.stream_path is None
 
-    def test_head_empty_body(self, server, temp_dir):
-        (temp_dir / "data.txt").write_text("some data")
+    def test_head_empty_body(self, server, upload_dir):
+        (upload_dir / "data.txt").write_text("some data")
         req = make_request("HEAD", "/data.txt")
         resp = server.handle_head(req)
         assert resp.status_code == 200
         assert resp.body == b""
         assert resp.stream_path is None
 
-    def test_head_content_length_matches_get(self, server, temp_dir):
+    def test_head_content_length_matches_get(self, server, upload_dir):
         content = "hello world content"
-        (temp_dir / "match.txt").write_text(content)
+        (upload_dir / "match.txt").write_text(content)
         get_req = make_request("GET", "/match.txt")
         get_resp = server.handle_get(get_req)
         head_req = make_request("HEAD", "/match.txt")
@@ -805,6 +809,38 @@ class TestHandleDelete:
         resp = server.handle_delete(req)
         assert resp.status_code == 400
 
+    def test_delete_uploads_root_requires_clear_flag(self, server, upload_dir):
+        (upload_dir / "keep.txt").write_text("keep")
+        req = make_request("DELETE", "/uploads")
+        resp = server.handle_delete(req)
+        assert resp.status_code == 400
+        assert (upload_dir / "keep.txt").exists()
+
+    def test_delete_uploads_clear_removes_visible_contents(self, server, upload_dir):
+        (upload_dir / ".gitkeep").write_text("")
+        (upload_dir / "file.txt").write_text("data")
+        subdir = upload_dir / "nested"
+        subdir.mkdir()
+        (subdir / "child.txt").write_text("child")
+        legacy_notes = upload_dir / "notes"
+        legacy_notes.mkdir()
+        (legacy_notes / "legacy.enc").write_text("keep")
+
+        req = make_request("DELETE", "/uploads?clear=1")
+        resp = server.handle_delete(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["success"] is True
+        assert data["cleared"] is True
+        assert data["deleted_files"] == 1
+        assert data["deleted_dirs"] == 1
+        assert data["preserved"] == [".gitkeep", "notes"]
+        assert (upload_dir / ".gitkeep").exists()
+        assert (legacy_notes / "legacy.enc").exists()
+        assert not (upload_dir / "file.txt").exists()
+        assert not subdir.exists()
+
     def test_delete_path_traversal_blocked(self, server):
         req = make_request("DELETE", "/uploads/../../etc/passwd")
         resp = server.handle_delete(req)
@@ -815,8 +851,8 @@ class TestHandleDelete:
 
 
 class TestCacheHeaders:
-    def test_get_returns_etag_and_last_modified(self, server, temp_dir):
-        (temp_dir / "cached.txt").write_text("cache me")
+    def test_get_returns_etag_and_last_modified(self, server, upload_dir):
+        (upload_dir / "cached.txt").write_text("cache me")
         req = make_request("GET", "/cached.txt")
         resp = server.handle_get(req)
         assert resp.status_code == 200
@@ -824,8 +860,8 @@ class TestCacheHeaders:
         assert "Last-Modified" in resp.headers
         assert "Cache-Control" in resp.headers
 
-    def test_conditional_304_with_if_none_match(self, server, temp_dir):
-        (temp_dir / "etag_test.txt").write_text("etag content")
+    def test_conditional_304_with_if_none_match(self, server, upload_dir):
+        (upload_dir / "etag_test.txt").write_text("etag content")
         # First request to get ETag
         req1 = make_request("GET", "/etag_test.txt")
         resp1 = server.handle_get(req1)
@@ -836,8 +872,8 @@ class TestCacheHeaders:
         assert resp2.status_code == 304
         assert resp2.body == b""
 
-    def test_head_has_cache_headers(self, server, temp_dir):
-        (temp_dir / "head_cache.txt").write_text("head cache")
+    def test_head_has_cache_headers(self, server, upload_dir):
+        (upload_dir / "head_cache.txt").write_text("head cache")
         req = make_request("HEAD", "/head_cache.txt")
         resp = server.handle_head(req)
         assert resp.status_code == 200
@@ -860,11 +896,11 @@ class TestMetrics:
         assert "bytes_sent" in data
         assert "status_counts" in data
 
-    def test_opsec_blocks_metrics(self, temp_dir, upload_dir):
-        srv = StubServer(temp_dir, upload_dir, opsec=True)
+    def test_metrics_available(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir)
         req = make_request("GET", "/metrics")
         resp = srv.handle_get(req)
-        assert resp.status_code == 404
+        assert resp.status_code == 200
 
 
 # ── OPSEC AES decryption path tests ──────────────────────────────
@@ -897,7 +933,7 @@ class TestOpsecAESDecryption:
                 "X-K": key,
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
         assert any(f.read_bytes() == original for f in saved)
@@ -918,7 +954,7 @@ class TestOpsecAESDecryption:
         encrypted = aes_encrypt(original, key)
         b64 = base64.urlsafe_b64encode(encrypted).decode().rstrip("=")
         req = make_request("XUPLOAD", f"/?d={b64}&e=aes&k={key}")
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         saved = list(upload_dir.iterdir())
         assert any(f.read_bytes() == original for f in saved)
@@ -946,7 +982,7 @@ class TestOpsecAESDecryption:
                 "X-K": "wrong_key",
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         # With wrong key, decrypt returns None so original encrypted data is saved
         saved = list(upload_dir.iterdir())
@@ -978,7 +1014,7 @@ class TestOpsecAESDecryption:
                 "X-H": hmac_val,
             },
         )
-        resp = srv.handle_opsec_upload(req)
+        resp = srv.handle_advanced_upload(req)
         assert resp.status_code == 200
         assert json.loads(resp.body)["ok"] is True
         saved = list(upload_dir.iterdir())

@@ -2,8 +2,11 @@
 const browseRootBtn = document.getElementById('browseRootBtn');
 const browseUpBtn = document.getElementById('browseUpBtn');
 const browseBtn = document.getElementById('browseBtn');
+const clearUploadsBtn = document.getElementById('clearUploadsBtn');
+const deleteSelectedUploadsBtn = document.getElementById('deleteSelectedUploadsBtn');
 const browsePathInput = document.getElementById('browsePathInput');
 const serverFilesEl = document.getElementById('serverFiles');
+const selectedUploadPaths = new Set();
 
 if (browseRootBtn) {
     browseRootBtn.addEventListener('click', goToRoot);
@@ -15,6 +18,14 @@ if (browseUpBtn) {
 
 if (browseBtn) {
     browseBtn.addEventListener('click', browseDirectory);
+}
+
+if (clearUploadsBtn) {
+    clearUploadsBtn.addEventListener('click', () => clearUploads(clearUploadsBtn));
+}
+
+if (deleteSelectedUploadsBtn) {
+    deleteSelectedUploadsBtn.addEventListener('click', () => deleteSelectedUploadFiles(deleteSelectedUploadsBtn));
 }
 
 if (browsePathInput) {
@@ -50,6 +61,26 @@ if (serverFilesEl) {
             browseDirectory();
         }
     });
+
+    serverFilesEl.addEventListener('change', (e) => {
+        const selectBox = e.target.closest('[data-file-select][data-path]');
+        if (!selectBox) return;
+
+        const path = decodeURIComponent(selectBox.dataset.path || '');
+        if (!path) return;
+
+        if (selectBox.checked) {
+            selectedUploadPaths.add(path);
+        } else {
+            selectedUploadPaths.delete(path);
+        }
+
+        const row = selectBox.closest('.uploaded-file');
+        if (row) {
+            row.classList.toggle('is-selected', selectBox.checked);
+        }
+        updateSelectedUploadsButton();
+    });
 }
 
 function goToRoot() {
@@ -84,10 +115,19 @@ function focusFilesBrowserAnchor() {
     }
 }
 
+function updateSelectedUploadsButton() {
+    if (deleteSelectedUploadsBtn) {
+        deleteSelectedUploadsBtn.disabled = selectedUploadPaths.size === 0;
+        deleteSelectedUploadsBtn.dataset.count = String(selectedUploadPaths.size);
+    }
+}
+
 async function browseDirectory() {
     const path = document.getElementById('browsePathInput').value || '/';
     const filesResponseArea = document.getElementById('filesResponseArea');
     const serverFiles = document.getElementById('serverFiles');
+    selectedUploadPaths.clear();
+    updateSelectedUploadsButton();
 
     announceLiveRegion('filesResponseAreaLive', `${t('loadingInfo')} ${path}`);
     filesResponseArea.innerHTML = `<div class="response-header">${t('loadingInfo')} ${esc(path)}...</div>`;
@@ -108,6 +148,7 @@ async function browseDirectory() {
                 const infoLabel = esc(`${t('methodInfo')}: ${item.name}`);
                 const smuggleLabel = esc(`${t('smuggleTitle')}: ${item.name}`);
                 const deleteLabel = esc(`${t('deleteBtn')}: ${item.name}`);
+                const selectLabel = esc(`${t('selectFileLabel')}: ${item.name}`);
 
                 if (item.is_dir) {
                     return `
@@ -121,12 +162,12 @@ async function browseDirectory() {
                     <div class="file-row__actions">
                         <div class="file-row__actions-primary">
                             <button
-                                class="btn-info btn--sm file-row__action-main"
+                                class="btn-info btn--sm file-row__action-main file-row__action-icon"
                                 data-file-action="open-dir"
                                 data-path="${encodedItemPath}"
                                 title="${openLabel}"
                                 aria-label="${openLabel}"
-                            >${t('open')}</button>
+                            >↗</button>
                         </div>
                     </div>
                 </div>
@@ -136,6 +177,10 @@ async function browseDirectory() {
                 return `
                 <div class="uploaded-file uploaded-file--file">
                     <div class="file-info">
+                        <label class="file-select" title="${selectLabel}" aria-label="${selectLabel}">
+                            <input type="checkbox" data-file-select data-path="${encodedItemPath}">
+                            <span aria-hidden="true"></span>
+                        </label>
                         <span class="file-icon" aria-hidden="true">${itemIcon}</span>
                         <div class="file-meta">
                             <span class="file-name">${esc(item.name)}</span>
@@ -144,35 +189,35 @@ async function browseDirectory() {
                     <div class="file-row__actions">
                         <div class="file-row__actions-primary">
                             <button
-                                class="btn-fetch btn--sm file-row__action-main"
+                                class="btn-fetch btn--sm file-row__action-main file-row__action-icon"
                                 data-file-action="download"
                                 data-path="${encodedItemPath}"
                                 title="${fetchLabel}"
                                 aria-label="${fetchLabel}"
-                            >FETCH</button>
+                            >↓</button>
                         </div>
                         <div class="file-row__actions-secondary" aria-label="${esc(t('advancedLabel'))}">
                             <button
-                                class="btn-ghost btn--sm file-row__action-muted"
+                                class="btn-ghost btn--sm file-row__action-muted file-row__action-icon"
                                 data-file-action="info"
                                 data-path="${encodedItemPath}"
                                 title="${infoLabel}"
                                 aria-label="${infoLabel}"
-                            >INFO</button>
+                            >i</button>
                             <button
-                                class="btn-ghost btn--sm file-row__action-muted"
+                                class="btn-ghost btn--sm file-row__action-muted file-row__action-compact"
                                 data-file-action="smuggle"
                                 data-path="${encodedItemPath}"
                                 title="${smuggleLabel}"
                                 aria-label="${smuggleLabel}"
-                            >SMUGGLE</button>
+                            >HTML</button>
                             <button
-                                class="btn-ghost btn--sm file-row__action-danger"
+                                class="btn-ghost btn--sm file-row__action-danger file-row__action-icon"
                                 data-file-action="delete"
                                 data-path="${encodedItemPath}"
                                 title="${deleteLabel}"
                                 aria-label="${deleteLabel}"
-                            >${t('deleteBtn')}</button>
+                            >×</button>
                         </div>
                     </div>
                 </div>
@@ -182,13 +227,13 @@ async function browseDirectory() {
             serverFiles.innerHTML = '';
         }
 
-        const sandboxNote = info.sandbox_mode ? '\n--- ' + t('sandboxMode') + ' ---\n' : '';
+        const uploadsOnlyNote = info.access_scope === 'uploads' ? '\n--- ' + t('uploadsOnlyMode') + ' ---\n' : '';
         filesResponseArea.innerHTML = `
 <div class="response-header">
 INFO ${path}
-<span class="status success">200 OK</span>${info.sandbox_mode ? ' <span class="response-flag response-flag--sandbox">[SANDBOX]</span>' : ''}
+<span class="status success">200 OK</span>${info.access_scope === 'uploads' ? ' <span class="response-flag response-flag--sandbox">[uploads/]</span>' : ''}
 </div>
-<div class="response-body">${esc(sandboxNote)}${esc(JSON.stringify(info, null, 2))}</div>`;
+<div class="response-body">${esc(uploadsOnlyNote)}${esc(JSON.stringify(info, null, 2))}</div>`;
         announceLiveRegion('filesResponseAreaLive', `INFO ${path} 200 OK`);
 
     } catch (error) {
@@ -205,6 +250,130 @@ INFO ${path}
 async function getFileInfo(path) {
     document.getElementById('browsePathInput').value = path;
     await browseDirectory();
+}
+
+async function clearUploads(triggerEl = null) {
+    const confirmed = await showConfirmDialog({
+        title: t('clearUploadsBtn'),
+        message: t('clearUploadsConfirm'),
+        details: '/uploads',
+        confirmLabel: t('clearUploadsBtn'),
+        triggerEl,
+        initialFocus: 'cancel',
+    });
+    if (!confirmed) return;
+
+    const filesResponseArea = document.getElementById('filesResponseArea');
+    announceLiveRegion('filesResponseAreaLive', t('clearUploadsRunning'));
+    filesResponseArea.innerHTML = `<div class="response-header">${esc(t('clearUploadsRunning'))}</div>`;
+
+    try {
+        const response = await sendCustomRequest('DELETE', `${SERVER_URL}/uploads?clear=1`);
+        const text = await response.text();
+        let result = null;
+        try {
+            result = JSON.parse(text);
+        } catch (error) {
+            result = null;
+        }
+
+        if (response.ok && result && result.success) {
+            if (browsePathInput) {
+                browsePathInput.value = '/';
+            }
+            await browseDirectory();
+            const summary = `${t('clearUploadsSuccess')}: ${result.deleted_files || 0} ${t('filesDeleted')}, ${result.deleted_dirs || 0} ${t('dirsDeleted')}`;
+            announceLiveRegion('filesResponseAreaLive', summary);
+            filesResponseArea.innerHTML = `
+<div class="response-header">
+DELETE /uploads?clear=1
+<span class="status success">200 OK</span>
+</div>
+<div class="response-body">${esc(summary)}
+
+${esc(JSON.stringify(result, null, 2))}</div>`;
+            focusFilesBrowserAnchor();
+            return;
+        }
+
+        const message = (result && result.error) || text || `${response.status} ${response.statusText || t('error')}`.trim();
+        await showNoticeDialog({
+            title: t('clearUploadsError'),
+            message,
+            details: '/uploads',
+            triggerEl,
+        });
+    } catch (e) {
+        await showNoticeDialog({
+            title: t('clearUploadsError'),
+            message: e.message,
+            details: '/uploads',
+            triggerEl,
+        });
+    }
+}
+
+async function deleteSelectedUploadFiles(triggerEl = null) {
+    const paths = Array.from(selectedUploadPaths);
+    if (paths.length === 0) return;
+
+    const confirmed = await showConfirmDialog({
+        title: t('deleteSelectedFilesBtn'),
+        message: t('deleteSelectedFilesConfirm'),
+        details: paths.join('\n'),
+        confirmLabel: t('deleteSelectedFilesBtn'),
+        triggerEl,
+        initialFocus: 'cancel',
+    });
+    if (!confirmed) return;
+
+    const filesResponseArea = document.getElementById('filesResponseArea');
+    const deleted = [];
+    const errors = [];
+
+    for (const path of paths) {
+        try {
+            const response = await sendCustomRequest('DELETE', SERVER_URL + path);
+            const text = await response.text();
+            let result = null;
+            try {
+                result = JSON.parse(text);
+            } catch (error) {
+                result = null;
+            }
+
+            if (response.ok && result && result.success) {
+                deleted.push(path);
+                selectedUploadPaths.delete(path);
+            } else {
+                const message = (result && result.error) || text || `${response.status} ${response.statusText || t('error')}`.trim();
+                errors.push(`${path}: ${message}`);
+            }
+        } catch (e) {
+            errors.push(`${path}: ${e.message}`);
+        }
+    }
+
+    await browseDirectory();
+    const summary = `${t('deleteSelectedFilesSuccess')}: ${deleted.length}`;
+    announceLiveRegion('filesResponseAreaLive', summary);
+    filesResponseArea.innerHTML = `
+<div class="response-header">
+DELETE ${esc(t('deleteSelectedFilesBtn'))}
+<span class="status ${errors.length ? 'error' : 'success'}">${errors.length ? esc(t('error')) : '200 OK'}</span>
+</div>
+<div class="response-body">${esc(summary)}
+${errors.length ? '\n\n' + esc(errors.join('\n')) : ''}</div>`;
+
+    if (errors.length) {
+        await showNoticeDialog({
+            title: t('deleteError'),
+            message: errors.join('\n'),
+            details: t('deleteSelectedFilesBtn'),
+            triggerEl,
+        });
+    }
+    focusFilesBrowserAnchor();
 }
 
 // ===== DELETE file =====
@@ -264,7 +433,7 @@ function showSmuggleDialog(filePath, triggerEl = null) {
                 <div class="smuggle-dialog__header">
                     <h3 id="smuggleDialogTitle">${t('smuggleTitle')}</h3>
                     <p class="smuggle-dialog__file">
-                        ${t('smuggleFile')}: <span class="smuggle-dialog__path">${esc(filePath)}</span>
+                        <span class="smuggle-dialog__path">${esc(filePath)}</span>
                     </p>
                 </div>
                 <div class="smuggle-dialog__settings">
@@ -319,7 +488,7 @@ async function executeSmuggle(filePath, usePassword = false) {
 SMUGGLE ${esc(filePath)}
 <span class="status success">${t('smuggleGenerated')}</span>
 </div>
-<div class="response-body">${t('smuggleFile')}: ${esc(result.file)}
+<div class="response-body">${esc(result.file)}
 ${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}
 URL: ${esc(result.url)}
 

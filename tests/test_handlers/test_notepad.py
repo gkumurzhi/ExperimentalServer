@@ -18,6 +18,8 @@ class NotepadStubServer(HandlerMixin):
     def __init__(self, root_dir: Path, upload_dir: Path, **kwargs):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.notes_dir = root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
         self.method_handlers = {
@@ -139,18 +141,19 @@ class TestNotepadSave:
         data = json.loads(resp.body)
         assert len(data["title"]) == 200
 
-    def test_files_written_to_disk(self, server, upload_dir):
+    def test_files_written_to_disk(self, server):
         body = _make_note_payload("Disk Test", b"hello encrypted")
         req = make_request("NOTE", "/notes", body=body)
         resp = server.handle_note(req)
         note_id = json.loads(resp.body)["id"]
 
-        notes_dir = upload_dir / "notes"
+        notes_dir = server.notes_dir
         enc_path = notes_dir / f"{note_id}.enc"
         meta_path = notes_dir / f"{note_id}.meta.json"
         assert enc_path.exists()
         assert meta_path.exists()
         assert enc_path.read_bytes() == b"hello encrypted"
+        assert not (server.upload_dir / "notes").exists()
 
         meta = json.loads(meta_path.read_text())
         assert meta["title"] == "Disk Test"
@@ -224,7 +227,7 @@ class TestNotepadLoad:
 
 
 class TestNotepadDelete:
-    def test_delete_existing_note(self, server, upload_dir):
+    def test_delete_existing_note(self, server):
         body = _make_note_payload("Delete Me")
         req = make_request("NOTE", "/notes", body=body)
         resp = server.handle_note(req)
@@ -237,7 +240,7 @@ class TestNotepadDelete:
         assert data["success"] is True
 
         # Files should be gone
-        notes_dir = upload_dir / "notes"
+        notes_dir = server.notes_dir
         assert not (notes_dir / f"{note_id}.enc").exists()
         assert not (notes_dir / f"{note_id}.meta.json").exists()
 
@@ -261,6 +264,53 @@ class TestNotepadDelete:
         resp = server.handle_note(req)
         data = json.loads(resp.body)
         assert data["count"] == 0
+
+
+class TestNotepadClear:
+    def test_clear_notes_removes_notes_without_touching_uploads(self, server):
+        upload_file = server.upload_dir / "download.txt"
+        upload_file.write_text("keep", encoding="utf-8")
+
+        first = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("First", b"one"))
+        )
+        second = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("Second", b"two"))
+        )
+        assert json.loads(first.body)["success"] is True
+        assert json.loads(second.body)["success"] is True
+
+        req = make_request("NOTE", "/notes?clear=1")
+        resp = server.handle_note(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["success"] is True
+        assert data["cleared"] is True
+        assert data["path"] == "/notes"
+        assert data["deleted_files"] == 4
+        assert data["deleted_dirs"] == 0
+        assert data["preserved"] == []
+        assert upload_file.exists()
+        assert list(server.notes_dir.iterdir()) == []
+
+        list_resp = server.handle_note(make_request("NOTE", "/notes?list"))
+        assert json.loads(list_resp.body)["count"] == 0
+
+    def test_clear_notes_preserves_hidden_files(self, server):
+        hidden = server.notes_dir / ".gitkeep"
+        hidden.write_text("", encoding="utf-8")
+        visible = server.notes_dir / "visible.tmp"
+        visible.write_text("remove", encoding="utf-8")
+
+        resp = server.handle_note(make_request("NOTE", "/notes?clear=1"))
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["deleted_files"] == 1
+        assert data["preserved"] == [".gitkeep"]
+        assert hidden.exists()
+        assert not visible.exists()
 
 
 # ── Security tests ─────────────────────────────────────────────────
@@ -433,6 +483,15 @@ class TestNotepadRequiresCrypto:
 
         assert resp.status_code == 501
 
+    def test_clear_without_ecdh_manager_returns_501(self, temp_dir, upload_dir):
+        srv = NotepadStubServer(temp_dir, upload_dir)
+        srv._ecdh_manager = None
+
+        req = make_request("NOTE", "/notes?clear=1")
+        resp = srv.handle_note(req)
+
+        assert resp.status_code == 501
+
 
 # ── Save with session header tests ────────────────────────────────
 
@@ -465,7 +524,7 @@ class TestNotepadSaveWithSession:
         assert data["success"] is True
 
         # Verify meta has session flag
-        notes_dir = server.upload_dir / "notes"
+        notes_dir = server.notes_dir
         meta_path = notes_dir / f"{data['id']}.meta.json"
         meta = json.loads(meta_path.read_text())
         assert meta.get("session") is True
@@ -490,16 +549,15 @@ class TestNotepadSaveWithSession:
         assert resp.status_code == 201
         data = json.loads(resp.body)
 
-        notes_dir = server.upload_dir / "notes"
+        notes_dir = server.notes_dir
         meta_path = notes_dir / f"{data['id']}.meta.json"
         meta = json.loads(meta_path.read_text())
         assert "session" not in meta
 
 
 class TestNotepadCorruptMetadata:
-    def test_list_skips_non_object_metadata(self, server, upload_dir):
-        notes_dir = upload_dir / "notes"
-        notes_dir.mkdir()
+    def test_list_skips_non_object_metadata(self, server):
+        notes_dir = server.notes_dir
         (notes_dir / "broken.meta.json").write_text("[]")
 
         req = make_request("NOTE", "/notes?list")
@@ -510,10 +568,9 @@ class TestNotepadCorruptMetadata:
         assert data["count"] == 0
         assert data["notes"] == []
 
-    def test_list_includes_note_when_metadata_is_corrupt(self, server, upload_dir):
+    def test_list_includes_note_when_metadata_is_corrupt(self, server):
         note_id = "b" * 32
-        notes_dir = upload_dir / "notes"
-        notes_dir.mkdir()
+        notes_dir = server.notes_dir
         (notes_dir / f"{note_id}.enc").write_bytes(b"ciphertext")
         (notes_dir / f"{note_id}.meta.json").write_text("[]")
 
@@ -527,10 +584,9 @@ class TestNotepadCorruptMetadata:
         assert data["notes"][0]["title"] == ""
         assert data["notes"][0]["size"] == len(b"ciphertext")
 
-    def test_load_with_non_object_metadata_falls_back(self, server, upload_dir):
+    def test_load_with_non_object_metadata_falls_back(self, server):
         note_id = "a" * 32
-        notes_dir = upload_dir / "notes"
-        notes_dir.mkdir()
+        notes_dir = server.notes_dir
         (notes_dir / f"{note_id}.enc").write_bytes(b"ciphertext")
         (notes_dir / f"{note_id}.meta.json").write_text("[]")
 
@@ -542,10 +598,9 @@ class TestNotepadCorruptMetadata:
         assert data["id"] == note_id
         assert data["title"] == ""
 
-    def test_update_rewrites_corrupt_metadata_sidecar(self, server, upload_dir):
+    def test_update_rewrites_corrupt_metadata_sidecar(self, server):
         note_id = "c" * 32
-        notes_dir = upload_dir / "notes"
-        notes_dir.mkdir()
+        notes_dir = server.notes_dir
         (notes_dir / f"{note_id}.enc").write_bytes(b"old")
         (notes_dir / f"{note_id}.meta.json").write_text("{not json")
 

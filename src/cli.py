@@ -17,7 +17,7 @@ def create_parser() -> argparse.ArgumentParser:
     """Create and configure the argument parser."""
     parser = argparse.ArgumentParser(
         prog="exphttp",
-        description="HTTP server with custom methods, TLS, Auth, and OPSEC mode.",
+        description="HTTP server with custom methods, TLS, Auth, and uploads-only file access.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Quick start:
@@ -27,7 +27,6 @@ Quick start:
 
 Examples:
     exphttp -H 0.0.0.0 -p 443 --tls    Public HTTPS
-    exphttp --opsec --sandbox           OPSEC + Sandbox
     exphttp -d ./data -m 500            Custom dir, 500 MB limit
 
 Custom HTTP methods:
@@ -51,15 +50,6 @@ Custom HTTP methods:
 
     # Operating modes
     modes = parser.add_argument_group("Modes")
-    modes.add_argument(
-        "-o",
-        "--opsec",
-        action="store_true",
-        help="OPSEC mode (randomized method names, nginx masquerade)",
-    )
-    modes.add_argument(
-        "-s", "--sandbox", action="store_true", help="Sandbox mode (restrict access to uploads/)"
-    )
     modes.add_argument("-q", "--quiet", action="store_true", help="Quiet mode (minimal logging)")
     modes.add_argument("--debug", action="store_true", help="Debug mode (verbose logging)")
     modes.add_argument("--open", action="store_true", help="Open browser after start")
@@ -152,8 +142,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "host": args.host,
         "port": args.port,
         "root_dir": args.dir,
-        "opsec_mode": args.opsec,
-        "sandbox_mode": args.sandbox,
         "max_upload_size": args.max_size * 1024 * 1024,
         "max_workers": args.workers,
         "quiet": args.quiet,

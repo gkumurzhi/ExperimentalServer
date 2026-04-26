@@ -61,9 +61,8 @@ class BaseHandler:
     # Attributes set from the server
     root_dir: Path
     upload_dir: Path
+    notes_dir: Path
     method_handlers: Mapping[str, "Handler"]
-    sandbox_mode: bool
-    opsec_mode: bool
     _temp_smuggle_files: set[str]
     _smuggle_lock: "threading.Lock"
     _ecdh_manager: "ECDHKeyManager | None"
@@ -79,7 +78,7 @@ class BaseHandler:
 
         Args:
             url_path: URL request path
-            for_sandbox: If True and sandbox_mode is on, restrict access to uploads dir
+            for_sandbox: If True, restrict access to uploads dir
         """
         if url_path == "/":
             url_path = "/index.html"
@@ -87,21 +86,12 @@ class BaseHandler:
         # Strip leading slash and normalize path
         clean_path = url_path.lstrip("/")
 
-        # In sandbox mode, certain operations are restricted to uploads
-        if for_sandbox and self.sandbox_mode:
+        if for_sandbox:
             # Strip uploads/ prefix if present
             if clean_path.startswith("uploads/"):
                 clean_path = clean_path[8:]  # len("uploads/") = 8
-            elif clean_path.startswith("static/"):
-                # static/ — first look in root_dir, then in package
-                file_path = resolve_descendant_path(
-                    clean_path.removeprefix("static/"),
-                    self.root_dir / "static",
-                )
-                if file_path and file_path.exists():
-                    return file_path
-                # Fallback to package resources
-                return get_package_resource(clean_path)
+            elif clean_path == "uploads":
+                clean_path = ""
             file_path = resolve_descendant_path(clean_path, self.upload_dir)
             if file_path is None:
                 logger.warning(f"Path traversal blocked: {url_path}")
@@ -152,9 +142,7 @@ class BaseHandler:
     get_metrics: "Callable[[], dict[str, object]]"
 
     def _serve_metrics(self) -> "HTTPResponse":
-        """Return server metrics as JSON. Hidden in OPSEC mode."""
-        if self.opsec_mode:
-            return self._not_found("/metrics")
+        """Return server metrics as JSON."""
         import json
 
         metrics = self.get_metrics()

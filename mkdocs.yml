@@ -1,5 +1,5 @@
 site_name: ExperimentalHTTPServer
-site_description: Experimental HTTP server with custom methods, TLS, Basic Auth, OPSEC mode
+site_description: Experimental HTTP server with custom methods, TLS, Basic Auth, and uploads-only file access
 repo_url: https://github.com/gkumurzhi/ExperimentalServer
 edit_uri: edit/main/docs/
 
@@ -53,9 +53,9 @@ nav:
       - ADR index: ADR/README.md
       - Overview: architecture.md
       - ADR-001 · Handler registry: ADR/ADR-001-handler-registry.md
-      - ADR-002 · OPSEC cipher: ADR/ADR-002-opsec-xor-hmac.md
+      - ADR-002 · Advanced upload payloads: ADR/ADR-002-advanced-upload-xor-hmac.md
       - ADR-003 · Optional cryptography: ADR/ADR-003-cryptography-optional.md
-      - ADR-004 · Sandbox via relative_to: ADR/ADR-004-sandbox-relative-to.md
+      - ADR-004 · Uploads via relative_to: ADR/ADR-004-uploads-relative-to.md
       - ADR-005 · Concurrency model: ADR/ADR-005-threadpool-over-asyncio.md
   - Security:
       - Threat model: threat-model.md

@@ -12,7 +12,7 @@ def xor_encrypt(data: bytes, password: str) -> bytes:
     XOR encryption using a SHA256-derived key.
 
     NOTE: This implementation intentionally differs from security/crypto.py!
-    - security/crypto.py: XOR with raw password (for server-side OPSEC encryption)
+    - security/crypto.py: XOR with raw password (for advanced upload payloads)
     - utils/smuggling.py: XOR with SHA256(password) (for HTML Smuggling / browser)
 
     The browser-side JavaScript (CryptoJS.SHA256) uses a SHA256-derived key,

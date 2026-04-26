@@ -7,6 +7,7 @@ import binascii
 import json
 import logging
 import secrets
+import shutil
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -107,6 +108,26 @@ class DeleteNoteResult:
         return {"success": True, "id": self.note_id}
 
 
+@dataclass(frozen=True, slots=True)
+class ClearNotesResult:
+    """Successful clear-notes result."""
+
+    deleted_files: int
+    deleted_dirs: int
+    preserved: list[str]
+
+    def to_dict(self) -> dict[str, object]:
+        """Serialize the clear result for JSON responses."""
+        return {
+            "success": True,
+            "cleared": True,
+            "path": "/notes",
+            "deleted_files": self.deleted_files,
+            "deleted_dirs": self.deleted_dirs,
+            "preserved": self.preserved,
+        }
+
+
 class NotepadServiceError(Exception):
     """Typed note-domain error that transports can map into responses."""
 
@@ -125,12 +146,12 @@ class NotepadService:
 
     def __init__(
         self,
-        upload_dir: Path,
+        notes_dir: Path,
         notes_lock: threading.Lock,
         *,
         session_exists: Callable[[str], bool] | None = None,
     ) -> None:
-        self._upload_dir = upload_dir
+        self._notes_dir = notes_dir
         self._notes_lock = notes_lock
         self._session_exists = session_exists
 
@@ -247,9 +268,49 @@ class NotepadService:
         logger.debug("Note deleted: %s", note_id)
         return DeleteNoteResult(note_id=note_id)
 
+    def clear_notes(self) -> ClearNotesResult:
+        """Delete all user-visible entries from the notes directory."""
+        notes_dir = self._get_notes_dir()
+        deleted_files = 0
+        deleted_dirs = 0
+        preserved: list[str] = []
+        errors: list[str] = []
+
+        with self._notes_lock:
+            for entry in sorted(notes_dir.iterdir(), key=lambda path: path.name):
+                if entry.name.startswith("."):
+                    preserved.append(entry.name)
+                    continue
+
+                try:
+                    if entry.is_dir() and not entry.is_symlink():
+                        shutil.rmtree(entry)
+                        deleted_dirs += 1
+                    else:
+                        entry.unlink()
+                        deleted_files += 1
+                except OSError as exc:
+                    errors.append(f"{entry.name}: {exc}")
+
+        if errors:
+            logger.error("Note clear failed: %s", "; ".join(errors))
+            raise NotepadServiceError(500, "Failed to clear notes")
+
+        logger.debug(
+            "Cleared notes/: %s files, %s directories, %s preserved",
+            deleted_files,
+            deleted_dirs,
+            len(preserved),
+        )
+        return ClearNotesResult(
+            deleted_files=deleted_files,
+            deleted_dirs=deleted_dirs,
+            preserved=preserved,
+        )
+
     def _get_notes_dir(self) -> Path:
         """Return the notes directory, creating it lazily."""
-        notes_dir = self._upload_dir / "notes"
+        notes_dir = self._notes_dir
         notes_dir.mkdir(parents=True, exist_ok=True)
         return notes_dir
 
@@ -332,6 +393,7 @@ class NotepadService:
 
 
 __all__ = [
+    "ClearNotesResult",
     "DeleteNoteResult",
     "ListNotesResult",
     "LoadNoteResult",

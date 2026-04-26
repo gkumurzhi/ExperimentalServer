@@ -9,12 +9,16 @@ Error responses use JSON format: `{"error": "message", "status": NNN}`.
 
 ## GET
 
-Serve files from the root directory (or `uploads/` in sandbox mode).
+Serve the bundled web UI, bundled static assets, and user files from `uploads/`.
 
 **Request:**
 ```
-GET /path/to/file HTTP/1.1
+GET /uploads/path/to/file HTTP/1.1
 ```
+
+`GET /` and `GET /index.html` serve the built-in UI. `GET /static/...` serves
+the built-in UI assets. Other file paths are resolved inside `uploads/`;
+`/file.txt` and `/uploads/file.txt` both target `<root>/uploads/file.txt`.
 
 **Response:** File contents with appropriate `Content-Type`. HTML files include `Content-Security-Policy` header.
 
@@ -28,7 +32,7 @@ Returns the same headers as GET but with no response body. Useful for checking f
 
 **Request:**
 ```
-HEAD /path/to/file HTTP/1.1
+HEAD /uploads/path/to/file HTTP/1.1
 ```
 
 **Response:** Same status code and headers as GET (200 or 404), empty body.
@@ -79,7 +83,9 @@ Aliases for POST/NONE (upload). All four methods (POST, PUT, PATCH, NONE) use th
 
 ## DELETE
 
-Delete a file from `uploads/`. Always sandbox-restricted — only files inside `uploads/` can be deleted.
+Delete a file from `uploads/`. Only files inside `uploads/` can be deleted.
+To clear the upload workspace, use the explicit clear flag; plain
+`DELETE /uploads` still rejects directory deletion.
 
 **Request:**
 ```
@@ -94,6 +100,27 @@ DELETE /uploads/filename.txt HTTP/1.1
   "path": "/uploads/filename.txt"
 }
 ```
+
+**Clear uploads request:**
+```
+DELETE /uploads?clear=1 HTTP/1.1
+```
+
+**Clear uploads response (200):**
+```json
+{
+  "success": true,
+  "cleared": true,
+  "path": "/uploads",
+  "deleted_files": 3,
+  "deleted_dirs": 1,
+  "preserved": [".gitkeep"]
+}
+```
+
+Hidden service files such as `.gitkeep` are preserved. A legacy `uploads/notes/`
+directory is also preserved; current notepad storage lives in the separate
+top-level `notes/` directory.
 
 **Status codes:** `200` OK, `403` Outside uploads/, `404` Not Found, `400` Cannot delete directory
 
@@ -118,11 +145,13 @@ FETCH /uploads/file.txt HTTP/1.1
 
 ## INFO
 
-Directory listing as JSON. Supports pagination via query parameters.
+Directory listing as JSON. Supports pagination via query parameters. Paths are
+always resolved inside `uploads/`; `/` and `/uploads/` both describe the upload
+workspace.
 
 **Request:**
 ```
-INFO /path?offset=0&limit=100 HTTP/1.1
+INFO /uploads/path?offset=0&limit=100 HTTP/1.1
 ```
 
 **Query parameters:**
@@ -168,8 +197,8 @@ PING / HTTP/1.1
   "server": "ExperimentalHTTPServer/2.0.0",
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
-  "sandbox_mode": false,
-  "opsec_mode": false,
+  "access_scope": "uploads",
+  "advanced_upload": true,
   "metrics": {
     "uptime_seconds": 3600.5,
     "total_requests": 150,
@@ -209,7 +238,7 @@ SMUGGLE /uploads/file.txt?encrypt=1 HTTP/1.1
 
 ## NOTE
 
-Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow requires the `cryptography` package; when the server is installed without `exphttp[crypto]`, NOTE operations fail closed with `501`. Notes are stored in `uploads/notes/` as `<id>.enc` + `<id>.meta.json` pairs.
+Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow requires the `cryptography` package; when the server is installed without `exphttp[crypto]`, NOTE operations fail closed with `501`. Notes are stored in the separate top-level `notes/` directory as `<id>.enc` + `<id>.meta.json` pairs, alongside `uploads/` rather than inside it.
 
 ### NOTE /notes/key
 
@@ -359,6 +388,34 @@ NOTE /notes/a1b2c3d4...?delete HTTP/1.1
 
 ---
 
+### NOTE /notes?clear=1 — clear all notes
+
+Deletes all user-visible entries from the separate `notes/` directory. Files in
+`uploads/` are not touched.
+
+**Request:**
+```
+NOTE /notes?clear=1 HTTP/1.1
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "cleared": true,
+  "path": "/notes",
+  "deleted_files": 4,
+  "deleted_dirs": 0,
+  "preserved": []
+}
+```
+
+Hidden files inside `notes/` are preserved.
+
+**Status codes:** `200` OK, `500` Clear failed, `501` Secure Notepad unavailable without `exphttp[crypto]`
+
+---
+
 ## WebSocket — /notes/ws
 
 Real-time notepad sync over WebSocket (RFC 6455). The server detects an upgrade request on any path starting with `/notes/ws` and performs the handshake inline, before the normal HTTP handler runs. The connection uses a 60-second idle timeout; the server sends a ping frame when idle to keep the connection alive. When the server is installed without `exphttp[crypto]`, the upgrade is rejected with `501`.
@@ -411,19 +468,14 @@ CORS preflight handler. Returns allowed methods.
 
 ---
 
-## OPSEC Mode
+## Advanced Upload
 
-When `--opsec` is enabled, the server generates randomized aliases for the
-OPSEC-sensitive upload, download, info, ping, and notepad flows. The
-mapping is saved to `.opsec_config.json` in the root directory. Standard
-methods remain routable for compatibility, but OPSEC mode hides the custom
-surface in CORS and error responses.
+Advanced upload is enabled by default and does not require a startup flag. Any
+unknown, non-standard HTTP method that carries advanced upload data is treated
+as an upload request and writes only to `uploads/`.
 
-The server masquerades as nginx and does not expose custom method names in
-CORS or error responses. Any non-standard method that carries OPSEC upload
-data is also treated as an upload request.
-
-OPSEC-specific upload endpoint accepts encoded payloads via JSON body, HTTP headers, or query parameters. Common fields are:
+The advanced upload endpoint accepts encoded payloads via JSON body, HTTP
+headers, or query parameters. Common fields are:
 
 - `d` / `data`: base64-encoded payload
 - `e`: encryption mode
@@ -434,11 +486,31 @@ OPSEC-specific upload endpoint accepts encoded payloads via JSON body, HTTP head
 
 Header transport also supports chunked payload headers `X-D-0`, `X-D-1`, ... for long values.
 
+**JSON body example:**
+
+**Request:**
+```
+CHECKDATA / HTTP/1.1
+Content-Type: application/json
+
+{"d": "SGVsbG8=", "n": "hello.txt"}
+```
+
+**Response (200):**
+```json
+{
+  "ok": true,
+  "id": "a1b2c3d4e5f67890",
+  "sz": 5,
+  "transport": "body"
+}
+```
+
 **Header transport example:**
 
 **Request:**
 ```
-<RANDOM_METHOD> /filename HTTP/1.1
+CHECKDATA /filename HTTP/1.1
 X-D: <base64-payload>
 X-E: xor
 X-K: <password>
@@ -467,7 +539,7 @@ Failed auth returns `401` with `WWW-Authenticate` header. Rate limiting applies 
 
 | Header | Description |
 |--------|-------------|
-| `X-Request-Id` | Unique request correlation ID (not in OPSEC mode) |
+| `X-Request-Id` | Unique request correlation ID |
 | `X-Upload-Status` | Upload result: `success`, `error`, `no-data` |
 | `X-Fetch-Status` | Download result: `success`, `file-not-found` |
 | `X-File-Name` | Sanitized filename |

@@ -10,7 +10,7 @@ src/
   metrics.py           # MetricsCollector (thread-safe counters)
   notepad_service.py   # NOTE domain logic shared by HTTP and WebSocket
   request_pipeline.py  # auth/dispatch/send orchestration
-  config.py            # constants: hidden files, OPSEC prefixes, status map
+  config.py            # constants: hidden files, status map
   websocket.py         # RFC 6455 frame parser and handshake
   http/
     request.py         # HTTPRequest parser
@@ -23,11 +23,11 @@ src/
     files.py           # GET/POST/PUT/DELETE/FETCH/NONE
     info.py            # INFO, PING
     notepad.py         # NOTE HTTP handlers
-    opsec.py           # randomised upload method
+    advanced_upload.py # advanced upload transports
     smuggle.py         # SMUGGLE (HTML smuggling demo)
   security/
     auth.py            # Basic Auth + rate limiter
-    crypto.py          # XOR/HMAC/AES-GCM OPSEC payload
+    crypto.py          # XOR/HMAC helpers
     keys.py            # ECDH P-256 for Secure Notepad
     tls.py             # cert generation helpers + Let's Encrypt integration
     tls_manager.py     # TLSManager: SSL context lifecycle + temp files
@@ -71,7 +71,11 @@ See [ADR-005](ADR/ADR-005-threadpool-over-asyncio.md). One accept loop,
    `src.http.utils.resolve_descendant_path()` under
    `BaseHandler._get_file_path()` / `_resolve_safe_path()`, plus
    `HIDDEN_FILES` checks in handler policy.
-4. **Obfuscation** — OPSEC mode (random method names, nginx header spoof,
-   XOR+HMAC or AES-GCM payload encryption).
+4. **Upload scope** — all user-visible file reads and writes are constrained
+   to `<root>/uploads/`; the built-in UI and `/static/...` are served
+   read-only package resources.
+5. **Advanced upload** — unknown non-standard methods carrying upload payload
+   data are routed to `AdvancedUploadHandlersMixin`, which supports JSON body,
+   header, chunked-header, and URL transports.
 
 See the [threat model](threat-model.md) for what each layer buys you.

@@ -38,7 +38,6 @@ class HTTPResponse:
 
     def build_headers(
         self,
-        opsec_mode: bool = False,
         cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
@@ -46,7 +45,6 @@ class HTTPResponse:
     ) -> bytes:
         """Build only the HTTP header portion (for streaming)."""
         self._finalize_headers(
-            opsec_mode,
             cors_origin,
             keep_alive,
             keep_alive_timeout,
@@ -64,7 +62,6 @@ class HTTPResponse:
 
     def build(
         self,
-        opsec_mode: bool = False,
         cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
@@ -73,7 +70,6 @@ class HTTPResponse:
         """Build the full HTTP response as bytes."""
         return (
             self.build_headers(
-                opsec_mode,
                 cors_origin,
                 keep_alive,
                 keep_alive_timeout,
@@ -84,17 +80,13 @@ class HTTPResponse:
 
     def _finalize_headers(
         self,
-        opsec_mode: bool,
         cors_origin: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
     ) -> None:
         """Add standard headers (Server, Date, Connection, CORS)."""
-        if opsec_mode:
-            self.set_header("Server", "nginx")
-        else:
-            self.set_header("Server", f"ExperimentalHTTPServer/{__version__}")
+        self.set_header("Server", f"ExperimentalHTTPServer/{__version__}")
 
         self.set_header("Date", datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
 
@@ -104,9 +96,9 @@ class HTTPResponse:
         else:
             self.set_header("Connection", "close")
 
-        self._set_cors_headers(opsec_mode, cors_origin)
+        self._set_cors_headers(cors_origin)
 
-    def _set_cors_headers(self, opsec_mode: bool, cors_origin: str | None = None) -> None:
+    def _set_cors_headers(self, cors_origin: str | None = None) -> None:
         """Set CORS headers."""
         if not cors_origin:
             return
@@ -115,14 +107,10 @@ class HTTPResponse:
             self.set_header("Access-Control-Allow-Origin", cors_origin)
 
         if "Access-Control-Allow-Methods" not in self.headers:
-            if opsec_mode:
-                # In OPSEC mode, do not expose all methods
-                self.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
-            else:
-                self.set_header(
-                    "Access-Control-Allow-Methods",
-                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS",
-                )
+            self.set_header(
+                "Access-Control-Allow-Methods",
+                "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS",
+            )
 
         if "Access-Control-Allow-Headers" not in self.headers:
             self.set_header(
@@ -131,7 +119,7 @@ class HTTPResponse:
                 "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9",
             )
 
-        if "Access-Control-Expose-Headers" not in self.headers and not opsec_mode:
+        if "Access-Control-Expose-Headers" not in self.headers:
             self.set_header(
                 "Access-Control-Expose-Headers",
                 "X-File-Name, X-File-Size, X-File-Path, "

@@ -43,7 +43,6 @@ class _PipelineServerStub:
     KEEP_ALIVE_TIMEOUT = 15
 
     def __init__(self) -> None:
-        self.opsec_mode = False
         self.cors_origin: str | None = None
         self._ecdh_manager: object | None = object()
         self.use_keep_alive = False
@@ -196,7 +195,6 @@ class TestRequestPipeline:
             {
                 "status": 204,
                 "build_args": {
-                    "opsec_mode": False,
                     "cors_origin": None,
                     "keep_alive": True,
                     "keep_alive_timeout": 15,

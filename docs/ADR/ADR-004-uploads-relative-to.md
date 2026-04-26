@@ -1,4 +1,4 @@
-# ADR-004: Sandbox enforcement via `Path.relative_to`
+# ADR-004: Uploads-only enforcement via `Path.relative_to`
 
 - **Status:** accepted
 
@@ -41,10 +41,11 @@ Additionally:
 
 - Symlinks are resolved *before* the check, so a symlink under `uploads/`
   pointing to `/etc/passwd` is rejected.
-- Hidden files (`.opsec_config.json`, `.env`, …) are blocked by an explicit
-  `HIDDEN_FILES` frozenset in `src/config.py`, independent of sandbox mode.
-- The check is centralised in `BaseHandler._safe_join` so no handler
-  implements its own path validation.
+- Hidden files (`.env`, `.gitignore`, legacy service files, …) are blocked by
+  an explicit `HIDDEN_FILES` frozenset in `src/config.py`.
+- The check is centralised in `resolve_descendant_path()` and
+  `BaseHandler._resolve_safe_path()` so handlers do not implement their own
+  path validation.
 
 We considered chroot/container-level isolation but rejected it as
 out-of-scope: the project is a library, not a runtime.

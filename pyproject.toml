@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "exphttp"
 dynamic = ["version"]
-description = "Experimental HTTP server with custom methods, TLS, Basic Auth, and OPSEC mode"
+description = "Experimental HTTP server with custom methods, TLS, Basic Auth, and uploads-only file access"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -16,7 +16,7 @@ keywords = [
     "https",
     "file-upload",
     "file-server",
-    "opsec",
+    "advanced-upload",
     "custom-methods",
 ]
 classifiers = [

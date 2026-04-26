@@ -6,7 +6,7 @@
 ## Context
 
 The server originally composed five mixin classes (`FileHandlersMixin`,
-`InfoHandlersMixin`, `NotepadHandlersMixin`, `OpsecHandlersMixin`,
+`InfoHandlersMixin`, `NotepadHandlersMixin`, `AdvancedUploadHandlersMixin`,
 `SmuggleHandlersMixin`) into a single `HandlerMixin`, and the server
 inherited from it. Adding a new handler meant creating a mixin, inserting it
 into the MRO, and registering the method name in a plain `dict` inside the
@@ -17,9 +17,9 @@ Problems:
 - Mixins share MRO with the server, so every handler implicitly depends on
   all server attributes (sockets, TLS, rate limiter). This complicates unit
   testing — you cannot instantiate a handler without a live server.
-- OPSEC-mode random method names required special-cased lookup (`_get_opsec_handler`),
-  because the static `method_handlers` dict could not be extended at runtime
-  in a first-class way.
+- Experimental custom-method routing required special-cased lookup in early
+  drafts because the static `method_handlers` dict could not be extended at
+  runtime in a first-class way.
 - No way to introspect which methods are available without reflection.
 
 ## Decision
@@ -38,8 +38,7 @@ is a larger change and is deferred.
 
 ### Positive
 
-- Dynamic registration (OPSEC-mode methods, plugin handlers) is now
-  ergonomic.
+- Dynamic registration for custom methods and plugin handlers is now ergonomic.
 - `server.method_handlers` remains a `Mapping`, so existing tests and the
   INFO handler work unchanged.
 - Routing becomes testable in isolation — pass a plain registry and dispatch

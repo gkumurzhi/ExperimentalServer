@@ -14,6 +14,7 @@ class ConcreteHandler(BaseHandler):
     def __init__(self, root_dir: Path, upload_dir: Path, sandbox: bool = False):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.notes_dir = root_dir / "notes"
         self.method_handlers = {}
         self.sandbox_mode = sandbox
         self.opsec_mode = False

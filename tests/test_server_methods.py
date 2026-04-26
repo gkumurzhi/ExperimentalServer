@@ -28,11 +28,11 @@ class ServerStub(HandlerMixin):
         *,
         auth: BasicAuthenticator | None = None,
         opsec: bool = False,
-    ):
+        ):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
-        self.sandbox_mode = False
-        self.opsec_mode = opsec
+        self.notes_dir = root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
@@ -52,15 +52,6 @@ class ServerStub(HandlerMixin):
             "OPTIONS": self.handle_options,
             "NONE": self.handle_none,
         }
-        self.opsec_methods: dict[str, str] = {}
-        if opsec:
-            self.opsec_methods = {
-                "upload": "XUPLOAD",
-                "download": "XDOWNLOAD",
-                "info": "XINFO",
-                "ping": "XPING",
-                "notepad": "XNOTE",
-            }
 
     def get_metrics(self):
         return {
@@ -107,44 +98,21 @@ class ServerStub(HandlerMixin):
 
     # Mirror of ExperimentalHTTPServer._dispatch_handler
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
-        if self.opsec_mode:
-            handler = self._get_opsec_handler(request)
-        else:
-            handler = self.method_handlers.get(request.method)
+        handler = self.method_handlers.get(request.method)
         if handler:
             return handler(request)
-        if self.opsec_mode:
-            response = HTTPResponse(404)
-            response.set_body(
-                json.dumps({"error": "Not Found", "status": 404}),
-                "application/json",
-            )
-            return response
+        if self._has_advanced_upload_payload(request):
+            return self.handle_advanced_upload(request)
         return self._method_not_allowed(request.method)
 
-    def _get_opsec_handler(self, request):
-        method = request.method
-        if method in self.method_handlers:
-            return self.method_handlers.get(method)
-        if method == self.opsec_methods.get("upload"):
-            return self.handle_opsec_upload
-        if method == self.opsec_methods.get("download"):
-            return self.handle_fetch
-        if method == self.opsec_methods.get("info"):
-            return self.handle_info
-        if method == self.opsec_methods.get("ping"):
-            return self.handle_ping
-        if method == self.opsec_methods.get("notepad"):
-            return self.handle_note
-        has_data = (
+    @staticmethod
+    def _has_advanced_upload_payload(request):
+        return bool(
             request.body
             or request.headers.get("x-d")
             or request.headers.get("x-d-0")
             or request.query_params.get("d")
         )
-        if has_data:
-            return self.handle_opsec_upload
-        return None
 
 
 @pytest.fixture
@@ -161,9 +129,9 @@ def auth_server(temp_dir, upload_dir):
 
 
 @pytest.fixture
-def opsec_server(temp_dir, upload_dir):
+def advanced_upload_server(temp_dir, upload_dir):
     (temp_dir / "index.html").write_text("<html>ok</html>")
-    return ServerStub(temp_dir, upload_dir, opsec=True)
+    return ServerStub(temp_dir, upload_dir)
 
 
 ADDR = ("127.0.0.1", 12345)
@@ -225,19 +193,25 @@ class TestDispatchHandler:
         assert resp.status_code == 405
         assert "Allow" in resp.headers
 
-    def test_opsec_unknown_method_returns_404(self, opsec_server):
+    def test_unknown_method_without_advanced_payload_returns_405(self, advanced_upload_server):
         req = make_request("CONNECT", "/")
-        resp = opsec_server._dispatch_handler(req)
-        assert resp.status_code == 404
+        resp = advanced_upload_server._dispatch_handler(req)
+        assert resp.status_code == 405
 
-    def test_real_server_opsec_unknown_method_returns_404(self, temp_dir):
+    def test_real_server_unknown_method_with_advanced_payload_uploads(self, temp_dir):
+        import base64
+
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, opsec_mode=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
-        resp = server._dispatch_handler(make_request("CONNECT", "/"))
+        payload = base64.b64encode(b"advanced upload").decode("ascii")
+        resp = server._dispatch_handler(
+            make_request("CONNECT", "/", headers={"X-D": payload, "X-N": "advanced.txt"})
+        )
 
-        assert resp.status_code == 404
-        assert json.loads(resp.body) == {"error": "Not Found", "status": 404}
+        assert resp.status_code == 200
+        assert json.loads(resp.body)["ok"] is True
+        assert (server.upload_dir / "advanced.txt").read_bytes() == b"advanced upload"
 
 
 class TestWebSocketOriginValidation:
@@ -437,17 +411,28 @@ class TestServerHelpers:
         assert not stale.exists()
         assert keep.exists()
 
-    def test_generate_opsec_methods_produces_unique_method_names(self, temp_dir):
+    def test_server_migrates_legacy_upload_notes_to_top_level_notes(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, opsec_mode=True)
+        legacy_notes = temp_dir / "uploads" / "notes"
+        legacy_notes.mkdir(parents=True)
+        (legacy_notes / "abc.enc").write_bytes(b"ciphertext")
+        (legacy_notes / "abc.meta.json").write_text("{}", encoding="utf-8")
 
-        assert len(server.opsec_methods) == 5
-        assert len(set(server.opsec_methods.values())) == len(server.opsec_methods)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
-    def test_should_keep_alive_respects_http_version_and_opsec(self, temp_dir):
+        assert (server.notes_dir / "abc.enc").read_bytes() == b"ciphertext"
+        assert (server.notes_dir / "abc.meta.json").read_text(encoding="utf-8") == "{}"
+        assert not legacy_notes.exists()
+
+    def test_server_does_not_generate_legacy_method_config(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+
+        assert not (temp_dir / ".opsec_config.json").exists()
+
+    def test_should_keep_alive_respects_http_version(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
-        opsec_server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, opsec_mode=True)
 
         http11 = make_request("GET", "/")
         http11_close = make_request("GET", "/", headers={"Connection": "close"})
@@ -458,7 +443,6 @@ class TestServerHelpers:
         assert server._should_keep_alive(http11_close) is False
         assert server._should_keep_alive(http10) is False
         assert server._should_keep_alive(http10_keep) is True
-        assert opsec_server._should_keep_alive(http11) is False
 
     def test_resolve_keep_alive_disables_when_request_budget_is_exhausted(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -574,24 +558,15 @@ class TestServerHelpers:
         assert response.headers["Content-Encoding"] == "gzip"
         assert gzip.decompress(response.body) == payload
 
-    def test_get_opsec_handler_maps_known_and_unknown_methods(self, temp_dir):
+    def test_advanced_upload_payload_detection(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, opsec_mode=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
-        assert server._get_opsec_handler(make_request("GET", "/")) == server.handle_get
-        assert (
-            server._get_opsec_handler(make_request(server.opsec_methods["download"], "/"))
-            == server.handle_fetch
-        )
-        assert (
-            server._get_opsec_handler(make_request(server.opsec_methods["ping"], "/"))
-            == server.handle_ping
-        )
-        assert (
-            server._get_opsec_handler(make_request(server.opsec_methods["notepad"], "/notes"))
-            == server.handle_note
-        )
-        assert server._get_opsec_handler(make_request("STEALTH", "/")) is None
+        assert server._has_advanced_upload_payload(make_request("STEALTH", "/")) is False
+        assert server._has_advanced_upload_payload(make_request("STEALTH", "/?d=abc")) is True
+        assert server._has_advanced_upload_payload(
+            make_request("STEALTH", "/", headers={"X-D": "abc"})
+        ) is True
 
     def test_send_response_streams_file_with_close_connection(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -606,7 +581,6 @@ class TestServerHelpers:
             response,
             sock,
             {
-                "opsec_mode": False,
                 "cors_origin": None,
                 "keep_alive": True,
                 "keep_alive_timeout": 15,
@@ -760,8 +734,6 @@ class TestServerHelpers:
             root_dir=str(temp_dir),
             quiet=True,
             auth="admin:secret",
-            sandbox_mode=True,
-            opsec_mode=True,
             open_browser=True,
             tls=True,
         )
@@ -796,8 +768,8 @@ class TestServerHelpers:
         assert "https://127.0.0.1:8080" in output
         assert "[TLS]     certificate: self-signed" in output
         assert "[AUTH]    Basic Auth enabled" in output
-        assert "[SANDBOX] access restricted to uploads/" in output
-        assert "[OPSEC]   randomized methods -> .opsec_config.json" in output
+        assert "File access: uploads/ only" in output
+        assert "Advanced upload: enabled" in output
         assert "Shutting down..." in output
         assert "Server stopped" in output
         assert listening_socket.bound == ("127.0.0.1", 8080)

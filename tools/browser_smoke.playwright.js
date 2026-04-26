@@ -12,6 +12,32 @@ async (page) => {
     await page.locator("#uploadBtn").waitFor({ state: "attached" });
   }
 
+  async function installClipboardMock() {
+    const installMock = () => {
+      window.__exphttpBrowserClipboardText = String(window.__exphttpBrowserClipboardText || "");
+      if (window.__exphttpClipboardMockInstalled) {
+        return;
+      }
+
+      const clipboard = {
+        writeText: async (text) => {
+          window.__exphttpBrowserClipboardText = String(text ?? "");
+        },
+        readText: async () => String(window.__exphttpBrowserClipboardText || ""),
+      };
+
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        get: () => clipboard,
+      });
+
+      window.__exphttpClipboardMockInstalled = true;
+    };
+
+    await page.addInitScript(installMock);
+    await page.evaluate(installMock);
+  }
+
   async function waitForPageCondition(label, pageFunction, arg = null, timeout = 10000) {
     try {
       await page.waitForFunction(pageFunction, arg, { timeout });
@@ -144,22 +170,6 @@ async (page) => {
     );
   }
 
-  async function waitForCapabilityChipPressed(tabName, timeout = 10000) {
-    await waitForPageCondition(
-      `waitForCapabilityChipPressed(${tabName})`,
-      ([targetTabName]) => {
-        const chip = document.querySelector(`.capability-chip[data-tab-target="${targetTabName}"]`);
-        return Boolean(
-          chip &&
-          chip.classList.contains("active") &&
-          chip.getAttribute("aria-pressed") === "true"
-        );
-      },
-      [tabName],
-      timeout
-    );
-  }
-
   async function assertOutputLiveRegionContracts(timeout = 10000) {
     await waitForPageCondition(
       "assertOutputLiveRegionContracts",
@@ -277,6 +287,10 @@ async (page) => {
     await waitForText(page.locator("#tab-upload"), uploadTabText);
     await waitForText(page.locator("#tab-files"), filesTabText);
     await waitForText(page.locator("#tab-opsec"), opsecTabText);
+    await waitForPageCondition("upload tabs are adjacent", () => {
+      const ids = Array.from(document.querySelectorAll(".tool-tabs .tab")).map((tab) => tab.id);
+      return ids.join(",") === "tab-upload,tab-opsec,tab-files,tab-notepad";
+    });
     await waitForText(page.locator("#notepadNoteList"), noteListText);
     await waitForText(page.locator("#notepadCharCount"), charCountText);
     await waitForPageCondition(
@@ -307,66 +321,1311 @@ async (page) => {
     await waitForText(page.locator("#uploadResponseArea"), name);
   }
 
-  async function assertCapabilityChipKeyboardActivation(tabName) {
-    const chip = page.locator(`.capability-chip[data-tab-target="${tabName}"]`);
-    await chip.focus();
-    await page.keyboard.press("Enter");
-    await waitForCapabilityChipPressed(tabName);
-    await waitForTabState(tabName, { focused: true });
-  }
-
-  async function browseUploadsAndAssert(name, options = {}) {
-    if (options.useCapabilityChip) {
-      await page.locator('.capability-chip[data-tab-target="files"]').click();
-      await waitForCapabilityChipPressed("files");
-      await waitForTabState("files");
-      await waitForPageCondition(
-        "capability chip pointer activation keeps chip focus",
-        () => {
-          const chip = document.querySelector('.capability-chip[data-tab-target="files"]');
-          return document.activeElement === chip;
-        },
-        null,
-        10000
-      );
-    } else {
-      await page.locator("#tab-files").click();
-      await waitForTabState("files", { focused: true });
-      await waitForCapabilityChipPressed("files");
-    }
+  async function browseUploadsAndAssert(name) {
+    await page.locator("#tab-files").click();
+    await waitForTabState("files", { focused: true });
     await page.locator("#browsePathInput").fill("/uploads");
-    await page.getByRole("button", { name: /Обзор \(INFO\)|Browse \(INFO\)/ }).click();
+    await page.getByRole("button", { name: /^(Обзор(?: \(INFO\))?|Browse(?: \(INFO\))?)$/ }).click();
     await waitForText(page.locator("#serverFiles"), name);
   }
 
-  async function fetchViaRequestPanelAndAssert(name) {
-    const requestPath = `/uploads/${name}`;
-    await page.locator("#pathInput").fill(requestPath);
-    await page.getByRole("button", { name: "FETCH" }).click();
-    await waitForText(page.locator("#responseArea"), requestPath);
+  async function waitForRequestPanelResponse(method, status, path, timeout = 15000) {
+    await waitForPageCondition(
+      `waitForRequestPanelResponse(${method},${status},${path})`,
+      ([targetMethod, targetStatus, targetPath]) => {
+        const responseArea = document.getElementById("responseArea");
+        return Boolean(
+          responseArea &&
+          responseArea.dataset.requestPhase === "complete" &&
+          responseArea.dataset.requestMethod === targetMethod &&
+          responseArea.dataset.requestStatus === String(targetStatus) &&
+          responseArea.dataset.requestPath === targetPath
+        );
+      },
+      [method, status, path],
+      timeout
+    );
+  }
+
+  async function waitForRequestPreview(method, path, timeout = 15000) {
+    await waitForPageCondition(
+      `waitForRequestPreview(${method},${path})`,
+      ([targetMethod, targetPath]) => {
+        const section = document.getElementById("requestPreviewSection");
+        const previewArea = document.getElementById("requestPreviewArea");
+        return Boolean(
+          section &&
+          previewArea &&
+          section.hidden === false &&
+          previewArea.dataset.requestPhase === "ready" &&
+          previewArea.dataset.requestMethod === targetMethod &&
+          previewArea.dataset.requestPath === targetPath
+        );
+      },
+      [method, path],
+      timeout
+    );
+  }
+
+  async function assertRequestPreviewToggleState(expectedChecked, expectedVisible, timeout = 10000) {
+    await waitForPageCondition(
+      `assertRequestPreviewToggleState(${expectedChecked},${expectedVisible})`,
+      ([targetChecked, targetVisible]) => {
+        const toggle = document.getElementById("requestPreviewToggle");
+        const section = document.getElementById("requestPreviewSection");
+        return Boolean(
+          toggle &&
+          section &&
+          toggle.checked === targetChecked &&
+          (section.hidden === !targetVisible)
+        );
+      },
+      [expectedChecked, expectedVisible],
+      timeout
+    );
+  }
+
+  async function assertRequestPreviewModeState(expectedMode, timeout = 10000) {
+    await waitForPageCondition(
+      `assertRequestPreviewModeState(${expectedMode})`,
+      ([targetMode]) => {
+        const buttons = Array.from(document.querySelectorAll("[data-request-preview-mode]"));
+        const previewArea = document.getElementById("requestPreviewArea");
+        return Boolean(
+          previewArea &&
+          previewArea.dataset.requestView === targetMode &&
+          buttons.length === 2 &&
+          buttons.every((button) => {
+            const isActive = button.dataset.requestPreviewMode === targetMode;
+            return (
+              button.classList.contains("active") === isActive &&
+              button.getAttribute("aria-checked") === String(isActive) &&
+              button.getAttribute("tabindex") === (isActive ? "0" : "-1")
+            );
+          })
+        );
+      },
+      [expectedMode],
+      timeout
+    );
+  }
+
+  async function assertResponseViewState(expectedMode, timeout = 10000) {
+    await waitForPageCondition(
+      `assertResponseViewState(${expectedMode})`,
+      ([targetMode]) => {
+        const responseArea = document.getElementById("responseArea");
+        return Boolean(responseArea && responseArea.dataset.requestView === targetMode);
+      },
+      [expectedMode],
+      timeout
+    );
+  }
+
+  async function assertClipboardSnapshot(kind, expectedText = [], timeout = 10000) {
+    await waitForPageCondition(
+      `assertClipboardSnapshot(${kind})`,
+      ([targetKind]) => {
+        const state = window.__exphttpClipboardState;
+        return Boolean(
+          state &&
+          state.lastKind === targetKind &&
+          typeof state.lastText === "string" &&
+          state.lastText.length > 0
+        );
+      },
+      [kind],
+      timeout
+    );
+
+    const snapshot = await page.evaluate(() => ({
+      clipboardText: String(window.__exphttpBrowserClipboardText || ""),
+      lastText: String(window.__exphttpClipboardState?.lastText || ""),
+      lastKind: String(window.__exphttpClipboardState?.lastKind || ""),
+    }));
+
+    if (snapshot.lastKind !== kind) {
+      throw new Error(`Clipboard kind mismatch for ${kind}: ${snapshot.lastKind}`);
+    }
+    if (snapshot.lastText !== snapshot.clipboardText) {
+      throw new Error(`Clipboard text mismatch for ${kind}`);
+    }
+
+    for (const item of expectedText) {
+      if (!snapshot.lastText.includes(item)) {
+        throw new Error(`Clipboard text for ${kind} missing "${item}": ${snapshot.lastText}`);
+      }
+    }
+  }
+
+  async function assertRequestBatchExport({
+    phase,
+    total,
+    completed,
+    matchCount,
+    mismatchCount,
+    failedCount,
+    expectedMethods = [],
+    expectedAttemptCounts = {},
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      "request batch export enabled",
+      () => {
+        const button = document.getElementById("requestBatchExportBtn");
+        return Boolean(button && !button.disabled);
+      },
+      null,
+      timeout
+    );
+
+    const downloadPromise = page.waitForEvent("download");
+    await page.locator("#requestBatchExportBtn").click();
+    const download = await downloadPromise;
+    const suggestedFilename = download.suggestedFilename();
+
+    await waitForPageCondition(
+      "request batch export state",
+      () => {
+        const state = window.__exphttpBatchExportState;
+        return Boolean(state && state.filename && state.content);
+      },
+      null,
+      timeout
+    );
+
+    const snapshot = await page.evaluate(() => ({
+      filename: String(window.__exphttpBatchExportState?.filename || ""),
+      content: String(window.__exphttpBatchExportState?.content || ""),
+    }));
+
+    if (snapshot.filename !== suggestedFilename) {
+      throw new Error(`Batch export filename mismatch: ${snapshot.filename} !== ${suggestedFilename}`);
+    }
+    if (!/^request-run-summary-.*\.json$/.test(snapshot.filename)) {
+      throw new Error(`Unexpected batch export filename: ${snapshot.filename}`);
+    }
+
+    let report;
+    try {
+      report = JSON.parse(snapshot.content);
+    } catch (error) {
+      throw new Error(`Batch export content is not valid JSON: ${error.message}`);
+    }
+
+    if (
+      report.phase !== phase ||
+      report.total !== total ||
+      report.completed !== completed ||
+      report.summary?.matchCount !== matchCount ||
+      report.summary?.mismatchCount !== mismatchCount ||
+      report.summary?.failedCount !== failedCount
+    ) {
+      throw new Error(`Unexpected batch export summary: ${snapshot.content}`);
+    }
+
+    if (!Array.isArray(report.results) || report.results.length !== total) {
+      throw new Error(`Unexpected batch export result count: ${snapshot.content}`);
+    }
+
+    for (const method of expectedMethods) {
+      if (!report.results.some((result) => result.method === method)) {
+        throw new Error(`Batch export is missing method ${method}: ${snapshot.content}`);
+      }
+    }
+
+    for (const [method, expectedAttemptCount] of Object.entries(expectedAttemptCounts)) {
+      const result = report.results.find((item) => item.method === method);
+      if (!result) {
+        throw new Error(`Batch export is missing method ${method} for attempts check: ${snapshot.content}`);
+      }
+      if (!Array.isArray(result.attempts) || result.attempts.length !== expectedAttemptCount) {
+        throw new Error(`Unexpected attempt count for ${method}: ${snapshot.content}`);
+      }
+      if (
+        result.attempts.some((attempt) => (
+          attempt.method !== method ||
+          typeof attempt.path !== "string" ||
+          typeof attempt.expectedStatus !== "string" ||
+          typeof attempt.actualStatus !== "string" ||
+          typeof attempt.checkState !== "string" ||
+          typeof attempt.checkLabel !== "string" ||
+          typeof attempt.timestamp !== "string"
+        ))
+      ) {
+        throw new Error(`Invalid attempt payload for ${method}: ${snapshot.content}`);
+      }
+    }
+  }
+
+  async function assertRequestBatchIssuesFilter({
+    checked,
+    filter,
+    visibleCount,
+    emptyText = "",
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestBatchIssuesFilter(${filter},${visibleCount})`,
+      ([targetChecked, targetFilter, targetVisibleCount, targetEmptyText]) => {
+        const toggle = document.getElementById("requestBatchIssuesOnlyToggle");
+        const summary = document.getElementById("requestBatchSummary");
+        const rows = Array.from(document.querySelectorAll("#requestBatchSummary .request-batch-summary__row"));
+        const empty = summary?.querySelector(".request-batch-summary__empty");
+
+        return Boolean(
+          toggle &&
+          summary &&
+          toggle.checked === targetChecked &&
+          summary.dataset.batchFilter === targetFilter &&
+          summary.dataset.batchVisibleCount === String(targetVisibleCount) &&
+          rows.length === targetVisibleCount &&
+          (
+            targetEmptyText
+              ? empty && (empty.textContent || "").includes(targetEmptyText)
+              : !empty
+          )
+        );
+      },
+      [checked, filter, visibleCount, emptyText],
+      timeout
+    );
+  }
+
+  async function assertRequestMethodButtonBatchState({
+    method,
+    checkState,
+    expectedStatus,
+    actualStatus,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestMethodButtonBatchState(${method},${checkState})`,
+      ([targetMethod, targetCheckState, targetExpectedStatus, targetActualStatus]) => {
+        const button = document.querySelector(`.request-method-switch [data-request-method="${targetMethod}"]`);
+        const label = button?.getAttribute("aria-label") || "";
+        const title = button?.getAttribute("title") || "";
+        return Boolean(
+          button &&
+          button.dataset.batchCheck === targetCheckState &&
+          button.dataset.batchExpectedStatus === targetExpectedStatus &&
+          button.dataset.batchActualStatus === targetActualStatus &&
+          label.includes(targetExpectedStatus) &&
+          label.includes(targetActualStatus) &&
+          title === label
+        );
+      },
+      [method, checkState, expectedStatus, actualStatus],
+      timeout
+    );
+  }
+
+  async function assertRequestBatchCleared(timeout = 10000) {
+    await waitForPageCondition(
+      "request batch cleared",
+      () => {
+        const summary = document.getElementById("requestBatchSummary");
+        const exportBtn = document.getElementById("requestBatchExportBtn");
+        const rerunIssuesBtn = document.getElementById("requestBatchRerunIssuesBtn");
+        const clearBtn = document.getElementById("requestBatchClearBtn");
+        const issuesToggle = document.getElementById("requestBatchIssuesOnlyToggle");
+        const batchStatus = document.getElementById("requestBatchStatus");
+        const methodButtons = Array.from(document.querySelectorAll(".request-method-switch [data-request-method]"));
+
+        return Boolean(
+          summary &&
+          summary.hidden === true &&
+          summary.dataset.batchPhase === "idle" &&
+          summary.dataset.batchTotal === "0" &&
+          summary.dataset.batchCompleted === "0" &&
+          summary.dataset.batchMatchCount === "0" &&
+          summary.dataset.batchMismatchCount === "0" &&
+          summary.dataset.batchFailedCount === "0" &&
+          summary.dataset.batchVisibleCount === "0" &&
+          exportBtn &&
+          exportBtn.disabled &&
+          rerunIssuesBtn &&
+          rerunIssuesBtn.disabled &&
+          rerunIssuesBtn.dataset.batchIssueCount === "0" &&
+          clearBtn &&
+          clearBtn.disabled &&
+          issuesToggle &&
+          !issuesToggle.checked &&
+          batchStatus &&
+          (batchStatus.textContent || "").trim() === "" &&
+          typeof window.__exphttpBatchExportState === "undefined" &&
+          methodButtons.length > 0 &&
+          methodButtons.every((button) =>
+            !button.dataset.batchCheck &&
+            !button.dataset.batchExpectedStatus &&
+            !button.dataset.batchActualStatus &&
+            !button.hasAttribute("aria-label")
+          )
+        );
+      },
+      null,
+      timeout
+    );
+  }
+
+  async function assertRequestBatchRerunIssuesButtonState({
+    disabled,
+    issueCount,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestBatchRerunIssuesButtonState(${disabled},${issueCount})`,
+      ([targetDisabled, targetIssueCount]) => {
+        const button = document.getElementById("requestBatchRerunIssuesBtn");
+        const label = button?.getAttribute("aria-label") || "";
+        const title = button?.getAttribute("title") || "";
+        return Boolean(
+          button &&
+          button.disabled === targetDisabled &&
+          button.dataset.batchIssueCount === String(targetIssueCount) &&
+          title === label &&
+          (
+            targetIssueCount > 0
+              ? label.includes(String(targetIssueCount))
+              : label.length > 0
+          )
+        );
+      },
+      [disabled, issueCount],
+      timeout
+    );
+  }
+
+  async function assertRequestPreviewSummary(method, path, expectedText = [], timeout = 10000) {
+    await waitForPageCondition(
+      `assertRequestPreviewSummary(${method},${path})`,
+      ([targetMethod, targetPath]) => {
+        const previewArea = document.getElementById("requestPreviewArea");
+        const summaryRoot = previewArea?.querySelector(".request-preview-summary");
+        const content = previewArea?.innerText || "";
+        return Boolean(
+          previewArea &&
+          summaryRoot &&
+          previewArea.dataset.requestPhase === "ready" &&
+          previewArea.dataset.requestMethod === targetMethod &&
+          previewArea.dataset.requestPath === targetPath &&
+          previewArea.dataset.requestView === "summary" &&
+          !content.includes(`${targetMethod} ${targetPath} HTTP/1.1`)
+        );
+      },
+      [method, path],
+      timeout
+    );
+
+    const previewText = (await page.locator("#requestPreviewArea").innerText()).trim();
+    for (const item of expectedText) {
+      if (!previewText.includes(item)) {
+        throw new Error(`Request preview summary missing "${item}": ${previewText}`);
+      }
+    }
+  }
+
+  async function assertResponseSummary(method, path, expectedText = [], timeout = 10000) {
+    await waitForPageCondition(
+      `assertResponseSummary(${method},${path})`,
+      ([targetMethod, targetPath]) => {
+        const responseArea = document.getElementById("responseArea");
+        const summaryRoot = responseArea?.querySelector(".response-summary");
+        return Boolean(
+          responseArea &&
+          summaryRoot &&
+          responseArea.dataset.requestPhase === "complete" &&
+          responseArea.dataset.requestMethod === targetMethod &&
+          responseArea.dataset.requestPath === targetPath &&
+          responseArea.dataset.requestView === "summary"
+        );
+      },
+      [method, path],
+      timeout
+    );
+
+    const responseText = (await page.locator("#responseArea").innerText()).trim();
+    for (const item of expectedText) {
+      if (!responseText.includes(item)) {
+        throw new Error(`Response summary missing "${item}": ${responseText}`);
+      }
+    }
+  }
+
+  async function assertResponseRaw(method, path, expectedText = [], timeout = 10000) {
+    await waitForPageCondition(
+      `assertResponseRaw(${method},${path})`,
+      ([targetMethod, targetPath]) => {
+        const responseArea = document.getElementById("responseArea");
+        const summaryRoot = responseArea?.querySelector(".response-summary");
+        return Boolean(
+          responseArea &&
+          !summaryRoot &&
+          responseArea.dataset.requestPhase === "complete" &&
+          responseArea.dataset.requestMethod === targetMethod &&
+          responseArea.dataset.requestPath === targetPath &&
+          responseArea.dataset.requestView === "raw"
+        );
+      },
+      [method, path],
+      timeout
+    );
+
+    const responseText = (await page.locator("#responseArea").innerText()).trim();
+    for (const item of expectedText) {
+      if (!responseText.includes(item)) {
+        throw new Error(`Raw response missing "${item}": ${responseText}`);
+      }
+    }
+  }
+
+  async function assertRequestPreviewComparison({
+    method,
+    path,
+    expectedStatus,
+    actualStatus,
+    checkState,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestPreviewComparison(${method},${path},${checkState})`,
+      ([targetMethod, targetPath, targetExpectedStatus, targetActualStatus, targetCheckState]) => {
+        const previewArea = document.getElementById("requestPreviewArea");
+        return Boolean(
+          previewArea &&
+          previewArea.dataset.requestPhase === "ready" &&
+          previewArea.dataset.requestMethod === targetMethod &&
+          previewArea.dataset.requestPath === targetPath &&
+          previewArea.dataset.requestView === "summary" &&
+          previewArea.dataset.requestExpectedStatus === targetExpectedStatus &&
+          previewArea.dataset.requestActualStatus === targetActualStatus &&
+          previewArea.dataset.requestStatusCheck === targetCheckState
+        );
+      },
+      [method, path, expectedStatus, actualStatus, checkState],
+      timeout
+    );
+  }
+
+  async function waitForRequestBatchSummary({
+    phase,
+    total,
+    completed,
+    matchCount,
+    mismatchCount,
+    failedCount,
+    timeout = 60000,
+  }) {
+    await waitForPageCondition(
+      `waitForRequestBatchSummary(${phase})`,
+      ([targetPhase, targetTotal, targetCompleted, targetMatchCount, targetMismatchCount, targetFailedCount]) => {
+        const summary = document.getElementById("requestBatchSummary");
+        return Boolean(
+          summary &&
+          summary.hidden === false &&
+          summary.dataset.batchPhase === targetPhase &&
+          summary.dataset.batchTotal === String(targetTotal) &&
+          summary.dataset.batchCompleted === String(targetCompleted) &&
+          summary.dataset.batchMatchCount === String(targetMatchCount) &&
+          summary.dataset.batchMismatchCount === String(targetMismatchCount) &&
+          summary.dataset.batchFailedCount === String(targetFailedCount)
+        );
+      },
+      [phase, total, completed, matchCount, mismatchCount, failedCount],
+      timeout
+    );
+  }
+
+  async function assertRequestBatchRow({
+    method,
+    path,
+    expectedStatus,
+    actualStatus,
+    checkState,
+    attemptCount = null,
+    rerunOutcome = null,
+    rerunOutcomeTone = null,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestBatchRow(${method},${checkState})`,
+      ([targetMethod, targetPath, targetExpectedStatus, targetActualStatus, targetCheckState, targetAttemptCount, targetRerunOutcome, targetRerunOutcomeTone]) => {
+        const rows = Array.from(document.querySelectorAll("#requestBatchSummary [data-batch-method]"));
+        return rows.some((row) => {
+          const pathMatches = targetPath ? row.dataset.batchPath === targetPath : true;
+          const attemptLabel = row.querySelector(".request-batch-summary__attempts");
+          const attemptsMatch = targetAttemptCount
+            ? (
+              row.dataset.batchAttemptCount === targetAttemptCount &&
+              attemptLabel &&
+              (attemptLabel.textContent || "").includes(targetAttemptCount)
+            )
+            : true;
+          const outcomeLabel = row.querySelector(".request-batch-summary__rerun-outcome");
+          const outcomeMatches = targetRerunOutcome
+            ? (
+              row.dataset.batchRerunOutcome === targetRerunOutcome &&
+              row.dataset.batchRerunOutcomeTone === targetRerunOutcomeTone &&
+              outcomeLabel &&
+              /Последний повтор|Last rerun/.test(outcomeLabel.textContent || "")
+            )
+            : true;
+          return (
+            row.dataset.batchMethod === targetMethod &&
+            pathMatches &&
+            row.dataset.batchExpectedStatus === targetExpectedStatus &&
+            row.dataset.batchActualStatus === targetActualStatus &&
+            row.dataset.batchCheck === targetCheckState &&
+            attemptsMatch &&
+            outcomeMatches
+          );
+        });
+      },
+      [
+        method,
+        path || "",
+        expectedStatus,
+        actualStatus,
+        checkState,
+        attemptCount === null ? "" : String(attemptCount),
+        rerunOutcome || "",
+        rerunOutcomeTone || "",
+      ],
+      timeout
+    );
+  }
+
+  async function assertRequestBatchAttemptHistory({
+    method,
+    attemptCount,
+    actualStatus,
+    checkState,
+    timeout = 10000,
+  }) {
+    const history = page.locator(`#requestBatchSummary [data-batch-method="${method}"] details.request-batch-summary__history`);
+    await history.waitFor({ state: "attached", timeout });
+    const isOpen = await history.evaluate((node) => node.open);
+    if (!isOpen) {
+      await history.locator("summary").click();
+    }
+
+    await waitForPageCondition(
+      `assertRequestBatchAttemptHistory(${method},${attemptCount})`,
+      ([targetMethod, targetAttemptCount, targetActualStatus, targetCheckState]) => {
+        const rows = Array.from(document.querySelectorAll("#requestBatchSummary [data-batch-method]"));
+        const row = rows.find((item) => item.dataset.batchMethod === targetMethod);
+        const details = row?.querySelector("details.request-batch-summary__history");
+        const items = Array.from(row?.querySelectorAll("[data-batch-attempt-index]") || []);
+        const rowText = row?.innerText || "";
+
+        return Boolean(
+          row &&
+          details &&
+          details.open &&
+          details.dataset.batchAttemptHistory === targetMethod &&
+          details.dataset.batchAttemptHistoryCount === targetAttemptCount &&
+          (rowText.includes("История попыток") || rowText.includes("Attempt history")) &&
+          items.length === Number(targetAttemptCount) &&
+          items.every((item) => (
+            item.dataset.batchAttemptActualStatus === targetActualStatus &&
+            item.dataset.batchAttemptCheck === targetCheckState
+          ))
+        );
+      },
+      [method, String(attemptCount), actualStatus, checkState],
+      timeout
+    );
+  }
+
+  async function assertRequestBatchAttemptHistoryState({
+    method,
+    attemptCount,
+    open,
+    autoOpen,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertRequestBatchAttemptHistoryState(${method},${attemptCount},${open})`,
+      ([targetMethod, targetAttemptCount, targetOpen, targetAutoOpen]) => {
+        const row = Array.from(document.querySelectorAll("#requestBatchSummary [data-batch-method]"))
+          .find((item) => item.dataset.batchMethod === targetMethod);
+        const details = row?.querySelector("details.request-batch-summary__history");
+        const items = Array.from(row?.querySelectorAll("[data-batch-attempt-index]") || []);
+
+        return Boolean(
+          row &&
+          details &&
+          details.open === targetOpen &&
+          details.dataset.batchAttemptHistory === targetMethod &&
+          details.dataset.batchAttemptHistoryCount === String(targetAttemptCount) &&
+          details.dataset.batchAttemptHistoryOpen === String(targetAutoOpen) &&
+          items.length === Number(targetAttemptCount)
+        );
+      },
+      [method, attemptCount, open, autoOpen],
+      timeout
+    );
+  }
+
+  async function injectRequestBatchMismatch({
+    method,
+    path,
+    status,
+    statusText,
+    attemptCount,
+    rerunOutcome,
+    timeout = 10000,
+  }) {
+    await page.evaluate(([targetMethod, targetPath, targetStatus, targetStatusText]) => {
+      if (
+        typeof window.buildRequestExecutionResult !== "function" ||
+        typeof window.updateRequestBatchResult !== "function"
+      ) {
+        throw new Error("Request batch helpers are unavailable");
+      }
+
+      const result = window.buildRequestExecutionResult(targetMethod, targetPath, {
+        kind: "response",
+        status: targetStatus,
+        statusText: targetStatusText,
+      });
+      window.updateRequestBatchResult(targetMethod, targetPath, result);
+    }, [method, path, status, statusText]);
+
+    await assertRequestBatchRow({
+      method,
+      path,
+      expectedStatus: "200 OK",
+      actualStatus: `${status} ${statusText}`,
+      checkState: "mismatch",
+      attemptCount,
+      rerunOutcome,
+      rerunOutcomeTone: "danger",
+      timeout,
+    });
+  }
+
+  async function assertRequestPanelMethodOrder(expectedMethods, timeout = 10000) {
+    await waitForPageCondition(
+      "request panel method order",
+      ([targetMethods]) => {
+        const buttons = Array.from(document.querySelectorAll(".request-method-switch [data-request-method]"));
+        return (
+          buttons.length === targetMethods.length &&
+          buttons.every((button, index) => {
+            const method = button.dataset.requestMethod || "";
+            const text = (button.textContent || "").trim();
+            return method === targetMethods[index] && text === targetMethods[index];
+          })
+        );
+      },
+      [expectedMethods],
+      timeout
+    );
+  }
+
+  async function assertRequestBatchLegend({ matchText, issueText, label }, timeout = 10000) {
+    await waitForPageCondition(
+      "request batch legend",
+      ([targetMatchText, targetIssueText, targetLabel]) => {
+        const legend = document.getElementById("requestBatchLegend");
+        const matchDot = legend?.querySelector(".request-batch-legend__dot--match");
+        const issueDot = legend?.querySelector(".request-batch-legend__dot--issue");
+        const content = legend?.innerText || "";
+        return Boolean(
+          legend &&
+          matchDot &&
+          issueDot &&
+          legend.getAttribute("aria-label") === targetLabel &&
+          content.includes(targetMatchText) &&
+          content.includes(targetIssueText)
+        );
+      },
+      [matchText, issueText, label],
+      timeout
+    );
+  }
+
+  async function runRequestPanelMethodScenario({
+    method,
+    initialPath = "/",
+    expectedRequestPath,
+    expectedPathInput,
+    expectedStatus,
+    responseIncludes = [],
+    previewIncludes = [],
+    timeout = 15000,
+  }) {
+    await page.locator("#pathInput").fill(initialPath);
+    await page.locator(`.request-method-switch [data-request-method="${method}"]`).click();
+    await waitForRequestPanelResponse(method, expectedStatus, expectedRequestPath, timeout);
+
+    if (expectedPathInput) {
+      await waitForValue("#pathInput", expectedPathInput, timeout);
+    }
+
+    const responseText = (await page.locator("#responseArea").innerText()).trim();
+    for (const expectedText of responseIncludes) {
+      if (!responseText.includes(expectedText)) {
+        throw new Error(`Request panel ${method} response missing "${expectedText}": ${responseText}`);
+      }
+    }
+
+    await waitForRequestPreview(method, expectedRequestPath, timeout);
+    const previewText = (await page.locator("#requestPreviewArea").innerText()).trim();
+    for (const expectedText of [`${method} ${expectedRequestPath} HTTP/1.1`, ...previewIncludes]) {
+      if (!previewText.includes(expectedText)) {
+        throw new Error(`Request panel ${method} preview missing "${expectedText}": ${previewText}`);
+      }
+    }
+
+    await waitForLiveRegionText("responseAreaLive", `${method} ${expectedRequestPath} ${expectedStatus}`, timeout);
+
+    return responseText;
+  }
+
+  async function assertRequestPanelScenarioMatrix() {
+    const expectedMethods = [
+      "GET",
+      "HEAD",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+      "FETCH",
+      "INFO",
+      "PING",
+      "NONE",
+      "NOTE",
+      "SMUGGLE",
+    ];
+    await assertRequestPanelMethodOrder(expectedMethods);
+    await assertRequestBatchLegend({
+      matchText: "Совпало",
+      issueText: "Проблема",
+      label: "Легенда статусов методов",
+    });
+    await assertRequestPreviewToggleState(false, false);
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await waitForPageCondition(
+      "request batch export initially disabled",
+      () => {
+        const exportBtn = document.getElementById("requestBatchExportBtn");
+        const clearBtn = document.getElementById("requestBatchClearBtn");
+        return Boolean(exportBtn && exportBtn.disabled && clearBtn && clearBtn.disabled);
+      },
+      null,
+      10000
+    );
+    await assertRequestBatchIssuesFilter({
+      checked: false,
+      filter: "all",
+      visibleCount: 0,
+      emptyText: "",
+      timeout: 10000,
+    });
+    await page.locator("#requestPreviewToggle").check();
+    await assertRequestPreviewToggleState(true, true);
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await waitForText(page.locator("#requestPreviewArea"), /Выберите метод|Choose a method/, 10000);
+    await page.reload();
+    await waitForSpaReady();
+    await assertRequestPreviewToggleState(true, true);
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await waitForText(page.locator("#requestPreviewArea"), /Выберите метод|Choose a method/, 10000);
+    await page.locator('[data-request-preview-mode="summary"]').click();
+    await assertRequestPreviewModeState("summary");
+    await assertResponseViewState("summary");
+    await page.reload();
+    await waitForSpaReady();
+    await assertRequestPreviewToggleState(true, true);
+    await assertRequestPreviewModeState("summary");
+    await assertResponseViewState("summary");
+    await page.locator("#pathInput").fill("/index.html");
+    await page.locator('.request-method-switch [data-request-method="GET"]').click();
+    await waitForRequestPanelResponse("GET", 200, "/index.html", 15000);
+    await waitForRequestPreview("GET", "/index.html", 15000);
+    await assertRequestPreviewSummary("GET", "/index.html", ["GET", "/index.html", "Host", "200 OK"], 15000);
+    await assertResponseSummary("GET", "/index.html", ["GET", "/index.html", "200 OK"], 15000);
+    await page.locator("#requestPreviewCopyBtn").click();
+    await assertClipboardSnapshot("request", ["GET /index.html HTTP/1.1", "Host:"], 15000);
+    await page.locator("#responseCopyBtn").click();
+    await assertClipboardSnapshot("response", ["GET /index.html", "200 OK", "--- Заголовки ---"], 15000);
+    await assertRequestPreviewComparison({
+      method: "GET",
+      path: "/index.html",
+      expectedStatus: "200 OK",
+      actualStatus: "200 OK",
+      checkState: "match",
+      timeout: 15000,
+    });
+    await page.locator('[data-request-preview-mode="raw"]').click();
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await assertResponseRaw("GET", "/index.html", ["GET /index.html", "200 OK"], 15000);
+    await page.locator('[data-request-preview-mode="summary"]').click();
+    await assertRequestPreviewModeState("summary");
+    await assertResponseViewState("summary");
+    await assertResponseSummary("GET", "/index.html", ["GET", "/index.html", "200 OK"], 15000);
+    await page.locator("#pathInput").fill("/ignored-post");
+    await page.locator('.request-method-switch [data-request-method="POST"]').click();
+    await waitForRequestPanelResponse("POST", 201, "/", 15000);
+    await waitForRequestPreview("POST", "/", 15000);
+    await waitForValue("#pathInput", "/uploads/request-panel-post.txt", 15000);
+    await assertRequestPreviewSummary("POST", "/", ["POST", "/", "201 Created"], 15000);
+    await assertRequestPreviewComparison({
+      method: "POST",
+      path: "/",
+      expectedStatus: "201 Created",
+      actualStatus: "201 Created",
+      checkState: "match",
+      timeout: 15000,
+    });
+    const missingPath = "/missing-browser-smoke.txt";
+    await page.locator("#pathInput").fill(missingPath);
+    await page.locator('.request-method-switch [data-request-method="GET"]').click();
+    await waitForRequestPanelResponse("GET", 404, missingPath, 15000);
+    await waitForRequestPreview("GET", missingPath, 15000);
+    await assertRequestPreviewSummary("GET", missingPath, ["GET", missingPath, "404 Not Found"], 15000);
+    await assertRequestPreviewComparison({
+      method: "GET",
+      path: missingPath,
+      expectedStatus: "200 OK",
+      actualStatus: "404 Not Found",
+      checkState: "mismatch",
+      timeout: 15000,
+    });
+    await page.locator("#requestRunAllBtn").click();
+    await waitForRequestBatchSummary({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 13,
+      mismatchCount: 0,
+      failedCount: 0,
+      timeout: 60000,
+    });
+    await assertRequestBatchRow({
+      method: "POST",
+      path: "/",
+      expectedStatus: "201 Created",
+      actualStatus: "201 Created",
+      checkState: "match",
+      timeout: 15000,
+    });
+    await assertRequestBatchRow({
+      method: "OPTIONS",
+      path: "/",
+      expectedStatus: "204 No Content",
+      actualStatus: "204 No Content",
+      checkState: "match",
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "GET",
+      checkState: "match",
+      expectedStatus: "200 OK",
+      actualStatus: "200 OK",
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "POST",
+      checkState: "match",
+      expectedStatus: "201 Created",
+      actualStatus: "201 Created",
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "OPTIONS",
+      checkState: "match",
+      expectedStatus: "204 No Content",
+      actualStatus: "204 No Content",
+      timeout: 15000,
+    });
+    await assertRequestBatchExport({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 13,
+      mismatchCount: 0,
+      failedCount: 0,
+      expectedMethods: ["GET", "POST", "OPTIONS", "SMUGGLE"],
+      expectedAttemptCounts: {
+        GET: 1,
+        OPTIONS: 1,
+      },
+      timeout: 15000,
+    });
+    await assertRequestBatchRerunIssuesButtonState({
+      disabled: true,
+      issueCount: 0,
+      timeout: 15000,
+    });
+    await injectRequestBatchMismatch({
+      method: "GET",
+      path: "/index.html",
+      status: 404,
+      statusText: "Not Found",
+      attemptCount: 2,
+      rerunOutcome: "regressed",
+      timeout: 15000,
+    });
+    await waitForRequestBatchSummary({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 12,
+      mismatchCount: 1,
+      failedCount: 0,
+      timeout: 15000,
+    });
+    await assertRequestBatchAttemptHistoryState({
+      method: "GET",
+      attemptCount: 2,
+      open: true,
+      autoOpen: true,
+      timeout: 15000,
+    });
+    await injectRequestBatchMismatch({
+      method: "GET",
+      path: "/index.html",
+      status: 500,
+      statusText: "Internal Server Error",
+      attemptCount: 3,
+      rerunOutcome: "still-failing",
+      timeout: 15000,
+    });
+    await waitForRequestBatchSummary({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 12,
+      mismatchCount: 1,
+      failedCount: 0,
+      timeout: 15000,
+    });
+    await assertRequestBatchAttemptHistoryState({
+      method: "GET",
+      attemptCount: 3,
+      open: true,
+      autoOpen: true,
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "GET",
+      checkState: "mismatch",
+      expectedStatus: "200 OK",
+      actualStatus: "500 Internal Server Error",
+      timeout: 15000,
+    });
+    await assertRequestBatchRerunIssuesButtonState({
+      disabled: false,
+      issueCount: 1,
+      timeout: 15000,
+    });
+    await page.locator("#requestBatchRerunIssuesBtn").click();
+    await waitForRequestPanelResponse("GET", 200, "/index.html", 15000);
+    await waitForValue("#pathInput", "/index.html", 15000);
+    await waitForRequestBatchSummary({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 13,
+      mismatchCount: 0,
+      failedCount: 0,
+      timeout: 15000,
+    });
+    await assertRequestBatchRow({
+      method: "GET",
+      path: "/index.html",
+      expectedStatus: "200 OK",
+      actualStatus: "200 OK",
+      checkState: "match",
+      attemptCount: 4,
+      rerunOutcome: "fixed",
+      rerunOutcomeTone: "success",
+      timeout: 15000,
+    });
+    await assertRequestBatchAttemptHistoryState({
+      method: "GET",
+      attemptCount: 4,
+      open: false,
+      autoOpen: false,
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "GET",
+      checkState: "match",
+      expectedStatus: "200 OK",
+      actualStatus: "200 OK",
+      timeout: 15000,
+    });
+    await assertRequestBatchRerunIssuesButtonState({
+      disabled: true,
+      issueCount: 0,
+      timeout: 15000,
+    });
+    await page.locator("#requestBatchIssuesOnlyToggle").check();
+    await assertRequestBatchIssuesFilter({
+      checked: true,
+      filter: "issues",
+      visibleCount: 0,
+      emptyText: "Расхождений и ошибок нет.",
+      timeout: 15000,
+    });
+    await page.locator("#requestBatchIssuesOnlyToggle").uncheck();
+    await assertRequestBatchIssuesFilter({
+      checked: false,
+      filter: "all",
+      visibleCount: 13,
+      emptyText: "",
+      timeout: 15000,
+    });
+    await page.locator('#requestBatchSummary [data-batch-rerun-method="OPTIONS"]').click();
+    await waitForRequestPanelResponse("OPTIONS", 204, "/", 15000);
+    await waitForValue("#pathInput", "/", 15000);
+    await assertRequestBatchRow({
+      method: "OPTIONS",
+      path: "/",
+      expectedStatus: "204 No Content",
+      actualStatus: "204 No Content",
+      checkState: "match",
+      attemptCount: 2,
+      rerunOutcome: "still-ok",
+      rerunOutcomeTone: "success",
+      timeout: 15000,
+    });
+    await assertRequestBatchAttemptHistory({
+      method: "OPTIONS",
+      attemptCount: 2,
+      actualStatus: "204 No Content",
+      checkState: "match",
+      timeout: 15000,
+    });
+    await assertRequestMethodButtonBatchState({
+      method: "OPTIONS",
+      checkState: "match",
+      expectedStatus: "204 No Content",
+      actualStatus: "204 No Content",
+      timeout: 15000,
+    });
+    await assertRequestBatchExport({
+      phase: "complete",
+      total: 13,
+      completed: 13,
+      matchCount: 13,
+      mismatchCount: 0,
+      failedCount: 0,
+      expectedMethods: ["GET", "OPTIONS"],
+      expectedAttemptCounts: {
+        GET: 4,
+        OPTIONS: 2,
+      },
+      timeout: 15000,
+    });
+    await page.locator("#requestBatchClearBtn").click();
+    await assertRequestBatchCleared(15000);
+    await assertRequestBatchIssuesFilter({
+      checked: false,
+      filter: "all",
+      visibleCount: 0,
+      emptyText: "",
+      timeout: 15000,
+    });
+    await page.locator('[data-request-preview-mode="raw"]').click();
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await page.locator("#requestPreviewToggle").uncheck();
+    await assertRequestPreviewToggleState(false, false);
+    await page.reload();
+    await waitForSpaReady();
+    await assertRequestPreviewToggleState(false, false);
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+    await page.locator("#requestPreviewToggle").check();
+    await assertRequestPreviewToggleState(true, true);
+    await assertRequestPreviewModeState("raw");
+    await assertResponseViewState("raw");
+
+    await runRequestPanelMethodScenario({
+      method: "GET",
+      initialPath: "/index.html",
+      expectedRequestPath: "/index.html",
+      expectedPathInput: "/index.html",
+      expectedStatus: 200,
+      responseIncludes: ["GET /index.html"],
+      previewIncludes: ["Host:"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "HEAD",
+      initialPath: "/index.html",
+      expectedRequestPath: "/index.html",
+      expectedPathInput: "/index.html",
+      expectedStatus: 200,
+      responseIncludes: ["HEAD /index.html"],
+      previewIncludes: ["Host:"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "POST",
+      initialPath: "/ignored-post",
+      expectedRequestPath: "/",
+      expectedPathInput: "/uploads/request-panel-post.txt",
+      expectedStatus: 201,
+      responseIncludes: ['"path": "/uploads/request-panel-post.txt"'],
+      previewIncludes: [
+        "X-File-Name: request-panel-post.txt",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Length:",
+        "request-panel demo via POST",
+      ],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "PUT",
+      initialPath: "/ignored-put",
+      expectedRequestPath: "/",
+      expectedPathInput: "/uploads/request-panel-put.txt",
+      expectedStatus: 201,
+      responseIncludes: ['"path": "/uploads/request-panel-put.txt"'],
+      previewIncludes: [
+        "X-File-Name: request-panel-put.txt",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Length:",
+        "request-panel demo via PUT",
+      ],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "PATCH",
+      initialPath: "/ignored-patch",
+      expectedRequestPath: "/",
+      expectedPathInput: "/uploads/request-panel-patch.txt",
+      expectedStatus: 201,
+      responseIncludes: ['"path": "/uploads/request-panel-patch.txt"'],
+      previewIncludes: [
+        "X-File-Name: request-panel-patch.txt",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Length:",
+        "request-panel demo via PATCH",
+      ],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "DELETE",
+      initialPath: "/ignored-delete",
+      expectedRequestPath: "/uploads/request-panel-delete.txt",
+      expectedPathInput: "/uploads/request-panel-delete.txt",
+      expectedStatus: 200,
+      responseIncludes: ['"deleted": "request-panel-delete.txt"'],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "OPTIONS",
+      initialPath: "/ignored-options",
+      expectedRequestPath: "/",
+      expectedPathInput: "/",
+      expectedStatus: 204,
+      responseIncludes: ["OPTIONS /"],
+      previewIncludes: ["Access-Control-Request-Method: GET"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "INFO",
+      initialPath: "/",
+      expectedRequestPath: "/",
+      expectedPathInput: "/",
+      expectedStatus: 200,
+      responseIncludes: ['"is_directory": true'],
+      previewIncludes: ["Host:"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "PING",
+      initialPath: "/ignored-ping",
+      expectedRequestPath: "/",
+      expectedPathInput: "/",
+      expectedStatus: 200,
+      responseIncludes: ['"status": "pong"'],
+      previewIncludes: ["Host:"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "NONE",
+      initialPath: "/ignored-none",
+      expectedRequestPath: "/",
+      expectedPathInput: "/uploads/request-panel-none.txt",
+      expectedStatus: 201,
+      responseIncludes: ['"path": "/uploads/request-panel-none.txt"'],
+      previewIncludes: [
+        "X-File-Name: request-panel-none.txt",
+        "Content-Type: text/plain; charset=utf-8",
+        "Content-Length:",
+        "request-panel demo via NONE",
+      ],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "NOTE",
+      initialPath: "/ignored-note",
+      expectedRequestPath: "/notes/key",
+      expectedPathInput: "/notes/key",
+      expectedStatus: 200,
+      responseIncludes: ['"hasEcdh":'],
+      previewIncludes: ["Host:"],
+    });
+
+    await runRequestPanelMethodScenario({
+      method: "SMUGGLE",
+      initialPath: "/ignored-smuggle",
+      expectedRequestPath: "/uploads/request-panel-smuggle.txt",
+      expectedPathInput: "/uploads/request-panel-smuggle.txt",
+      expectedStatus: 200,
+      responseIncludes: ['"url": "/uploads/smuggle_'],
+    });
+
+    const fetchPath = "/uploads/request-panel-fetch.txt";
+    await runRequestPanelMethodScenario({
+      method: "FETCH",
+      initialPath: "/ignored-fetch",
+      expectedRequestPath: fetchPath,
+      expectedPathInput: fetchPath,
+      expectedStatus: 200,
+      responseIncludes: ["FETCH /uploads/request-panel-fetch.txt"],
+    });
 
     const downloadButton = page.locator("#responseArea [data-download-path]");
     await downloadButton.waitFor({ state: "attached", timeout: 10000 });
 
+    const fetchFileName = "request-panel-fetch.txt";
     const downloadPromise = page.waitForEvent("download");
     await downloadButton.click();
     await waitForPageCondition(
-      `request-panel download progress mounted (${name})`,
+      `request-panel download progress mounted (${fetchFileName})`,
       ([targetName]) => {
         const progressArea = document.getElementById("downloadProgressArea");
         const progressText = document.getElementById("dlProgressText");
         return Boolean(progressArea && progressText && progressArea.innerText.includes(targetName));
       },
-      [name],
+      [fetchFileName],
       10000
     );
     const download = await downloadPromise;
     const suggestedFilename = download.suggestedFilename();
-    if (suggestedFilename !== name) {
+    if (suggestedFilename !== fetchFileName) {
       throw new Error(`Request-panel FETCH download filename mismatch: ${suggestedFilename}`);
     }
 
-    return requestPath;
+    return fetchPath;
+  }
+
+  async function fetchViaRequestPanelAndAssert() {
+    return assertRequestPanelScenarioMatrix();
   }
 
   function getServerFileAction(name, action) {
@@ -596,7 +1855,6 @@ async (page) => {
   async function prepareOpsecTransportScenario(initialTransport) {
     await page.locator("#tab-opsec").click();
     await waitForTabState("opsec", { focused: true });
-    await waitForCapabilityChipPressed("opsec");
 
     await page.evaluate(() => {
       if (typeof setOpsecFile === "function") {
@@ -613,13 +1871,19 @@ async (page) => {
         const uploadBtn = document.getElementById("opsecUploadBtn");
         const warning = document.getElementById("opsecTransportWarning");
         const selectionState = document.getElementById("opsecSelectionState");
+        const selectionReset = Boolean(
+          selectionState &&
+          (
+            selectionState.hidden === true ||
+            /No file selected(?: yet)?|Файл(?: пока)? не выбран/.test(selectionState.innerText)
+          )
+        );
         return Boolean(
           uploadBtn &&
           uploadBtn.disabled &&
           warning &&
           warning.hidden === true &&
-          selectionState &&
-          /No file selected yet|Файл пока не выбран/.test(selectionState.innerText)
+          selectionReset
         );
       },
       null,
@@ -769,9 +2033,98 @@ async (page) => {
     await waitForValue("#notepadTitleInput", title);
   }
 
+  async function clearNotesViaUiAndAssert(uploadPathToPreserve) {
+    const uploadNameToPreserve = uploadPathToPreserve.split("/").pop();
+
+    await page.locator("#notepadClearBtn").click();
+    await confirmAppDialog(/notes\//, 10000);
+    await waitForPageCondition(
+      "notepad notes cleared",
+      () => {
+        const titleInput = document.getElementById("notepadTitleInput");
+        const textarea = document.getElementById("notepadTextarea");
+        const deleteBtn = document.getElementById("notepadDeleteBtn");
+        const noteList = document.getElementById("notepadNoteList");
+        const indicator = document.getElementById("notepadSaveIndicator");
+        return Boolean(
+          titleInput &&
+          textarea &&
+          deleteBtn &&
+          noteList &&
+          indicator &&
+          titleInput.value === "" &&
+          textarea.value === "" &&
+          deleteBtn.disabled &&
+          /Нет заметок|No notes/.test(noteList.innerText) &&
+          /Заметки очищены|Notes cleared/.test(indicator.innerText)
+        );
+      },
+      null,
+      15000
+    );
+
+    await browseUploadsAndAssert(uploadNameToPreserve);
+    return uploadPathToPreserve;
+  }
+
+  async function deleteSelectedUploadViaUiAndAssert(path) {
+    const name = path.split("/").pop();
+    const encodedPath = encodeURIComponent(path);
+
+    await browseUploadsAndAssert(name);
+    await page.locator(`#serverFiles [data-file-select][data-path="${encodedPath}"]`).check();
+    await page.locator("#deleteSelectedUploadsBtn").click();
+    await confirmAppDialog(path, 10000);
+    await waitForPageCondition(
+      `selected upload deleted (${name})`,
+      ([targetPath]) => !document.querySelector(`#serverFiles [data-path="${targetPath}"]`),
+      [encodedPath],
+      15000
+    );
+  }
+
+  async function deleteSelectedNoteViaUiAndAssert(deleteTitle, keepTitle) {
+    await page.locator(".note-row", { hasText: deleteTitle }).locator("[data-note-select]").check();
+    await page.locator("#notepadDeleteSelectedBtn").click();
+    await confirmAppDialog(deleteTitle, 10000);
+    await waitForPageCondition(
+      `selected note deleted (${deleteTitle})`,
+      ([removedTitle, remainingTitle]) => {
+        const noteList = document.getElementById("notepadNoteList");
+        const titleInput = document.getElementById("notepadTitleInput");
+        const textarea = document.getElementById("notepadTextarea");
+        return Boolean(
+          noteList &&
+          titleInput &&
+          textarea &&
+          !noteList.innerText.includes(removedTitle) &&
+          noteList.innerText.includes(remainingTitle) &&
+          titleInput.value === "" &&
+          textarea.value === ""
+        );
+      },
+      [deleteTitle, keepTitle],
+      15000
+    );
+  }
+
   async function loadNoteByKeyboard(title) {
     await page.locator("#notepadRefreshBtn").focus();
-    await page.keyboard.press("Tab");
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press("Tab");
+      const focused = await page.evaluate(([targetTitle]) => {
+        const active = document.activeElement;
+        return Boolean(
+          active &&
+          active.classList &&
+          active.classList.contains("note-item") &&
+          active.innerText.includes(targetTitle)
+        );
+      }, [title]);
+      if (focused) {
+        break;
+      }
+    }
     await waitForPageCondition(
       `note item focused (${title})`,
       ([targetTitle]) => {
@@ -803,8 +2156,7 @@ async (page) => {
       () => {
         const doc = document.documentElement;
         const requestSwitch = document.querySelector(".request-method-switch");
-        const capabilityStrip = document.querySelector(".capability-strip");
-        const capabilityChip = document.querySelector(".capability-chip");
+        const toolTabs = document.querySelector(".tool-tabs");
         const requestPanel = document.querySelector(".request-panel");
         const statusChip = document.querySelector(".status-chip");
         const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
@@ -813,8 +2165,7 @@ async (page) => {
 
         if (
           !requestSwitch ||
-          !capabilityStrip ||
-          !capabilityChip ||
+          !toolTabs ||
           !requestPanel ||
           !statusChip ||
           !liveStatusFull ||
@@ -830,8 +2181,7 @@ async (page) => {
         };
 
         const requestSwitchStyles = window.getComputedStyle(requestSwitch);
-        const capabilityStripStyles = window.getComputedStyle(capabilityStrip);
-        const capabilityChipStyles = window.getComputedStyle(capabilityChip);
+        const toolTabsStyles = window.getComputedStyle(toolTabs);
         const requestPanelStyles = window.getComputedStyle(requestPanel);
         const statusChipStyles = window.getComputedStyle(statusChip);
         const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
@@ -841,8 +2191,7 @@ async (page) => {
         return (
           doc.scrollWidth <= window.innerWidth + 1 &&
           countColumns(requestSwitchStyles.gridTemplateColumns) === 2 &&
-          countColumns(capabilityStripStyles.gridTemplateColumns) === 2 &&
-          parseFloat(capabilityChipStyles.paddingTop) <= 12.5 &&
+          countColumns(toolTabsStyles.gridTemplateColumns) === 2 &&
           parseFloat(requestPanelStyles.paddingTop) <= 16.5 &&
           parseFloat(statusChipStyles.minHeight) <= 30.5 &&
           liveStatusFullStyles.display === "none" &&
@@ -857,8 +2206,7 @@ async (page) => {
     const snapshot = await page.evaluate(() => {
       const doc = document.documentElement;
       const requestSwitch = document.querySelector(".request-method-switch");
-      const capabilityStrip = document.querySelector(".capability-strip");
-      const capabilityChip = document.querySelector(".capability-chip");
+      const toolTabs = document.querySelector(".tool-tabs");
       const requestPanel = document.querySelector(".request-panel");
       const statusChip = document.querySelector(".status-chip");
       const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
@@ -871,8 +2219,7 @@ async (page) => {
       };
 
       const requestSwitchStyles = window.getComputedStyle(requestSwitch);
-      const capabilityStripStyles = window.getComputedStyle(capabilityStrip);
-      const capabilityChipStyles = window.getComputedStyle(capabilityChip);
+      const toolTabsStyles = window.getComputedStyle(toolTabs);
       const requestPanelStyles = window.getComputedStyle(requestPanel);
       const statusChipStyles = window.getComputedStyle(statusChip);
       const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
@@ -883,8 +2230,7 @@ async (page) => {
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         scrollWidth: doc.scrollWidth,
         requestMethodColumns: countColumns(requestSwitchStyles.gridTemplateColumns),
-        capabilityColumns: countColumns(capabilityStripStyles.gridTemplateColumns),
-        capabilityChipPaddingTop: parseFloat(capabilityChipStyles.paddingTop),
+        toolTabColumns: countColumns(toolTabsStyles.gridTemplateColumns),
         requestPanelPaddingTop: parseFloat(requestPanelStyles.paddingTop),
         statusChipMinHeight: parseFloat(statusChipStyles.minHeight),
         liveStatusFullDisplay: liveStatusFullStyles.display,
@@ -901,10 +2247,7 @@ async (page) => {
   async function runHappyPath() {
     await assertOutputLiveRegionContracts();
     await waitForTabState("upload");
-    await page.locator("#pathInput").fill("/");
-    await page.getByRole("button", { name: "PING" }).click();
-    await waitForText(page.locator("#responseArea"), "pong");
-    await waitForLiveRegionText("responseAreaLive", "PING / 200", 10000);
+    const requestPanelFetchPath = await fetchViaRequestPanelAndAssert();
 
     await waitForUploadMethodState("POST");
     await page.locator('[data-upload-method="POST"]').focus();
@@ -912,7 +2255,6 @@ async (page) => {
     await waitForUploadMethodState("PATCH", { focused: true });
     await page.keyboard.press("Home");
     await waitForUploadMethodState("POST", { focused: true });
-    await assertCapabilityChipKeyboardActivation("upload");
 
     const uploadName = uploadFilePath.split(/[\\/]/).pop();
     await uploadViaDom(uploadName);
@@ -923,8 +2265,7 @@ async (page) => {
     }
     await waitForLiveRegionText("uploadResponseAreaLive", /Загрузка завершена|Upload complete/, 10000);
 
-    const requestPanelFetchPath = await fetchViaRequestPanelAndAssert(uploadName);
-    await browseUploadsAndAssert(uploadName, { useCapabilityChip: true });
+    await browseUploadsAndAssert(uploadName);
     await waitForLiveRegionText("filesResponseAreaLive", "INFO /uploads 200 OK", 10000);
     await assertFileActionAccessibleNames(uploadName);
     await fetchViaServerFilesAndAssert(uploadName);
@@ -968,7 +2309,6 @@ async (page) => {
     };
 
     await page.locator("#tab-notepad").click();
-    await waitForCapabilityChipPressed("notepad");
     await waitForTabState("notepad", { focused: true });
     await waitForPageCondition("notepad enabled", () => {
       const titleInput = document.getElementById("notepadTitleInput");
@@ -978,28 +2318,28 @@ async (page) => {
 
     await switchLanguage("ru");
     await assertLocaleSnapshot({
-      uploadTabText: "Загрузка файлов",
-      filesTabText: "Файлы на сервере",
-      opsecTabText: "Режим OPSEC",
-      noteListText: "Заметок пока нет",
+      uploadTabText: "Загрузка",
+      filesTabText: "Скачивание",
+      opsecTabText: "Загрузка (продвинутая)",
+      noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
     });
     await switchLanguage("en");
     await assertLocaleSnapshot({
       uploadTabText: "Uploads",
-      filesTabText: "Files",
-      opsecTabText: "OPSEC",
-      noteListText: "No notes yet",
+      filesTabText: "Download",
+      opsecTabText: "Advanced upload",
+      noteListText: "No notes",
       charCountText: "0 chars",
       themeLabel: "Toggle theme",
     });
     await switchLanguage("ru");
     await assertLocaleSnapshot({
-      uploadTabText: "Загрузка файлов",
-      filesTabText: "Файлы на сервере",
-      opsecTabText: "Режим OPSEC",
-      noteListText: "Заметок пока нет",
+      uploadTabText: "Загрузка",
+      filesTabText: "Скачивание",
+      opsecTabText: "Загрузка (продвинутая)",
+      noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
     });
@@ -1049,7 +2389,7 @@ async (page) => {
       [noteTitle],
       15000
     );
-    await waitForText(page.locator("#notepadNoteList"), /Заметок пока нет|No notes yet/, 15000);
+    await waitForText(page.locator("#notepadNoteList"), /Нет заметок|No notes/, 15000);
 
     await page.locator('input[name="notepadTransport"][value="ws"]').check();
     await waitForConnectionStatus("connected", "ws", 15000);
@@ -1081,6 +2421,15 @@ async (page) => {
       throw new Error(`Cross-transport loaded text mismatch: ${wsLoadedText}`);
     }
 
+    const selectiveKeepTitle = "Browser Smoke Selective Keep";
+    const selectiveDeleteTitle = "Browser Smoke Selective Delete";
+    await createAutosavedNote(selectiveKeepTitle, "keep this note");
+    await createAutosavedNote(selectiveDeleteTitle, "delete this note");
+    await deleteSelectedNoteViaUiAndAssert(selectiveDeleteTitle, selectiveKeepTitle);
+
+    const notesClearPreservedUpload = await clearNotesViaUiAndAssert(requestPanelFetchPath);
+    await deleteSelectedUploadViaUiAndAssert(requestPanelFetchPath);
+
     const mobileLayout = await assertMobileLayoutSnapshot();
 
     return {
@@ -1097,6 +2446,9 @@ async (page) => {
       wsConnState,
       wsConnTransport,
       wsConnClass,
+      notesClearPreservedUpload,
+      selectedUploadDeleted: requestPanelFetchPath,
+      selectedNoteDeleted: selectiveDeleteTitle,
       mobileLayout,
     };
   }
@@ -1158,9 +2510,9 @@ async (page) => {
     }
 
     const expectedUnavailableRu =
-      "Защищённый блокнот недоступен: установите exphttp[crypto] на сервере.";
+      "Блокнот недоступен: нужен exphttp[crypto] на сервере.";
     const expectedUnavailableEn =
-      "Secure Notepad unavailable: install exphttp[crypto] on the server.";
+      "Notepad unavailable: exphttp[crypto] required on server.";
 
     await switchLanguage("ru");
     await page.locator("#tab-notepad").click();
@@ -1180,6 +2532,7 @@ async (page) => {
   }
 
   await waitForSpaReady();
+  await installClipboardMock();
   await page.waitForTimeout(100);
   const happyPath = await runHappyPath();
 

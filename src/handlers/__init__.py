@@ -3,10 +3,10 @@ HTTP method handlers module.
 """
 
 from .base import BaseHandler
+from .advanced_upload import AdvancedUploadHandlersMixin
 from .files import FileHandlersMixin
 from .info import InfoHandlersMixin
 from .notepad import NotepadHandlersMixin
-from .opsec import OpsecHandlersMixin
 from .smuggle import SmuggleHandlersMixin
 
 
@@ -14,7 +14,7 @@ class HandlerMixin(
     FileHandlersMixin,
     InfoHandlersMixin,
     NotepadHandlersMixin,
-    OpsecHandlersMixin,
+    AdvancedUploadHandlersMixin,
     SmuggleHandlersMixin,
 ):
     """
@@ -24,7 +24,7 @@ class HandlerMixin(
     - FileHandlersMixin: GET, POST, OPTIONS, FETCH, NONE
     - InfoHandlersMixin: INFO, PING
     - NotepadHandlersMixin: NOTE
-    - OpsecHandlersMixin: handle_opsec_upload
+    - AdvancedUploadHandlersMixin: handle_advanced_upload
     - SmuggleHandlersMixin: SMUGGLE
     """
 
@@ -34,9 +34,9 @@ class HandlerMixin(
 __all__ = [
     "BaseHandler",
     "HandlerMixin",
+    "AdvancedUploadHandlersMixin",
     "FileHandlersMixin",
     "InfoHandlersMixin",
     "NotepadHandlersMixin",
-    "OpsecHandlersMixin",
     "SmuggleHandlersMixin",
 ]

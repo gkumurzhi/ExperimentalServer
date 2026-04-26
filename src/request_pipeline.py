@@ -17,7 +17,6 @@ logger = logging.getLogger("httpserver")
 class ResponseBuildArgs(TypedDict, total=False):
     """Parameters threaded into :class:`HTTPResponse` header building."""
 
-    opsec_mode: bool
     cors_origin: str | None
     keep_alive: bool
     keep_alive_timeout: int
@@ -27,7 +26,6 @@ class ResponseBuildArgs(TypedDict, total=False):
 class RequestPipelineServer(Protocol):
     """The subset of server behavior the request pipeline orchestrates."""
 
-    opsec_mode: bool
     cors_origin: str | None
     KEEP_ALIVE_TIMEOUT: int
     _ecdh_manager: Any
@@ -92,7 +90,6 @@ class RequestPipeline:
         start_time = time.monotonic()
         request_id = secrets.token_hex(4)
         build_args: ResponseBuildArgs = {
-            "opsec_mode": self._server.opsec_mode,
             "cors_origin": self._server.cors_origin,
         }
 
@@ -126,17 +123,16 @@ class RequestPipeline:
             if response.stream_path is not None:
                 use_keep_alive = False
 
-            if not self._server.opsec_mode:
-                duration_ms = (time.monotonic() - start_time) * 1000
-                logger.info(
-                    "[%s] %s - %s %s -> %d (%dms)",
-                    request_id,
-                    client_address[0],
-                    request.method,
-                    request.path,
-                    response.status_code,
-                    duration_ms,
-                )
+            duration_ms = (time.monotonic() - start_time) * 1000
+            logger.info(
+                "[%s] %s - %s %s -> %d (%dms)",
+                request_id,
+                client_address[0],
+                request.method,
+                request.path,
+                response.status_code,
+                duration_ms,
+            )
 
             return use_keep_alive
 
@@ -147,8 +143,7 @@ class RequestPipeline:
                 client_address[0],
             )
             self._server._record_metric(500, 0, error=True)
-            message = "Error" if self._server.opsec_mode else "Internal Server Error"
-            error_response = self._server._build_error_response(500, message)
+            error_response = self._server._build_error_response(500, "Internal Server Error")
             try:
                 client_socket.sendall(error_response.build(**build_args))
             except Exception:

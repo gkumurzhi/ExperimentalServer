@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Serve the current directory over HTTPS on port 8443 with a random Basic Auth
-# password, sandboxed to `uploads/`. Self-signed certificate is generated
-# automatically.
+# password. File access is restricted to `uploads/` by default.
+# Self-signed certificate is generated automatically.
 
 set -euo pipefail
 
@@ -14,5 +14,4 @@ exec exphttp \
   --dir "${ROOT_DIR}" \
   --tls \
   --auth random \
-  --sandbox \
   --max-size 100

@@ -1,5 +1,5 @@
 """
-OPSEC file upload handler.
+Advanced file upload handler.
 """
 
 import base64
@@ -19,7 +19,7 @@ logger = logging.getLogger("httpserver")
 Transport = Literal["body", "headers", "url"]
 
 
-class OpsecPayload(TypedDict, total=False):
+class AdvancedUploadPayload(TypedDict, total=False):
     d: str
     data: str
     e: str
@@ -33,8 +33,8 @@ class OpsecPayload(TypedDict, total=False):
     _raw_body: bytes
 
 
-class OpsecHandlersMixin(BaseHandler):
-    """Mixin with OPSEC handlers."""
+class AdvancedUploadHandlersMixin(BaseHandler):
+    """Mixin with advanced upload handlers."""
 
     @staticmethod
     def _urlsafe_b64decode(data: str) -> bytes:
@@ -48,11 +48,11 @@ class OpsecHandlersMixin(BaseHandler):
         except (binascii.Error, ValueError):
             return b""
 
-    def _extract_opsec_payload(
+    def _extract_advanced_upload_payload(
         self,
         request: HTTPRequest,
-    ) -> tuple[OpsecPayload | None, HTTPResponse | None]:
-        """Extract OPSEC payload from body, headers, or URL params (in priority order)."""
+    ) -> tuple[AdvancedUploadPayload | None, HTTPResponse | None]:
+        """Extract advanced upload payload from body, headers, or URL params."""
 
         # 1. Try JSON body.
         if request.body:
@@ -71,7 +71,7 @@ class OpsecHandlersMixin(BaseHandler):
                 if not isinstance(data_field, str) or not data_field:
                     return None, self._bad_request("Missing 'd' or 'data' in JSON body")
 
-            result: OpsecPayload = {
+            result: AdvancedUploadPayload = {
                 "_transport": "body",
                 "d": data_field,
             }
@@ -102,7 +102,7 @@ class OpsecHandlersMixin(BaseHandler):
 
         # 2. Try HTTP headers (x-d, x-e, x-k, x-n, x-h, x-kb64)
         if request.headers.get("x-d"):
-            header_payload: OpsecPayload = {
+            header_payload: AdvancedUploadPayload = {
                 "d": request.headers["x-d"],
                 "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
                 "_transport": "headers",
@@ -128,7 +128,7 @@ class OpsecHandlersMixin(BaseHandler):
             while request.headers.get(f"x-d-{i}") is not None:
                 chunks.append(request.headers[f"x-d-{i}"])
                 i += 1
-            chunked_payload = OpsecPayload(
+            chunked_payload = AdvancedUploadPayload(
                 d="".join(chunks),
                 kb64=request.headers.get("x-kb64", "").lower() in ("1", "true"),
                 _transport="headers",
@@ -149,7 +149,7 @@ class OpsecHandlersMixin(BaseHandler):
 
         # 3. Try URL query params (?d=...&e=...&k=...)
         if request.query_params.get("d"):
-            query_payload = OpsecPayload(
+            query_payload = AdvancedUploadPayload(
                 d=request.query_params["d"],
                 kb64=request.query_params.get("kb64", "").lower() in ("1", "true"),
                 _transport="url",
@@ -168,11 +168,11 @@ class OpsecHandlersMixin(BaseHandler):
                 query_payload["h"] = hmac_value
             return query_payload, None
 
-        return None, None  # No data found
+        return None, None
 
-    def handle_opsec_upload(self, request: HTTPRequest) -> HTTPResponse:
-        """OPSEC file upload — covert mode."""
-        payload, error = self._extract_opsec_payload(request)
+    def handle_advanced_upload(self, request: HTTPRequest) -> HTTPResponse:
+        """Advanced upload endpoint."""
+        payload, error = self._extract_advanced_upload_payload(request)
         if error:
             return error
 
@@ -192,14 +192,12 @@ class OpsecHandlersMixin(BaseHandler):
         if data_field:
             key_is_base64 = payload.get("kb64", False)
 
-            # Decode key from base64 if flag is set
             if decrypt_key and key_is_base64:
                 try:
                     decrypt_key = base64.b64decode(decrypt_key, validate=True).decode("utf-8")
                 except (ValueError, binascii.Error, UnicodeDecodeError):
                     return self._bad_request("Invalid base64 in 'k'")
 
-            # Decode data using appropriate base64 variant
             if transport == "url":
                 file_data = self._urlsafe_b64decode(data_field)
             else:
@@ -209,22 +207,20 @@ class OpsecHandlersMixin(BaseHandler):
                     return self._bad_request("Invalid base64 in 'd'")
 
             if not file_data:
-                return self._bad_request("Empty or invalid OPSEC payload")
+                return self._bad_request("Empty or invalid advanced upload payload")
 
         if file_data is None:
             response = HTTPResponse(400)
             response.set_body("", "text/plain")
             return response
 
-        # Verify HMAC if provided
         if hmac_value and decrypt_key:
             if not verify_hmac(file_data, decrypt_key, hmac_value):
-                logger.warning("OPSEC HMAC verification failed")
+                logger.warning("Advanced upload HMAC verification failed")
                 response = HTTPResponse(400)
                 response.set_body(json.dumps({"ok": False, "err": "hmac"}), "application/json")
                 return response
 
-        # Decrypt if key is provided
         if encryption and decrypt_key:
             decrypted = decrypt(file_data, decrypt_key)
             if decrypted is not None:
@@ -248,7 +244,7 @@ class OpsecHandlersMixin(BaseHandler):
             file_path = self.upload_dir / safe_filename
 
         logger.debug(
-            "OPSEC upload: %s, encrypted=%s, hmac=%s, transport=%s",
+            "Advanced upload: %s, encrypted=%s, hmac=%s, transport=%s",
             safe_filename,
             bool(encryption),
             bool(hmac_value),
@@ -271,7 +267,7 @@ class OpsecHandlersMixin(BaseHandler):
 
         except Exception as e:
             file_path.unlink(missing_ok=True)
-            logger.error(f"OPSEC write failed: {e}")
+            logger.error(f"Advanced upload write failed: {e}")
             response = HTTPResponse(500)
             response.set_body(json.dumps({"ok": False}), "application/json")
             return response

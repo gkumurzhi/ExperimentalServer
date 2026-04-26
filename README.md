@@ -21,10 +21,10 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 - [Запуск](#запуск)
 - [HTTP-методы](#http-методы)
 - [Веб-интерфейс](#веб-интерфейс)
-- [OPSEC-режим](#opsec-режим)
+- [Продвинутая загрузка](#продвинутая-загрузка)
 - [HTTPS/TLS](#httpstls)
 - [Basic Auth](#basic-auth)
-- [Sandbox-режим](#sandbox-режим)
+- [Область доступа uploads/](#область-доступа-uploads)
 - [HTML Smuggling](#html-smuggling)
 - [Утилита расшифровки](#утилита-расшифровки)
 - [Использование как библиотеки](#использование-как-библиотеки)
@@ -43,8 +43,8 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 - **WebSocket** — реал-тайм синхронизация блокнота (RFC 6455) по `/notes/ws`
 - **HTTPS/TLS** — самоподписные сертификаты на лету или свои
 - **Basic Auth** — HTTP аутентификация с генерацией паролей
-- **OPSEC-режим** — случайные имена методов + XOR-шифрование + HMAC
-- **Sandbox-режим** — ограничение доступа только к `uploads/`
+- **Загрузка (продвинутая)** — загрузка через JSON body, заголовки или URL-параметры
+- **Доступ только к `uploads/`** — файловые операции по умолчанию ограничены рабочей папкой загрузок
 - **Многопоточность** — ThreadPoolExecutor для параллельной обработки
 - Ограничение размера загрузки (по умолчанию 100 MB)
 - Веб-интерфейс с drag & drop загрузкой
@@ -65,12 +65,12 @@ pip install -e .
 exphttp --open
 ```
 
-Сервер запустится на `http://127.0.0.1:8080` и откроет браузер.
+Сервер запустится на `http://127.0.0.1:8080` и откроет браузер. Все пользовательские файлы читаются и записываются через `<root>/uploads/`; встроенный `index.html` и `/static/...` отдаются только для загрузки веб-интерфейса.
 
 Полезные комбинации:
 ```bash
 exphttp --tls --auth random    # HTTPS + авто-пароль
-exphttp --opsec --sandbox      # Скрытный + ограниченный режим
+exphttp -d ./data -m 500       # Рабочая папка ./data/uploads, лимит 500 MB
 exphttp -H 0.0.0.0 -p 443     # Публичный доступ
 ```
 
@@ -105,7 +105,7 @@ ExperimentalHTTPServer/
 │   │   ├── files.py       # GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE
 │   │   ├── info.py        # INFO, PING
 │   │   ├── notepad.py     # NOTE HTTP handlers
-│   │   ├── opsec.py       # OPSEC upload
+│   │   ├── advanced_upload.py # Advanced upload
 │   │   ├── registry.py    # HandlerRegistry
 │   │   └── smuggle.py     # HTML Smuggling
 │   │
@@ -153,8 +153,6 @@ exphttp [опции]
 | `-H, --host HOST` | Хост для привязки | `127.0.0.1` |
 | `-p, --port PORT` | Порт для прослушивания | `8080` |
 | `-d, --dir DIR` | Корневая директория | `.` |
-| `-o, --opsec` | Включить OPSEC-режим | выключен |
-| `-s, --sandbox` | Включить Sandbox-режим | выключен |
 | `-m, --max-size MB` | Макс. размер загрузки в MB | `100` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
@@ -193,36 +191,28 @@ exphttp --tls --cert cert.pem --key key.pem
 # Публичный доступ на порту 443
 exphttp -H 0.0.0.0 -p 443 --tls --auth admin:pass
 
-# OPSEC-режим (случайные имена методов)
-exphttp --opsec
-
-# Sandbox-режим (доступ только к uploads/)
-exphttp --sandbox
-
-# Полная защита: TLS + Auth + OPSEC + Sandbox
-exphttp --tls --auth random --opsec --sandbox
-
 # Комбинированный режим
-exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
+exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth random -m 200
 ```
 
 ## HTTP-методы
 
-| Метод | Описание | Sandbox |
+| Метод | Описание | Область доступа |
 |-------|----------|---------|
-| `GET` | Получение файлов и страниц | Корневые файлы + uploads/ + static/ |
-| `HEAD` | Заголовки GET без тела ответа | Корневые файлы + uploads/ + static/ |
-| `POST` | Загрузка файлов на сервер | Да |
-| `PUT` | Загрузка файлов на сервер | Да |
-| `PATCH` | Загрузка файлов на сервер | Да |
+| `GET` | Получение встроенного UI, статических ресурсов и файлов загрузок | UI + `uploads/` |
+| `HEAD` | Заголовки GET без тела ответа | UI + `uploads/` |
+| `POST` | Загрузка файлов на сервер | `uploads/` |
+| `PUT` | Загрузка файлов на сервер | `uploads/` |
+| `PATCH` | Загрузка файлов на сервер | `uploads/` |
 | `DELETE` | Удаление файла из uploads/ | Только uploads/ |
-| `OPTIONS` | CORS preflight | Да |
+| `OPTIONS` | CORS preflight | n/a |
 | `FETCH` | Скачивание файлов с Content-Disposition | Только uploads/ |
 | `INFO` | Метаданные файла/директории (JSON) | Только uploads/ |
-| `PING` | Проверка доступности сервера | Да |
-| `NONE` | Загрузка файлов на сервер | Да |
-| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM, требует `exphttp[crypto]`) | Только uploads/notes/ |
+| `PING` | Проверка доступности сервера | n/a |
+| `NONE` | Загрузка файлов на сервер | `uploads/` |
+| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM, требует `exphttp[crypto]`) | Только notes/ |
 | `SMUGGLE` | HTML Smuggling — генерация страницы со встроенным файлом | Только uploads/ |
+| Любой нестандартный метод с payload | Загрузка (продвинутая) через `d`/`data`, `X-D` или `?d=` | `uploads/` |
 
 ### Заголовки ответов
 
@@ -235,7 +225,7 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 | `X-Upload-Status` | NONE | success / error / no-data |
 | `X-Fetch-Status` | FETCH | success / file-not-found |
 | `X-Ping-Response` | PING | pong |
-| `X-Request-Id` | Все вне OPSEC | 8-символьный hex ID для корреляции логов |
+| `X-Request-Id` | Все HTTP-ответы | 8-символьный hex ID для корреляции логов |
 | `Content-Security-Policy` | GET (HTML) | CSP заголовок для HTML ответов |
 
 ## Веб-интерфейс
@@ -244,41 +234,23 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --opsec --sandbox -m 200
 
 1. **Запросы** — отправка `GET`, `FETCH`, `INFO`, `PING` по произвольному пути
 2. **Загрузка файлов** — drag & drop интерфейс с переключателем метода `POST` / `NONE` / `PUT` / `PATCH`
-3. **OPSEC Mode** — скрытая загрузка через JSON body, заголовки или URL-параметры, с опциональным XOR-шифрованием
-4. **Файлы на сервере** — обзор `uploads/`, переход по директориям, `INFO`, `FETCH`, `SMUGGLE`, удаление файлов
+3. **Загрузка (продвинутая)** — загрузка через JSON body, заголовки или URL-параметры, с опциональным XOR-шифрованием
+4. **Скачивание** — обзор `uploads/`, переход по директориям, `INFO`, `FETCH`, `SMUGGLE`, удаление файлов и быстрая очистка `uploads/`
 5. **Secure Notepad** — ECDH/AES-GCM блокнот с автошифрованием и переключением транспорта `HTTP` / `WebSocket`
 
-## OPSEC-режим
+## Продвинутая загрузка
 
-Режим повышенной скрытности для передачи файлов:
+Продвинутый сценарий загрузки включён всегда и не требует отдельного параметра запуска. Он принимает данные через JSON body, HTTP-заголовки или URL-параметры и сохраняет результат в `uploads/`.
 
 ### Особенности
 
-- **Случайные алиасы методов** — для upload/download/info/ping/notepad при каждом запуске генерируются новые имена
+- **Свободный нестандартный метод** — любой неизвестный HTTP-метод с payload загрузки обрабатывается как продвинутая загрузка
 - **Несколько транспортов** — payload можно передать через JSON body, HTTP headers или URL query
 - **Base64-кодирование** — данные передаются как `d` / `data`
-- **XOR или AES-GCM** — при наличии ключа payload можно шифровать перед передачей
+- **XOR** — при наличии ключа payload можно обфусцировать перед передачей
 - **Имя файла опционально** — если `n` / `name` не передано, сервер сохранит `<sha256[:12]>.bin`
 
-### Генерируемые методы
-
-При запуске с `--opsec` создаётся `.opsec_config.json`:
-
-```json
-{
-  "upload": "VALIDATESTATUS",
-  "download": "SYNCRECORD",
-  "info": "QUERYRECORD",
-  "ping": "CHECKDATA",
-  "notepad": "PROCESSENTRY"
-}
-```
-
-Имена формируются из комбинаций:
-- Префиксы: CHECK, SYNC, VERIFY, UPDATE, QUERY, REPORT, SUBMIT, VALIDATE, PROCESS, EXECUTE
-- Суффиксы: DATA, STATUS, INFO, CONTENT, RESOURCE, ITEM, OBJECT, RECORD, ENTRY
-
-### Формат OPSEC-запроса
+### Формат запроса
 
 ```json
 {
@@ -321,7 +293,7 @@ payload = {
 
 Сервер проверит HMAC перед расшифровкой и вернёт ошибку если данные повреждены.
 
-### Пример OPSEC загрузки
+### Пример продвинутой загрузки
 
 ```bash
 # 1. Зашифровать файл локально
@@ -331,12 +303,12 @@ python tools/decrypt.py secret.txt mykey -e -o secret.enc
 base64 secret.enc > secret.b64
 
 # 3. Отправить с рандомизированным или любым нестандартным методом, который несёт payload
-curl -X SYNCDATA -H "Content-Type: application/json" \
+curl -X CHECKDATA -H "Content-Type: application/json" \
   -d '{"d":"'$(cat secret.b64)'","n":"secret.txt","e":"xor","k":"mykey"}' \
   http://localhost:8080/
 ```
 
-### Ответ OPSEC
+### Ответ
 
 ```json
 {
@@ -460,18 +432,16 @@ server.authenticator = auth
 server.start()
 ```
 
-## Sandbox-режим
+## Область доступа uploads/
 
-Ограничивает доступ к файловой системе:
+Сервер всегда ограничивает пользовательские файловые операции рабочей папкой `uploads/` внутри выбранного `--dir`:
 
-- `GET` — корневые файлы (index.html и т.д.) + uploads/ + static/
+- `GET` — встроенный `index.html`, `/static/...` и файлы из `uploads/`
 - `FETCH`, `INFO` — только uploads/
+- `POST`, `PUT`, `PATCH`, `NONE`, продвинутая загрузка — запись только в uploads/
+- `DELETE`, `SMUGGLE` — работа только с uploads/
 - Защита от path traversal (`../`)
 - `static/` — доступна только для чтения (JS, CSS, изображения)
-
-```bash
-exphttp --sandbox
-```
 
 ## HTML Smuggling
 
@@ -558,9 +528,7 @@ from src import ExperimentalHTTPServer, xor_encrypt, xor_decrypt
 server = ExperimentalHTTPServer(
     host="127.0.0.1",
     port=8080,
-    root_dir="./data",
-    opsec_mode=True,
-    sandbox_mode=True
+    root_dir="./data"
 )
 server.start()  # Блокирующий вызов
 
@@ -587,6 +555,12 @@ curl -X INFO http://localhost:8080/uploads/
 # FETCH — скачать файл
 curl -X FETCH http://localhost:8080/uploads/test.txt -o test.txt
 
+# Очистить uploads/ (скрытые служебные файлы сохраняются)
+curl -X DELETE "http://localhost:8080/uploads?clear=1"
+
+# Очистить заметки отдельно от uploads/
+curl -X NOTE "http://localhost:8080/notes?clear=1"
+
 # NONE — загрузить файл
 curl -X NONE -H "X-File-Name: test.txt" \
   --data-binary @test.txt http://localhost:8080/
@@ -599,7 +573,7 @@ curl -X PUT -H "X-File-Name: data.bin" \
 curl -X POST -H "X-File-Name: post.txt" \
   --data-binary @post.txt http://localhost:8080/
 
-# OPSEC загрузка (в OPSEC-режиме)
+# Загрузка (продвинутая)
 curl -X CHECKDATA -H "Content-Type: application/json" \
   -d '{"d":"SGVsbG8gV29ybGQ=","n":"hello.txt"}' \
   http://localhost:8080/
@@ -624,12 +598,12 @@ async function uploadFile(file) {
     return response.json();
 }
 
-// OPSEC загрузка текстового payload (в OPSEC-режиме)
-async function opsecUpload(data, filename) {
+// Продвинутая загрузка текстового payload
+async function advancedUpload(data, filename) {
     const base64 = btoa(data);
 
     const response = await fetch('http://localhost:8080/', {
-        method: 'SYNCDATA',
+        method: 'CHECKDATA',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ d: base64, n: filename })
     });
@@ -661,10 +635,10 @@ with open('test.txt', 'rb') as f:
     )
 print(response.json())
 
-# OPSEC загрузка (в OPSEC-режиме: используйте рандомизированный или любой нестандартный метод с payload)
+# Продвинутая загрузка: используйте любой нестандартный метод с payload
 data = base64.b64encode(b"Secret data").decode()
 response = requests.request(
-    'SYNCDATA',
+    'CHECKDATA',
     'http://localhost:8080/',
     json={'d': data, 'n': 'secret.txt'},
     headers={'Content-Type': 'application/json'}
@@ -681,19 +655,11 @@ print(response.json())
 - **Path Traversal** — проверка `resolve()` + `Path.relative_to()` + блокировка symlinks
 - **Санитизация имён** — удаление опасных символов из имён файлов
 - **CORS** — настроенные заголовки для кросс-доменных запросов
-- **Sandbox** — ограничение доступа к файловой системе
+- **Доступ только к uploads/** — ограничение пользовательских файловых операций
 - **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
 - **Лимит размера** — ограничение размера загружаемых файлов (413 Payload Too Large)
-- **Скрытые файлы** — `.opsec_config.json`, `.env`, `.gitignore` недоступны через GET и INFO
-- **HMAC** — опциональная проверка целостности данных в OPSEC режиме
-
-### OPSEC маскировка
-
-В OPSEC режиме сервер маскируется:
-- Заголовок `Server: nginx` вместо `ExperimentalHTTPServer`
-- Скрыты кастомные методы в `Access-Control-Allow-Methods`
-- Неизвестные методы возвращают 404 вместо 405
-- Минимальное логирование (только ошибки)
+- **Скрытые файлы** — `.env`, `.gitignore` и legacy-служебные файлы недоступны через GET и INFO
+- **HMAC** — опциональная проверка целостности данных в продвинутой загрузке
 
 ### Ограничения XOR-шифрования
 

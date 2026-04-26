@@ -1,6 +1,5 @@
 .panel,
 .tool-card,
-.capability-chip,
 .tab,
 .response-area,
 .upload-section,
@@ -15,50 +14,6 @@
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-soft), var(--shadow-line);
     padding: var(--space-5);
-}
-
-.capability-chip {
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-muted);
-    color: inherit;
-    text-align: left;
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-2);
-    cursor: pointer;
-    transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
-}
-
-.capability-chip:hover,
-.capability-chip:focus-visible {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-    background: var(--bg-elevated);
-}
-
-.capability-chip.active {
-    border-color: var(--accent-secondary);
-    background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-elevated));
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 18%, transparent);
-}
-
-.capability-chip.active .capability-chip__title {
-    color: var(--accent-secondary);
-}
-
-.capability-chip.active .capability-chip__desc {
-    color: var(--text-secondary);
-}
-
-.capability-chip__title {
-    font-weight: 700;
-    color: var(--text-emphasis);
-}
-
-.capability-chip__desc {
-    color: var(--text-muted);
-    font-size: 0.92rem;
-    line-height: 1.4;
 }
 
 .status-chip {
@@ -82,12 +37,19 @@
     color: var(--accent-primary);
 }
 
+.status-chip--uploads,
 .status-chip--sandbox {
     color: var(--accent-tertiary);
 }
 
 .status-chip--opsec {
     color: var(--accent-opsec);
+}
+
+.status-chip--host {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    color: color-mix(in srgb, var(--text-secondary) 82%, transparent);
 }
 
 .status-chip__label--compact {
@@ -169,15 +131,23 @@ button:disabled {
     color: var(--accent-primary);
 }
 
+.btn-head {
+    background: color-mix(in srgb, var(--accent-primary) 10%, var(--bg-elevated));
+    color: var(--accent-primary);
+}
+
 .btn-post,
 .btn-none,
 .btn-put,
 .btn-patch,
+.btn-options,
 .btn-info,
 .btn-fetch,
 .btn-ping,
+.btn-smuggle,
 .btn-download,
 .btn-note,
+.btn-delete,
 .btn-opsec,
 .btn-danger,
 .btn-ghost {
@@ -205,18 +175,21 @@ button:disabled {
 }
 
 .btn-fetch,
-.btn-info {
+.btn-info,
+.btn-options {
     background: color-mix(in srgb, var(--accent-secondary) 18%, var(--bg-elevated));
     color: var(--accent-secondary);
 }
 
-.btn-ping {
+.btn-ping,
+.btn-delete {
     background: color-mix(in srgb, var(--accent-danger) 18%, var(--bg-elevated));
     color: var(--accent-danger);
 }
 
 .btn-download,
-.btn-note {
+.btn-note,
+.btn-smuggle {
     background: color-mix(in srgb, var(--accent-note) 18%, var(--bg-elevated));
     color: var(--accent-note);
 }
@@ -330,6 +303,24 @@ button:focus-visible,
     gap: var(--space-2);
 }
 
+#opsec-tab .control-cluster,
+#opsec-tab .settings-stack {
+    gap: var(--space-2);
+}
+
+#opsec-tab .checkbox-with-input {
+    gap: 6px;
+}
+
+#opsec-tab .checkbox-row {
+    align-items: flex-start;
+    line-height: 1.35;
+}
+
+#opsec-tab .radio-row {
+    gap: var(--space-3);
+}
+
 input[type="checkbox"],
 input[type="radio"] {
     accent-color: var(--accent-secondary);
@@ -365,6 +356,7 @@ input[type="radio"] {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     align-content: start;
+    gap: var(--space-3);
 }
 
 .tool-card__actions {
@@ -406,7 +398,6 @@ input[type="radio"] {
     }
 
     .tool-card--output {
-        gap: var(--space-3);
         padding: var(--space-4);
     }
 
@@ -446,6 +437,10 @@ input[type="radio"] {
 
     #filesResponseArea > .response-header:only-child {
         color: var(--text-muted);
+    }
+
+    #uploadResponseArea {
+        min-height: 172px;
     }
 
     #uploadBtn:disabled,
@@ -488,12 +483,6 @@ input[type="radio"] {
     border-color: var(--border-strong);
 }
 
-[data-theme="light"] .capability-chip.active {
-    border-color: color-mix(in srgb, var(--accent-secondary) 34%, var(--border-strong));
-    background: color-mix(in srgb, var(--accent-secondary) 6%, white);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-secondary) 12%, transparent);
-}
-
 [data-theme="light"] .status-chip {
     background: rgba(255, 255, 255, 0.86);
     border-color: color-mix(in srgb, var(--border-strong) 88%, transparent);
@@ -504,6 +493,7 @@ input[type="radio"] {
     border-color: color-mix(in srgb, var(--accent-primary) 22%, var(--border-strong));
 }
 
+[data-theme="light"] .status-chip--uploads,
 [data-theme="light"] .status-chip--sandbox {
     background: color-mix(in srgb, var(--accent-tertiary) 7%, white);
     border-color: color-mix(in srgb, var(--accent-tertiary) 22%, var(--border-strong));
@@ -512,6 +502,10 @@ input[type="radio"] {
 [data-theme="light"] .status-chip--opsec {
     background: color-mix(in srgb, var(--accent-opsec) 6%, white);
     border-color: color-mix(in srgb, var(--accent-opsec) 22%, var(--border-strong));
+}
+
+[data-theme="light"] .status-chip--host {
+    color: color-mix(in srgb, var(--text-secondary) 82%, transparent);
 }
 
 @media (min-width: 1101px) {
@@ -539,6 +533,7 @@ input[type="radio"] {
         border-color: color-mix(in srgb, var(--accent-primary) 18%, var(--border-strong));
     }
 
+    [data-theme="light"] .status-chip--uploads,
     [data-theme="light"] .status-chip--sandbox {
         background: color-mix(in srgb, var(--accent-tertiary) 5%, white);
         border-color: color-mix(in srgb, var(--accent-tertiary) 16%, var(--border-strong));
@@ -555,6 +550,11 @@ input[type="radio"] {
     border-color: color-mix(in srgb, var(--accent-primary) 24%, var(--border-strong));
 }
 
+[data-theme="light"] .btn-head {
+    background: color-mix(in srgb, var(--accent-primary) 4%, white);
+    border-color: color-mix(in srgb, var(--accent-primary) 18%, var(--border-strong));
+}
+
 [data-theme="light"] .btn-post {
     background: color-mix(in srgb, var(--accent-tertiary) 7%, white);
     border-color: color-mix(in srgb, var(--accent-tertiary) 24%, var(--border-strong));
@@ -567,7 +567,8 @@ input[type="radio"] {
 
 [data-theme="light"] .btn-put,
 [data-theme="light"] .btn-fetch,
-[data-theme="light"] .btn-info {
+[data-theme="light"] .btn-info,
+[data-theme="light"] .btn-options {
     background: color-mix(in srgb, var(--accent-secondary) 7%, white);
     border-color: color-mix(in srgb, var(--accent-secondary) 24%, var(--border-strong));
 }
@@ -579,13 +580,15 @@ input[type="radio"] {
 }
 
 [data-theme="light"] .btn-ping,
+[data-theme="light"] .btn-delete,
 [data-theme="light"] .btn-danger {
     background: color-mix(in srgb, var(--accent-danger) 6%, white);
     border-color: color-mix(in srgb, var(--accent-danger) 22%, var(--border-strong));
 }
 
 [data-theme="light"] .btn-download,
-[data-theme="light"] .btn-note {
+[data-theme="light"] .btn-note,
+[data-theme="light"] .btn-smuggle {
     background: color-mix(in srgb, var(--accent-note) 7%, white);
     border-color: color-mix(in srgb, var(--accent-note) 24%, var(--border-strong));
 }
@@ -706,15 +709,15 @@ input[type="radio"] {
     }
 
     #opsec-tab .upload-section {
-        min-height: 176px;
+        min-height: 160px;
     }
 
     #opsec-tab .upload-label {
-        padding: var(--space-4);
+        padding: var(--space-3);
     }
 
     #opsec-tab .upload-text {
-        font-size: 0.96rem;
+        font-size: 0.92rem;
     }
 
     #opsec-tab .upload-hint,
@@ -723,14 +726,21 @@ input[type="radio"] {
         line-height: 1.35;
     }
 
-    .capability-chip {
-        padding: var(--space-3);
-        gap: 6px;
+    #upload-tab .upload-section {
+        min-height: 160px;
     }
 
-    .capability-chip__desc {
-        font-size: 0.88rem;
-        line-height: 1.35;
+    #upload-tab .upload-label {
+        padding: var(--space-4);
+    }
+
+    #upload-tab .upload-text {
+        font-size: 0.94rem;
+    }
+
+    #upload-tab .upload-hint,
+    #upload-tab .upload-selection {
+        line-height: 1.3;
     }
 
     .status-chip {
@@ -771,6 +781,10 @@ input[type="radio"] {
     .response-area {
         min-height: 180px;
         max-height: 46vh;
+    }
+
+    #uploadResponseArea {
+        min-height: 152px;
     }
 
     .response-area--hero {

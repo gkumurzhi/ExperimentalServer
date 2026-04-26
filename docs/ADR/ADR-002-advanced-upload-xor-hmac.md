@@ -1,13 +1,14 @@
-# ADR-002: OPSEC cipher — XOR + HMAC baseline with optional AES-GCM
+# ADR-002: Advanced upload payload protection — XOR + HMAC baseline with optional AES-GCM
 
 - **Status:** accepted
 
 ## Context
 
-OPSEC mode aims to make uploaded files *unreadable to a passive observer who
-captures traffic* without requiring a separate TLS termination. The server
-must work in environments where installing `cryptography` is impossible (air-
-gapped research VMs, minimal containers).
+Advanced upload allows clients to send encoded payloads through JSON bodies,
+headers, chunked headers, or URL parameters. Some clients also need a stdlib-only
+way to obfuscate payload bytes and detect accidental or malicious tampering.
+The server must work in environments where installing `cryptography` is
+impossible (air-gapped research VMs, minimal containers).
 
 Requirements:
 
@@ -25,9 +26,8 @@ Requirements:
    upload path uses AES-256-GCM with a random 12-byte nonce; wire format
    carries a version byte so both clients and the server can distinguish
    baseline vs. AEAD payloads.
-3. **Method names are randomised at startup** so intent is not readable
-   from access logs; names are persisted to `.opsec_config.json` for the
-   client.
+3. **Transport selection is explicit:** clients choose JSON body, header,
+   chunked-header, or URL transport. Method names are not treated as secrets.
 
 ## Consequences
 
@@ -43,8 +43,7 @@ Requirements:
 - XOR+HMAC is **not IND-CPA secure**. A motivated attacker who captures
   multiple encrypted uploads with known plaintext can recover the key.
   Document this in `SECURITY.md` and `docs/threat-model.md`.
-- Random method names obscure intent but do not defeat traffic analysis
-  (timing, body sizes, TLS fingerprint) — nginx masquerading headers are
-  decorative.
-- OPSEC mode is *obfuscation*, not *cryptographic secrecy*. Users must
+- Non-standard method names and payload placement do not defeat traffic
+  analysis (timing, body sizes, TLS fingerprint).
+- Advanced upload obfuscation is not a complete security layer. Users must
   layer TLS and auth on top for any real-world deployment.

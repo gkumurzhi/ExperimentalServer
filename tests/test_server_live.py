@@ -1,4 +1,4 @@
-"""Live end-to-end server coverage for auth, keep-alive, OPSEC, and WebSocket notes."""
+"""Live end-to-end server coverage for auth, keep-alive, advanced upload, and WebSocket notes."""
 
 from __future__ import annotations
 
@@ -154,8 +154,8 @@ class TestLiveRequestHandling:
                 assert headers1["connection"] == "keep-alive"
                 ping1 = json.loads(body1)
                 assert ping1["status"] == "pong"
-                assert ping1["sandbox_mode"] is False
-                assert ping1["opsec_mode"] is False
+                assert ping1["access_scope"] == "uploads"
+                assert ping1["advanced_upload"] is True
 
                 sock.sendall(
                     (
@@ -170,8 +170,8 @@ class TestLiveRequestHandling:
                 assert headers2["connection"] == "close"
                 ping2 = json.loads(body2)
                 assert ping2["status"] == "pong"
-                assert ping2["sandbox_mode"] is False
-                assert ping2["opsec_mode"] is False
+                assert ping2["access_scope"] == "uploads"
+                assert ping2["advanced_upload"] is True
 
     def test_basic_auth_rejects_missing_header_and_accepts_valid_credentials(
         self,
@@ -208,33 +208,32 @@ class TestLiveRequestHandling:
                 assert json.loads(body)["status"] == "pong"
 
 
-class TestLiveOpsecRouting:
-    def test_randomized_opsec_methods_route_ping_info_and_upload(
+class TestLiveAdvancedUploadRouting:
+    def test_advanced_upload_is_available_without_mode_flags(
         self,
         temp_dir: Path,
     ) -> None:
-        with _LiveServer(temp_dir, opsec_mode=True) as live:
-            config = json.loads((temp_dir / ".opsec_config.json").read_text("utf-8"))
-
+        with _LiveServer(temp_dir) as live:
+            assert not (temp_dir / ".opsec_config.json").exists()
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 sock.sendall(
                     (
-                        f"{config['ping']} / HTTP/1.1\r\n"
+                        f"PING / HTTP/1.1\r\n"
                         f"Host: 127.0.0.1:{live.port}\r\n"
                         "\r\n"
                     ).encode("ascii")
                 )
                 status, headers, body = _recv_http_response(sock)
                 assert status.startswith("HTTP/1.1 200")
-                assert headers["server"] == "nginx"
+                assert headers["server"].startswith("ExperimentalHTTPServer/")
                 assert json.loads(body)["status"] == "pong"
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 sock.sendall(
                     (
-                        f"{config['info']} / HTTP/1.1\r\n"
+                        f"INFO / HTTP/1.1\r\n"
                         f"Host: 127.0.0.1:{live.port}\r\n"
                         "\r\n"
                     ).encode("ascii")
@@ -244,15 +243,15 @@ class TestLiveOpsecRouting:
                 assert status.startswith("HTTP/1.1 200")
                 assert info["is_directory"] is True
                 assert info["path"] == "/"
-                assert "contents" not in info
+                assert "contents" in info
 
-            payload = base64.b64encode(b"opsec live upload").decode("ascii")
+            payload = base64.b64encode(b"advanced live upload").decode("ascii")
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
-                request_body = f'{{"d":"{payload}","n":"covert.txt"}}'.encode("ascii")
+                request_body = f'{{"d":"{payload}","n":"advanced.txt"}}'.encode("ascii")
                 sock.sendall(
                     (
-                        f"{config['upload']} /covert HTTP/1.1\r\n"
+                        f"SYNCDATA /advanced HTTP/1.1\r\n"
                         f"Host: 127.0.0.1:{live.port}\r\n"
                         "Content-Type: application/json\r\n"
                         f"Content-Length: {len(request_body)}\r\n"
@@ -265,10 +264,10 @@ class TestLiveOpsecRouting:
                 assert status.startswith("HTTP/1.1 200")
                 assert result["ok"] is True
                 assert result["transport"] == "body"
-                assert (temp_dir / "uploads" / "covert.txt").read_bytes() == b"opsec live upload"
+                assert (temp_dir / "uploads" / "advanced.txt").read_bytes() == b"advanced live upload"
 
-    def test_unknown_opsec_method_with_data_falls_back_to_upload(self, temp_dir: Path) -> None:
-        with _LiveServer(temp_dir, opsec_mode=True) as live:
+    def test_unknown_method_with_data_falls_back_to_advanced_upload(self, temp_dir: Path) -> None:
+        with _LiveServer(temp_dir) as live:
             payload = base64.b64encode(b"fallback upload").decode("ascii")
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
@@ -339,7 +338,8 @@ class TestLiveWebSocketNotes:
                 assert loaded["id"] == note_id
                 assert loaded["title"] == "Live WS Note"
                 assert loaded["data"] == note_data
-                assert (temp_dir / "uploads" / "notes" / f"{note_id}.enc").read_bytes() == note_blob
+                assert (temp_dir / "notes" / f"{note_id}.enc").read_bytes() == note_blob
+                assert not (temp_dir / "uploads" / "notes").exists()
 
                 sock.sendall(_make_masked_frame(WS_CLOSE, struct.pack("!H", 1000)))
                 close_frame = parse_ws_frame(sock.recv(4096))

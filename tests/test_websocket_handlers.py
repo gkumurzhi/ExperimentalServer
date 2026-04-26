@@ -65,6 +65,8 @@ class WSServerStub(HandlerMixin):
     def __init__(self, root_dir: Path, upload_dir: Path):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.notes_dir = root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = False
         self.opsec_mode = False
         self._temp_smuggle_files: set[str] = set()
@@ -339,6 +341,25 @@ class TestNoteTransportParity:
 
         expected_ws = {"type": "loaded", **http_data}
         assert ws_data == expected_ws
+
+    def test_http_and_ws_clear_match(self, ws_server, mock_socket):
+        save_body = json.dumps(
+            {
+                "title": "Clear Parity",
+                "data": base64.b64encode(b"clear-parity").decode(),
+            }
+        ).encode()
+        ws_server.handle_note(make_request("NOTE", "/notes", body=save_body))
+
+        http_resp = ws_server.handle_note(make_request("NOTE", "/notes?clear=1"))
+        http_data = json.loads(http_resp.body)
+        assert http_data["success"] is True
+
+        ws_server.handle_note(make_request("NOTE", "/notes", body=save_body))
+        ws_server._handle_ws_message(mock_socket, json.dumps({"type": "clear"}).encode())
+        ws_data = mock_socket.last_json
+
+        assert ws_data == {"type": "cleared", **http_data}
 
 
 class TestWSHelpers:

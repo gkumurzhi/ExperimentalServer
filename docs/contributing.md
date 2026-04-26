@@ -138,7 +138,7 @@ restates this):
 6. Tests:
    - Unit tests in `tests/test_handlers/test_<mixin>.py`
    - Integration scenarios in `tests/test_handlers/test_handler_integration.py`
-     if the method interacts with sockets, auth, or OPSEC mode.
+     if the method interacts with sockets, auth, or advanced upload routing.
 
 ## Reporting security issues
 

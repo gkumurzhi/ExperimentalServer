@@ -18,7 +18,7 @@ function setUploadMethod(method, btn, options = {}) {
     });
 
     const hint = document.getElementById('uploadMethodHint');
-    if (hint) hint.textContent = t('uploadMethodLabel') + ': ' + method;
+    if (hint) hint.textContent = method;
 
     if (focusButton) {
         focusElementWithoutScroll(activeButton);
@@ -56,6 +56,7 @@ function getUploadSelectionText() {
 
 function refreshUploadSelectionLocale() {
     if (uploadSelectionState) {
+        uploadSelectionState.hidden = filesToUpload.length === 0;
         uploadSelectionState.textContent = getUploadSelectionText();
     }
 

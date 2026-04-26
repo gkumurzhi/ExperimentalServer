@@ -1,8 +1,8 @@
 """Registry of HTTP method handlers.
 
 Replaces the hard-coded `method_handlers` dict with a first-class object that
-supports dynamic registration (needed for OPSEC-mode random method names) and
-provides a single place to look up handlers during request dispatch.
+supports dynamic registration for custom methods and provides a single place
+to look up handlers during request dispatch.
 
 The legacy `method_handlers` dict on the server is kept as a live view of the
 registry for backwards compatibility with tests and the INFO handler.

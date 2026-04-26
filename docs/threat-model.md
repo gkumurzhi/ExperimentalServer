@@ -11,12 +11,12 @@ trusted *after* it is validated at the boundary.
 
 | Asset | Why it matters |
 |-------|----------------|
-| Files on disk | Confidentiality (sandbox escape leaks user data), integrity (arbitrary write corrupts the host) |
+| Files on disk | Confidentiality (uploads-only escape leaks user data), integrity (arbitrary write corrupts the host) |
 | Server process | Availability (DoS pins resources, makes the service unusable) |
 | Basic Auth credentials | Confidentiality (leaked credentials grant full access) |
 | TLS private key | If leaked, enables passive decryption of all recorded traffic |
 | Notepad ECDH session key | Short-lived, bounded in-memory state; leak compromises one session, not a permanent secret |
-| OPSEC config (`.opsec_config.json`) | If leaked to an attacker, reveals the randomised method names |
+| Uploaded files | User-controlled data stored under `<root>/uploads/` |
 
 ## STRIDE summary
 
@@ -35,7 +35,7 @@ trusted *after* it is validated at the boundary.
 | Path traversal in upload/download | `Path.resolve().relative_to(base)` — see ADR-004 |
 | Content-Length smuggling (duplicate/negative CL) | Rejected in `src/http/io.py:_parse_content_length` |
 | Transfer-Encoding smuggling | Known limitation: the backend does not decode chunked bodies; deploy behind a proxy that rejects `Transfer-Encoding` until this is fixed |
-| OPSEC payload modification | HMAC-SHA256 tag over ciphertext + metadata |
+| Advanced upload payload modification | Optional HMAC-SHA256 tag over ciphertext + metadata |
 | WebSocket frame injection | Frame size capped at 10 MB in `src/websocket.py` |
 
 ### Repudiation
@@ -48,11 +48,11 @@ trusted *after* it is validated at the boundary.
 
 | Threat | Mitigation |
 |--------|------------|
-| Hidden file access (`.env`, `.opsec_config.json`) | `HIDDEN_FILES` blocks GET/INFO access; OPSEC mode also suppresses directory contents |
-| Directory listing in production | OPSEC mode suppresses INFO directory contents; sandbox mode narrows scope to `uploads/` |
+| Hidden file access (`.env`, legacy service files) | `HIDDEN_FILES` blocks GET/INFO access |
+| Directory listing in production | INFO is limited to `uploads/`; protect deployments with Basic Auth and a reverse proxy when exposed |
 | Auth timing side channel | Dummy password verification on unknown users (`verify_password`) |
 | TLS downgrade | Minimum TLS 1.2; modern cipher suite only |
-| Error messages leaking internal paths | OPSEC mode returns generic `{"error": "Error"}`; non-OPSEC returns `Internal Server Error` without traceback |
+| Error messages leaking internal paths | Error responses avoid tracebacks and keep filesystem paths out of public bodies |
 
 ### Denial of Service
 
@@ -72,18 +72,18 @@ a reverse proxy / CDN if that is a concern.
 
 | Threat | Mitigation |
 |--------|------------|
-| Symlink escape from sandbox | `resolve_descendant_path()` enforces base-dir containment; handler policy blocks serving symlink targets directly |
-| Uploading an executable to a served directory | Sandbox mode restricts writes to `uploads/`; any downstream layer serving uploads should set `X-Content-Type-Options: nosniff` |
-| OPSEC mode used as sole security layer | Documented in `SECURITY.md` and ADR-002 — always pair with TLS + Auth |
+| Symlink escape from uploads | `resolve_descendant_path()` enforces base-dir containment; handler policy blocks serving symlink targets directly |
+| Uploading an executable to a served directory | Writes are restricted to `uploads/`; any downstream layer serving uploads should set `X-Content-Type-Options: nosniff` |
+| Advanced upload used as sole security layer | Documented in `SECURITY.md`; always pair external exposure with TLS + Auth |
 
 ## Non-goals
 
-- **Perfect forward secrecy for OPSEC uploads.** XOR+HMAC baseline is
-  fragile against chosen-plaintext; use AES-GCM path (`[crypto]` extra) for
+- **Perfect forward secrecy for advanced uploads.** XOR+HMAC baseline is
+  fragile against chosen-plaintext; use TLS and authenticated encryption for
   real-world deployments.
-- **Resistance to traffic analysis.** OPSEC method-name obfuscation masks
-  intent from logs, not from wire observers who can see timings and
-  sizes.
+- **Resistance to traffic analysis.** Non-standard method names and payload
+  placement do not hide timings, body sizes, or connection metadata from wire
+  observers.
 - **Defense against compromised peer.** Once a client holds valid Basic
   Auth credentials, the server trusts every request it sends.
 

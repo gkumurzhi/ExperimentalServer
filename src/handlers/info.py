@@ -27,13 +27,11 @@ class InfoHandlersMixin(BaseHandler):
         url_path = request.path
         clean_path = url_path.lstrip("/")
 
-        # In sandbox mode, restrict to uploads
-        if self.sandbox_mode:
-            if clean_path.startswith("uploads/"):
-                clean_path = clean_path[8:]
-            file_path = self._resolve_safe_path(clean_path, self.upload_dir)
-        else:
-            file_path = self._resolve_safe_path(clean_path, self.root_dir)
+        if clean_path.startswith("uploads/"):
+            clean_path = clean_path[8:]
+        elif clean_path == "uploads":
+            clean_path = ""
+        file_path = self._resolve_safe_path(clean_path, self.upload_dir)
 
         if file_path is None:
             response = HTTPResponse(400)
@@ -65,10 +63,10 @@ class InfoHandlersMixin(BaseHandler):
             "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
             "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
             "extension": file_path.suffix,
-            "sandbox_mode": self.sandbox_mode,
+            "access_scope": "uploads",
         }
 
-        if file_path.is_dir() and not self.opsec_mode:
+        if file_path.is_dir():
             all_items = [
                 {"name": f.name, "is_dir": f.is_dir()}
                 for f in sorted(file_path.iterdir())
@@ -99,25 +97,17 @@ class InfoHandlersMixin(BaseHandler):
         logger.debug("PING")
         response = HTTPResponse(200)
 
-        ping_info: dict[str, Any]
-        if self.opsec_mode:
-            ping_info = {
-                "status": "pong",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        else:
-            ping_info = {
-                "status": "pong",
-                "server": f"ExperimentalHTTPServer/{__version__}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "supported_methods": list(self.method_handlers.keys()),
-                "sandbox_mode": self.sandbox_mode,
-                "opsec_mode": self.opsec_mode,
-            }
-            # Include server metrics if available
-            get_metrics = getattr(self, "get_metrics", None)
-            if callable(get_metrics):
-                ping_info["metrics"] = get_metrics()
+        ping_info: dict[str, Any] = {
+            "status": "pong",
+            "server": f"ExperimentalHTTPServer/{__version__}",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "supported_methods": list(self.method_handlers.keys()),
+            "access_scope": "uploads",
+            "advanced_upload": True,
+        }
+        get_metrics = getattr(self, "get_metrics", None)
+        if callable(get_metrics):
+            ping_info["metrics"] = get_metrics()
 
         response.set_body(json.dumps(ping_info, indent=2), "application/json")
         response.set_header("X-Ping-Response", "pong")

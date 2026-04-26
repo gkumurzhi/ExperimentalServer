@@ -55,8 +55,6 @@ class TestCLIParser:
         assert args.host == "127.0.0.1"
         assert args.port == 8080
         assert args.dir == "."
-        assert args.opsec is False
-        assert args.sandbox is False
         assert args.quiet is False
         assert args.debug is False
         assert args.tls is False
@@ -70,15 +68,14 @@ class TestCLIParser:
         assert args.host == "0.0.0.0"
         assert args.port == 443
 
-    def test_opsec_sandbox(self):
-        args = self.parser.parse_args(["--opsec", "--sandbox"])
-        assert args.opsec is True
-        assert args.sandbox is True
+    @pytest.mark.parametrize("flag", ["--opsec", "--sandbox", "-o", "-s"])
+    def test_removed_mode_flags_are_rejected(self, flag):
+        with pytest.raises(SystemExit) as exc_info:
+            self.parser.parse_args([flag])
+        assert exc_info.value.code == 2
 
     def test_short_flags(self):
-        args = self.parser.parse_args(["-o", "-s", "-q"])
-        assert args.opsec is True
-        assert args.sandbox is True
+        args = self.parser.parse_args(["-q"])
         assert args.quiet is True
 
     def test_tls_flags(self):
@@ -169,8 +166,6 @@ class TestCLIMain:
                 "9090",
                 "-d",
                 "/srv/data",
-                "--opsec",
-                "--sandbox",
                 "--quiet",
                 "--debug",
                 "--open",
@@ -191,8 +186,6 @@ class TestCLIMain:
             "host": "0.0.0.0",
             "port": 9090,
             "root_dir": "/srv/data",
-            "opsec_mode": True,
-            "sandbox_mode": True,
             "max_upload_size": 250 * 1024 * 1024,
             "max_workers": 20,
             "quiet": True,

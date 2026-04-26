@@ -5,8 +5,8 @@ Main HTTP server with custom method support.
 import gzip
 import json
 import logging
-import os
 import secrets
+import shutil
 import socket
 import ssl
 import threading
@@ -14,14 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .config import (
-    HIDDEN_FILES,
-    OPSEC_METHOD_PREFIXES,
-    OPSEC_METHOD_SUFFIXES,
-    __version__,
-)
+from .config import HIDDEN_FILES, __version__
 from .handlers import HandlerMixin
-from .handlers.registry import Handler, HandlerRegistry
+from .handlers.registry import HandlerRegistry
 from .http import HTTPRequest, HTTPResponse
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
@@ -69,8 +64,6 @@ class ExperimentalHTTPServer(HandlerMixin):
         host: str = "127.0.0.1",
         port: int = 8080,
         root_dir: str = ".",
-        opsec_mode: bool = False,
-        sandbox_mode: bool = False,
         max_upload_size: int = 100 * 1024 * 1024,  # 100 MB
         max_workers: int = 10,
         quiet: bool = False,
@@ -97,8 +90,6 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.port = port
         self.root_dir = Path(root_dir).resolve()
         self.socket: socket.socket | None = None
-        self.opsec_mode = opsec_mode
-        self.sandbox_mode = sandbox_mode
         self.max_upload_size = max_upload_size
         self.max_workers = max_workers
         self.running = False
@@ -155,14 +146,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.upload_dir = self.root_dir / "uploads"
         self.upload_dir.mkdir(exist_ok=True)
 
+        # Directory for encrypted notepad blobs, kept separate from uploads/.
+        self.notes_dir = self.root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
+        self._migrate_legacy_notes_dir()
+
         # Clean up stale SMUGGLE files from previous sessions
         self._cleanup_old_smuggle_files()
-
-        # OPSEC: generate random method names on each startup
-        self.opsec_methods: dict[str, str] = {}
-        if opsec_mode:
-            self._generate_opsec_methods()
-            logger.debug(f"OPSEC methods generated: {self.opsec_methods}")
 
         # Register method handlers via registry (exposed as a dict-like Mapping
         # so tests and handlers that expect `self.method_handlers[...]` keep
@@ -212,8 +202,6 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Set up logging."""
         if self.debug:
             level = logging.DEBUG
-        elif self.opsec_mode:
-            level = logging.ERROR if quiet else logging.WARNING
         else:
             level = logging.WARNING if quiet else logging.INFO
 
@@ -226,30 +214,6 @@ class ExperimentalHTTPServer(HandlerMixin):
             )
         logger.handlers = [handler]
         logger.setLevel(level)
-
-    def _generate_opsec_methods(self) -> None:
-        """Generate random method names for OPSEC mode."""
-        method_keys = ("upload", "download", "info", "ping", "notepad")
-        name_pool = [
-            f"{prefix}{suffix}" if suffix else prefix
-            for prefix in OPSEC_METHOD_PREFIXES
-            for suffix in OPSEC_METHOD_SUFFIXES
-        ]
-        if len(name_pool) < len(method_keys):
-            raise RuntimeError("Not enough unique OPSEC method names configured")
-        chosen_names = secrets.SystemRandom().sample(name_pool, k=len(method_keys))
-        self.opsec_methods = dict(zip(method_keys, chosen_names, strict=True))
-        config_path = self.root_dir / ".opsec_config.json"
-        fd = os.open(str(config_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            json.dump(self.opsec_methods, f, indent=2)
-
-    @staticmethod
-    def _random_method_name() -> str:
-        """Generate a random method name."""
-        prefix = secrets.choice(OPSEC_METHOD_PREFIXES)
-        suffix = secrets.choice(OPSEC_METHOD_SUFFIXES)
-        return f"{prefix}{suffix}" if suffix else prefix
 
     def _setup_tls(self) -> None:
         """Set up the TLS context (delegated to TLSManager)."""
@@ -350,6 +314,35 @@ class ExperimentalHTTPServer(HandlerMixin):
         if count > 0:
             logger.info(f"Cleaned up {count} stale SMUGGLE files")
 
+    def _migrate_legacy_notes_dir(self) -> None:
+        """Move legacy uploads/notes contents into the top-level notes/ directory."""
+        legacy_notes_dir = self.upload_dir / "notes"
+        if not legacy_notes_dir.is_dir():
+            return
+
+        moved = 0
+        for entry in sorted(legacy_notes_dir.iterdir(), key=lambda path: path.name):
+            target = self.notes_dir / entry.name
+            if target.exists():
+                logger.warning("Legacy note migration skipped existing target: %s", target)
+                continue
+            try:
+                shutil.move(str(entry), str(target))
+                moved += 1
+            except OSError as exc:
+                logger.warning("Legacy note migration failed for %s: %s", entry, exc)
+
+        try:
+            legacy_notes_dir.rmdir()
+        except OSError:
+            logger.warning(
+                "Legacy notes directory still contains entries: %s",
+                legacy_notes_dir,
+            )
+        else:
+            if moved:
+                logger.info("Migrated %s legacy notepad files into %s", moved, self.notes_dir)
+
     def start(self) -> None:
         """Start the server."""
         # Set up TLS
@@ -374,28 +367,17 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  {url}")
         print()
         print(f"  Root directory: {self.root_dir}")
+        print(f"  File access: uploads/ only ({self.upload_dir})")
+        print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload: {self.max_upload_size // (1024 * 1024)} MB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
+        print("  Advanced upload: enabled")
 
         if self.tls_enabled:
             print(f"\n  [TLS]     certificate: {self._tls.describe()}")
 
         if self.authenticator:
             print("  [AUTH]    Basic Auth enabled")
-
-        if self.sandbox_mode:
-            print("  [SANDBOX] access restricted to uploads/")
-
-        if self.opsec_mode:
-            print("  [OPSEC]   randomized methods -> .opsec_config.json")
-            print(
-                f"            upload: {self.opsec_methods['upload']}, "
-                f"download: {self.opsec_methods['download']}"
-            )
-            print(
-                f"            info: {self.opsec_methods['info']}, "
-                f"ping: {self.opsec_methods['ping']}"
-            )
 
         print("\n  Ctrl+C to stop")
         print("=" * 60)
@@ -440,10 +422,6 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _should_keep_alive(self, request: HTTPRequest) -> bool:
         """Determine whether to keep the connection alive after this request."""
-        # OPSEC mode: always close to minimize fingerprint
-        if self.opsec_mode:
-            return False
-
         conn_header = request.headers.get("connection", "").lower()
         if conn_header == "close":
             return False
@@ -535,22 +513,24 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
         """Look up and invoke the handler for *request*.method."""
-        if self.opsec_mode:
-            handler = self._get_opsec_handler(request)
-        else:
-            handler = self.method_handlers.get(request.method)
-
+        handler = self.method_handlers.get(request.method)
         if handler:
             return handler(request)
 
-        if self.opsec_mode:
-            response = HTTPResponse(404)
-            response.set_body(
-                json.dumps({"error": "Not Found", "status": 404}),
-                "application/json",
-            )
-            return response
+        if self._has_advanced_upload_payload(request):
+            return self.handle_advanced_upload(request)
+
         return self._method_not_allowed(request.method)
+
+    @staticmethod
+    def _has_advanced_upload_payload(request: HTTPRequest) -> bool:
+        """Return True when an unknown method carries advanced upload data."""
+        return bool(
+            request.body
+            or request.headers.get("x-d")
+            or request.headers.get("x-d-0")
+            or request.query_params.get("d")
+        )
 
     def _send_response(
         self,
@@ -619,9 +599,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         response: HTTPResponse,
         request_id: str,
     ) -> None:
-        """Apply non-OPSEC response decorations (request-id, gzip)."""
-        if self.opsec_mode:
-            return
+        """Apply response decorations."""
         response.set_header("X-Request-Id", request_id)
         if "gzip" in request.headers.get("accept-encoding", ""):
             self._maybe_gzip_response(response)
@@ -706,37 +684,6 @@ class ExperimentalHTTPServer(HandlerMixin):
             max_upload_size=self.max_upload_size,
             idle_timeout=idle_timeout,
         )
-
-    def _get_opsec_handler(self, request: HTTPRequest) -> Handler | None:
-        """Get the handler for OPSEC mode."""
-        method = request.method
-
-        # Standard methods always work
-        if method in self.method_handlers:
-            return self.method_handlers.get(method)
-
-        if method == self.opsec_methods.get("upload"):
-            return self.handle_opsec_upload
-        elif method == self.opsec_methods.get("download"):
-            return self.handle_fetch
-        elif method == self.opsec_methods.get("info"):
-            return self.handle_info
-        elif method == self.opsec_methods.get("ping"):
-            return self.handle_ping
-        elif method == self.opsec_methods.get("notepad"):
-            return self.handle_note
-
-        # Any unknown method in OPSEC mode -> upload
-        has_data = (
-            request.body
-            or request.headers.get("x-d")
-            or request.headers.get("x-d-0")
-            or request.query_params.get("d")
-        )
-        if has_data:
-            return self.handle_opsec_upload
-
-        return None
 
     def _handle_notepad_ws(
         self,

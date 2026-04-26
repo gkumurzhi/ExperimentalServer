@@ -10,6 +10,7 @@ Routes:
     NOTE /notes/exchange   → ECDH key exchange → session
     NOTE /notes  + body    → save note
     NOTE /notes?list       → list notes
+    NOTE /notes?clear=1    → clear all notes
     NOTE /notes/{id}       → load note
     NOTE /notes/{id}?delete→ delete note
 """
@@ -63,6 +64,7 @@ class NotepadHandlersMixin(BaseHandler):
         | NOTE /notes/exchange + body    | ECDH key exchange  |
         | NOTE /notes  + body            | Save (create/upd)  |
         | NOTE /notes?list               | List all notes     |
+        | NOTE /notes?clear=1            | Clear all notes    |
         | NOTE /notes/{id}               | Load note          |
         | NOTE /notes/{id}?delete        | Delete note        |
         """
@@ -82,6 +84,8 @@ class NotepadHandlersMixin(BaseHandler):
 
         # Route: /notes  (root)
         if clean == "notes" or clean == "notes/":
+            if self._is_note_clear_request(request):
+                return self._note_clear()
             if "list" in query:
                 return self._note_list()
             if request.body:
@@ -175,12 +179,17 @@ class NotepadHandlersMixin(BaseHandler):
                 self._note_session_is_active if self._ecdh_manager is not None else None
             )
             service = NotepadService(
-                self.upload_dir,
+                self.notes_dir,
                 self._notes_lock,
                 session_exists=session_exists,
             )
             self._notepad_service = service
         return service
+
+    @staticmethod
+    def _is_note_clear_request(request: HTTPRequest) -> bool:
+        """Return True when NOTE explicitly asks to clear notes/."""
+        return request.query_params.get("clear", "").lower() in {"1", "true", "yes"}
 
     def _note_session_is_active(self, session_id: str) -> bool:
         """Return ``True`` when *session_id* is still active in the ECDH manager."""
@@ -247,6 +256,14 @@ class NotepadHandlersMixin(BaseHandler):
             return self._note_error_response(exc)
         return self._note_json_response(result.to_dict())
 
+    def _note_clear(self) -> HTTPResponse:
+        """Clear all notes from the separate notes/ directory."""
+        try:
+            result = self._get_notepad_service().clear_notes()
+        except NotepadServiceError as exc:
+            return self._note_error_response(exc)
+        return self._note_json_response(result.to_dict())
+
     def _handle_ws_message(self, sock: socket.socket, payload: bytes) -> None:
         """Process a single WebSocket JSON message for notepad ops."""
         try:
@@ -283,6 +300,12 @@ class NotepadHandlersMixin(BaseHandler):
                 self._ws_send_json(sock, result)
             else:
                 self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+        elif msg_type == "clear":
+            result = self._ws_run_note_operation(
+                "cleared",
+                lambda: self._get_notepad_service().clear_notes(),
+            )
+            self._ws_send_json(sock, result)
         else:
             self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
 

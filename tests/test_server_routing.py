@@ -1,8 +1,7 @@
-"""Tests for server method routing and OPSEC routing (B44)."""
+"""Tests for server method routing and advanced upload routing (B44)."""
 
 import json
 import threading
-from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -14,12 +13,12 @@ from src.http import HTTPRequest, HTTPResponse
 class StubServer(HandlerMixin):
     """Minimal server stub for routing tests."""
 
-    def __init__(self, root_dir: Path, upload_dir: Path, opsec: bool = False):
+    def __init__(self, root_dir: Path, upload_dir: Path):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.notes_dir = root_dir / "notes"
+        self.notes_dir.mkdir(exist_ok=True)
         self.cors_origin = None
-        self.sandbox_mode = False
-        self.opsec_mode = opsec
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
@@ -38,13 +37,6 @@ class StubServer(HandlerMixin):
             "NONE": self.handle_none,
             "SMUGGLE": self.handle_smuggle,
         }
-        self.opsec_methods = {
-            "upload": "XUPLOAD",
-            "download": "XDOWNLOAD",
-            "info": "XINFO",
-            "ping": "XPING",
-            "notepad": "XNOTE",
-        }
 
     def get_metrics(self):
         return {
@@ -55,31 +47,14 @@ class StubServer(HandlerMixin):
             "status_counts": {},
         }
 
-    def _get_opsec_handler(self, request: HTTPRequest) -> Callable[..., HTTPResponse] | None:
-        """Mirror of ExperimentalHTTPServer._get_opsec_handler for testing."""
-        method = request.method
-        if method in self.method_handlers:
-            return self.method_handlers.get(method)
-        if method == self.opsec_methods.get("upload"):
-            return self.handle_opsec_upload
-        elif method == self.opsec_methods.get("download"):
-            return self.handle_fetch
-        elif method == self.opsec_methods.get("info"):
-            return self.handle_info
-        elif method == self.opsec_methods.get("ping"):
-            return self.handle_ping
-        elif method == self.opsec_methods.get("notepad"):
-            return self.handle_note
-        # Any unknown method in OPSEC mode -> upload if data present
-        has_data = (
+    @staticmethod
+    def _has_advanced_upload_payload(request: HTTPRequest) -> bool:
+        return bool(
             request.body
             or request.headers.get("x-d")
             or request.headers.get("x-d-0")
             or request.query_params.get("d")
         )
-        if has_data:
-            return self.handle_opsec_upload
-        return None
 
 
 def _make_request(
@@ -115,11 +90,6 @@ def upload_dir(temp_dir):
 @pytest.fixture
 def server(temp_dir, upload_dir):
     return StubServer(temp_dir, upload_dir)
-
-
-@pytest.fixture
-def opsec_server(temp_dir, upload_dir):
-    return StubServer(temp_dir, upload_dir, opsec=True)
 
 
 class TestMethodRouting:
@@ -172,33 +142,24 @@ class TestMethodRouting:
         assert server.method_handlers["PUT"] == server.handle_none
 
 
-class TestOpsecMethods:
-    """Test OPSEC method name mapping."""
+class TestAdvancedUploadRouting:
+    """Test advanced upload payload detection."""
 
-    def test_standard_get_still_works_in_opsec(self, opsec_server):
+    def test_standard_get_still_works(self, server):
         req = _make_request("GET", "/")
-        resp = opsec_server.handle_get(req)
+        resp = server.handle_get(req)
         assert resp.status_code == 200
 
-    def test_opsec_unknown_method_with_d_param(self, opsec_server):
-        """Unknown method + ?d= query param → routes to opsec upload."""
+    def test_unknown_method_with_d_param_has_advanced_payload(self, server):
         import base64
 
         b64 = base64.urlsafe_b64encode(b"test").decode().rstrip("=")
         req = _make_request("RANDOMMETHOD", f"/?d={b64}")
-        handler = opsec_server._get_opsec_handler(req)
-        assert handler == opsec_server.handle_opsec_upload
+        assert server._has_advanced_upload_payload(req) is True
 
-    def test_opsec_unknown_method_no_data(self, opsec_server):
-        """Unknown method with no body/header/param → returns None."""
+    def test_unknown_method_no_data_has_no_advanced_payload(self, server):
         req = _make_request("RANDOMMETHOD", "/")
-        handler = opsec_server._get_opsec_handler(req)
-        assert handler is None
-
-    def test_opsec_notepad_method_maps_to_note_handler(self, opsec_server):
-        req = _make_request(opsec_server.opsec_methods["notepad"], "/notes")
-        handler = opsec_server._get_opsec_handler(req)
-        assert handler == opsec_server.handle_note
+        assert server._has_advanced_upload_payload(req) is False
 
 
 class TestSmuggleHandler:
@@ -245,12 +206,12 @@ class TestResponseHeaders:
         built = resp.build(cors_origin="https://app.example")
         assert b"Access-Control-Allow-Origin: https://app.example" in built
 
-    def test_opsec_hides_cors_expose(self, opsec_server):
+    def test_cors_exposes_file_headers(self, server):
         req = _make_request("GET", "/")
-        resp = opsec_server.handle_get(req)
-        built = resp.build(opsec_mode=True, cors_origin="https://app.example")
-        assert b"Server: nginx" in built
-        assert b"Access-Control-Expose-Headers" not in built
+        resp = server.handle_get(req)
+        built = resp.build(cors_origin="https://app.example")
+        assert b"Server: ExperimentalHTTPServer/" in built
+        assert b"Access-Control-Expose-Headers" in built
 
     def test_csp_on_html(self, server):
         req = _make_request("GET", "/")

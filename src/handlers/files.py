@@ -5,21 +5,17 @@ File operation handlers: GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE.
 import json
 import logging
 import mimetypes
-import re
+import shutil
 from datetime import datetime
 from email.utils import formatdate
 from pathlib import Path
 from urllib.parse import unquote
 
+from ..config import HIDDEN_FILES
 from ..http import HTTPRequest, HTTPResponse, make_unique_filename, sanitize_filename
-from .base import BaseHandler
+from .base import BaseHandler, get_package_resource
 
 logger = logging.getLogger("httpserver")
-
-# Pattern to remove Telegram link in OPSEC mode
-TELEGRAM_LINK_PATTERN = re.compile(
-    r'<a\s+href="https://t\.me/kgmnotes"[^>]*>.*?</a>', re.DOTALL | re.IGNORECASE
-)
 
 
 class FileHandlersMixin(BaseHandler):
@@ -34,42 +30,23 @@ class FileHandlersMixin(BaseHandler):
         st = file_path.stat()
         return f'"{st.st_size:x}-{st.st_mtime_ns:x}"'
 
-    def _process_html_for_opsec(self, content: bytes) -> bytes:
-        """
-        Process HTML for OPSEC mode.
-        Removes the author's Telegram channel link.
-        """
-        if not self.opsec_mode:
-            return content
-
-        try:
-            html = content.decode("utf-8")
-            # Remove Telegram link
-            html = TELEGRAM_LINK_PATTERN.sub("", html)
-            return html.encode("utf-8")
-        except UnicodeDecodeError:
-            return content
-
     def _resolve_get_path(self, request: HTTPRequest) -> Path | None:
         """Resolve the filesystem path for a GET request.
 
-        Handles sandbox mode restrictions, directory→index.html fallback,
-        and hidden file protection.  Returns None when the path should 404.
+        File content is limited to uploads/. The bundled web app and static
+        assets stay readable so the browser UI can load.
         """
         url_path = request.path.lstrip("/")
 
         if self._is_hidden_file(request.path):
             return None
 
-        if self.sandbox_mode:
-            if url_path.startswith(("uploads/", "static/")) or url_path in ("uploads", "static"):
-                file_path = self._get_file_path(request.path, for_sandbox=True)
-            else:
-                file_path = self._get_file_path(request.path, for_sandbox=False)
-                if file_path and "/" in url_path and not url_path.startswith(("uploads", "static")):
-                    return None
+        if url_path in ("", "index.html"):
+            file_path = get_package_resource("index.html")
+        elif url_path.startswith("static/"):
+            file_path = get_package_resource(url_path)
         else:
-            file_path = self._get_file_path(request.path)
+            file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists():
             return None
@@ -110,17 +87,15 @@ class FileHandlersMixin(BaseHandler):
         else:
             response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
 
-        # Smuggle files and OPSEC HTML need a full read
+        # Smuggle files need a full read so they can be deleted after serving.
         file_path_str = str(file_path)
         with self._smuggle_lock:
             is_smuggle = file_path_str in self._temp_smuggle_files
 
-        needs_full_read = is_smuggle or (content_type.startswith("text/html") and self.opsec_mode)
+        needs_full_read = is_smuggle
 
         if needs_full_read:
             content = file_path.read_bytes()
-            if content_type.startswith("text/html"):
-                content = self._process_html_for_opsec(content)
             response.set_body(content, content_type)
 
             if is_smuggle:
@@ -167,11 +142,13 @@ class FileHandlersMixin(BaseHandler):
 
     def handle_delete(self, request: HTTPRequest) -> HTTPResponse:
         """Handle DELETE request — delete file from uploads/."""
-        # Always sandbox-restricted
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists():
             return self._not_found(request.path)
+
+        if file_path.resolve() == self.upload_dir.resolve() and self._is_clear_uploads_request(request):
+            return self._clear_uploads_directory()
 
         # Reject directories
         if file_path.is_dir():
@@ -212,6 +189,76 @@ class FileHandlersMixin(BaseHandler):
         except OSError as e:
             return self._internal_error(f"Delete failed: {e}")
 
+    @staticmethod
+    def _is_clear_uploads_request(request: HTTPRequest) -> bool:
+        """Return True when DELETE explicitly asks to clear uploads/."""
+        return request.query_params.get("clear", "").lower() in {"1", "true", "yes"}
+
+    def _clear_uploads_directory(self) -> HTTPResponse:
+        """Delete user-visible contents from uploads/, preserving hidden service files."""
+        deleted_files = 0
+        deleted_dirs = 0
+        preserved: list[str] = []
+        errors: list[str] = []
+
+        for entry in sorted(self.upload_dir.iterdir(), key=lambda path: path.name):
+            if entry.name == "notes" or entry.name.startswith(".") or entry.name in HIDDEN_FILES:
+                preserved.append(entry.name)
+                continue
+
+            try:
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                    deleted_dirs += 1
+                else:
+                    entry.unlink()
+                    deleted_files += 1
+            except OSError as exc:
+                errors.append(f"{entry.name}: {exc}")
+
+        if errors:
+            response = HTTPResponse(500)
+            response.set_body(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "Failed to clear uploads/",
+                        "deleted_files": deleted_files,
+                        "deleted_dirs": deleted_dirs,
+                        "preserved": preserved,
+                        "errors": errors,
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                ),
+                "application/json",
+            )
+            return response
+
+        logger.debug(
+            "Cleared uploads/: %s files, %s directories, %s preserved",
+            deleted_files,
+            deleted_dirs,
+            len(preserved),
+        )
+        response = HTTPResponse(200)
+        response.set_body(
+            json.dumps(
+                {
+                    "success": True,
+                    "cleared": True,
+                    "path": "/uploads",
+                    "deleted_files": deleted_files,
+                    "deleted_dirs": deleted_dirs,
+                    "preserved": preserved,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            "application/json",
+        )
+        return response
+
     def handle_post(self, request: HTTPRequest) -> HTTPResponse:
         """Handle POST request — delegates to handle_none (file upload).
 
@@ -233,32 +280,21 @@ class FileHandlersMixin(BaseHandler):
         requested_method = request.headers.get("access-control-request-method", "")
         logger.debug(f"OPTIONS preflight: {requested_method}")
         if requested_method:
-            if self.opsec_mode:
-                # In OPSEC mode, do not expose custom methods
-                allowed = "GET, POST, PUT, PATCH, OPTIONS"
-                if requested_method not in allowed:
-                    allowed = f"{allowed}, {requested_method}"
-            else:
-                allowed = (
-                    "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
-                )
-                if requested_method not in allowed:
-                    allowed = f"{allowed}, {requested_method}"
+            allowed = "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
+            if requested_method not in allowed:
+                allowed = f"{allowed}, {requested_method}"
             response.set_header("Access-Control-Allow-Methods", allowed)
 
         return response
 
     def handle_fetch(self, request: HTTPRequest) -> HTTPResponse:
         """Custom FETCH method — file download."""
-        # In sandbox mode, download only from uploads
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists() or file_path.is_dir():
             response = HTTPResponse(404)
             response.set_header("X-Fetch-Status", "file-not-found")
             error_msg = f"Cannot fetch: {request.path}"
-            if self.sandbox_mode:
-                error_msg += " (sandbox mode: only uploads/ accessible)"
             response.set_body(error_msg, "text/plain")
             return response
 

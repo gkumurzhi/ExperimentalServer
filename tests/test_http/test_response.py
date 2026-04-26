@@ -53,19 +53,11 @@ class TestHTTPResponse:
         assert b"Content-Length: 2\r\n" in built
         assert built.endswith(b"\r\n\r\nOK")
 
-    def test_build_opsec_mode(self):
-        """Test building response in OPSEC mode."""
+    def test_build_sets_server_header(self):
+        """Test building response sets the server header."""
         response = HTTPResponse(200)
         response.set_body("OK", "text/plain")
-        built = response.build(opsec_mode=True)
-
-        assert b"Server: nginx\r\n" in built
-
-    def test_build_normal_mode(self):
-        """Test building response in normal mode."""
-        response = HTTPResponse(200)
-        response.set_body("OK", "text/plain")
-        built = response.build(opsec_mode=False)
+        built = response.build()
 
         assert b"Server: ExperimentalHTTPServer/2.0.0\r\n" in built
 

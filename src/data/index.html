@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="description" content="Экспериментальный HTTP-сервер: кастомные методы, обмен файлами, OPSEC и E2E-заметки">
+    <meta name="description" content="Экспериментальный HTTP-сервер: кастомные методы, загрузки и E2E-заметки">
     <meta name="theme-color" content="#13161b">
     <title>Experimental HTTP Server</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%2311161b'/%3E%3Cpath d='M18 18h28v10H18zm0 18h28v10H18z' fill='%233ecf8e'/%3E%3C/svg%3E">
@@ -19,27 +19,20 @@
     <div class="app-shell">
         <header class="topbar">
             <div class="topbar__brand">
-                <p class="eyebrow">ExperimentalHTTPServer</p>
                 <h1>Experimental HTTP Server</h1>
-                <p class="topbar__summary" data-i18n="subtitle">Кастомные методы, обмен файлами, OPSEC и E2E-заметки.</p>
             </div>
             <div class="topbar__actions">
                 <div class="status-cluster">
                     <span class="status-chip status-chip--live" data-i18n-title="statusLive">
                         <span class="sr-only" data-i18n="statusLive">Локальная консоль</span>
-                        <span class="status-chip__label status-chip__label--full" aria-hidden="true" data-i18n="statusLive">Локальная консоль</span>
+                        <span class="status-chip__label status-chip__label--full" aria-hidden="true" data-i18n="statusLiveCompact">Локально</span>
                         <span class="status-chip__label status-chip__label--compact" aria-hidden="true" data-i18n="statusLiveCompact">Локально</span>
                     </span>
                     <span class="status-chip status-chip--host" id="serverAddressValue">127.0.0.1</span>
-                    <span class="status-chip status-chip--sandbox" id="sandboxIndicator" hidden data-i18n-title="sandboxMode">
-                        <span class="sr-only" data-i18n="sandboxMode">🔒 SANDBOX MODE - доступ ограничен папкой uploads/</span>
-                        <span class="status-chip__label status-chip__label--full" aria-hidden="true" data-i18n="sandboxMode">🔒 SANDBOX MODE - доступ ограничен папкой uploads/</span>
-                        <span class="status-chip__label status-chip__label--compact" aria-hidden="true" data-i18n="sandboxModeCompact">🔒 Sandbox: uploads/</span>
-                    </span>
-                    <span class="status-chip status-chip--opsec" id="opsecIndicator" hidden data-i18n-title="opsecEnabled">
-                        <span class="sr-only" data-i18n="opsecEnabled">OPSEC включён</span>
-                        <span class="status-chip__label status-chip__label--full" aria-hidden="true" data-i18n="opsecEnabled">OPSEC включён</span>
-                        <span class="status-chip__label status-chip__label--compact" aria-hidden="true" data-i18n="opsecEnabledCompact">OPSEC</span>
+                    <span class="status-chip status-chip--uploads" id="uploadsOnlyIndicator" data-i18n-title="uploadsOnlyMode">
+                        <span class="sr-only" data-i18n="uploadsOnlyMode">Доступ ограничен папкой uploads/</span>
+                        <span class="status-chip__label status-chip__label--full" aria-hidden="true" data-i18n="uploadsOnlyModeCompact">uploads/</span>
+                        <span class="status-chip__label status-chip__label--compact" aria-hidden="true" data-i18n="uploadsOnlyModeCompact">uploads/</span>
                     </span>
                 </div>
                 <div class="lang-switcher">
@@ -54,88 +47,157 @@
             <section class="hero-shell">
                 <div class="panel request-panel">
                     <div class="panel__header">
-                        <div>
-                            <p class="eyebrow" data-i18n="requestPanelLabel">Рабочая панель</p>
-                            <h2 data-i18n="requestPanelTitle">Проверяйте маршруты и методы без лишнего шума</h2>
-                        </div>
-                        <p class="panel__hint" data-i18n="requestPanelHint">Быстрый запрос, быстрый ответ и быстрый переход к загрузке или файлам.</p>
+                        <h2 data-i18n="requestPanelTitle">Запрос</h2>
                     </div>
 
                     <div class="request-composer">
                         <div class="field-stack">
-                            <label for="pathInput" class="field-label" data-i18n="labelFilePath">Путь к файлу</label>
-                            <input type="text" id="pathInput" data-i18n-placeholder="pathPlaceholder" placeholder="Путь к файлу (например: /index.html)" value="/index.html">
+                            <label for="pathInput" class="sr-only" data-i18n="labelFilePath">Путь к файлу</label>
+                            <input type="text" id="pathInput" data-i18n-placeholder="pathPlaceholder" placeholder="/index.html или /uploads/" value="/index.html">
                         </div>
 
                         <div class="request-method-switch demo-buttons" aria-label="Быстрые методы запроса" data-i18n-aria-label="quickRequestMethodsLabel">
-                            <button class="btn-get" data-request-method="GET">GET</button>
-                            <button class="btn-fetch" data-request-method="FETCH">FETCH</button>
-                            <button class="btn-info" data-request-method="INFO">INFO</button>
-                            <button class="btn-ping" data-request-method="PING">PING</button>
+                            <button type="button" class="btn-get" data-request-method="GET" data-i18n-title="methodGet">GET</button>
+                            <button type="button" class="btn-head" data-request-method="HEAD" data-i18n-title="methodHead">HEAD</button>
+                            <button type="button" class="btn-post" data-request-method="POST" data-i18n-title="methodPost">POST</button>
+                            <button type="button" class="btn-put" data-request-method="PUT" data-i18n-title="methodPut">PUT</button>
+                            <button type="button" class="btn-patch" data-request-method="PATCH" data-i18n-title="methodPatch">PATCH</button>
+                            <button type="button" class="btn-delete" data-request-method="DELETE" data-i18n-title="methodDelete">DELETE</button>
+                            <button type="button" class="btn-options" data-request-method="OPTIONS" data-i18n-title="methodOptions">OPTIONS</button>
+                            <button type="button" class="btn-fetch" data-request-method="FETCH" data-i18n-title="methodFetch">FETCH</button>
+                            <button type="button" class="btn-info" data-request-method="INFO" data-i18n-title="methodInfo">INFO</button>
+                            <button type="button" class="btn-ping" data-request-method="PING" data-i18n-title="methodPing">PING</button>
+                            <button type="button" class="btn-none" data-request-method="NONE" data-i18n-title="methodNone">NONE</button>
+                            <button type="button" class="btn-note" data-request-method="NOTE" data-i18n-title="methodNote">NOTE</button>
+                            <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
                         </div>
 
-                        <p class="inline-hint request-meta" data-i18n="requestMetaHint">Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.</p>
+                        <div class="request-detail-toolbar">
+                            <label class="checkbox-row request-preview-toggle" for="requestPreviewToggle">
+                                <input type="checkbox" id="requestPreviewToggle">
+                                <span data-i18n="requestPreviewToggleLabel">Показывать отправляемое</span>
+                            </label>
+
+                            <div class="segmented-control request-preview-mode" role="radiogroup" aria-label="Режим показа исходящего запроса" data-i18n-aria-label="requestPreviewModeLabel">
+                                <button type="button" class="request-preview-mode-btn" data-request-preview-mode="summary" role="radio" aria-checked="false" tabindex="-1" data-i18n="requestPreviewModeSummary">Сводка</button>
+                                <button type="button" class="request-preview-mode-btn active" data-request-preview-mode="raw" role="radio" aria-checked="true" tabindex="0" data-i18n="requestPreviewModeRaw">Raw HTTP</button>
+                            </div>
+                        </div>
+
+                        <div class="request-batch-toolbar">
+                            <div class="request-batch-actions">
+                                <button type="button" class="btn-info btn--sm request-run-all-btn" id="requestRunAllBtn" data-i18n="requestRunAllBtn">Прогнать все</button>
+                                <button
+                                    type="button"
+                                    class="btn-info btn--sm request-batch-rerun-issues-btn"
+                                    id="requestBatchRerunIssuesBtn"
+                                    data-i18n="requestBatchRerunIssuesBtn"
+                                    data-i18n-title="requestBatchRerunIssuesLabel"
+                                    data-i18n-aria-label="requestBatchRerunIssuesLabel"
+                                    disabled
+                                >
+                                    Повторить проблемы
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn-info btn--sm request-batch-export-btn"
+                                    id="requestBatchExportBtn"
+                                    data-i18n="requestBatchExportBtn"
+                                    data-i18n-title="requestBatchExportLabel"
+                                    data-i18n-aria-label="requestBatchExportLabel"
+                                    disabled
+                                >
+                                    Экспорт JSON
+                                </button>
+                                <button
+                                    type="button"
+                                    class="btn-ghost btn--sm request-batch-clear-btn"
+                                    id="requestBatchClearBtn"
+                                    data-i18n="requestBatchClearBtn"
+                                    data-i18n-title="requestBatchClearLabel"
+                                    data-i18n-aria-label="requestBatchClearLabel"
+                                    disabled
+                                >
+                                    Очистить
+                                </button>
+                            </div>
+                            <label class="checkbox-row request-batch-filter" for="requestBatchIssuesOnlyToggle">
+                                <input type="checkbox" id="requestBatchIssuesOnlyToggle">
+                                <span data-i18n="requestBatchIssuesOnlyLabel">Только проблемы</span>
+                            </label>
+                            <div class="request-batch-legend" id="requestBatchLegend" aria-label="Легенда статусов методов" data-i18n-aria-label="requestBatchLegendLabel">
+                                <span class="request-batch-legend__item">
+                                    <span class="request-batch-legend__dot request-batch-legend__dot--match" aria-hidden="true"></span>
+                                    <span data-i18n="requestBatchLegendMatch">Совпало</span>
+                                </span>
+                                <span class="request-batch-legend__item">
+                                    <span class="request-batch-legend__dot request-batch-legend__dot--issue" aria-hidden="true"></span>
+                                    <span data-i18n="requestBatchLegendIssue">Проблема</span>
+                                </span>
+                            </div>
+                            <p class="request-batch-status" id="requestBatchStatus" aria-live="polite" aria-atomic="true"></p>
+                        </div>
+                        <div class="sr-only" id="requestBatchLive" role="status" aria-live="polite" aria-atomic="true"></div>
+
+                        <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
+
+                        <div class="request-preview-section" id="requestPreviewSection" hidden>
+                            <div class="request-preview-header">
+                                <p class="request-preview-title" data-i18n="requestPreviewTitle">Что отправляется</p>
+                                <div class="request-copy-actions">
+                                    <button
+                                        type="button"
+                                        class="btn-info btn--sm request-copy-btn"
+                                        id="requestPreviewCopyBtn"
+                                        data-i18n="copyRaw"
+                                        data-i18n-title="copyRawRequestLabel"
+                                        data-i18n-aria-label="copyRawRequestLabel"
+                                        disabled
+                                    >
+                                        Копировать raw
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="sr-only" id="requestPreviewCopyLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                            <div class="response-area request-preview-area" id="requestPreviewArea" data-testid="request-preview-area"></div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="panel response-panel">
-                    <div class="panel__header">
-                        <div>
-                            <p class="eyebrow" data-i18n="responsePanelLabel">Ответ</p>
-                            <h2 data-i18n="responsePanelTitle">Живой вывод сервера</h2>
+                    <div class="panel__header panel__header--with-actions">
+                        <h2 data-i18n="responsePanelTitle">Ответ</h2>
+                        <div class="request-copy-actions">
+                            <button
+                                type="button"
+                                class="btn-info btn--sm request-copy-btn"
+                                id="responseCopyBtn"
+                                data-i18n="copyRaw"
+                                data-i18n-title="copyRawResponseLabel"
+                                data-i18n-aria-label="copyRawResponseLabel"
+                                disabled
+                            >
+                                Копировать raw
+                            </button>
                         </div>
-                        <p class="panel__hint" data-i18n="responsePanelHint">Статус, заголовки и payload появляются здесь без переключения вкладок.</p>
                     </div>
 
                     <div class="sr-only" id="responseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                    <div class="response-area response-area--hero" id="responseArea" data-testid="response-area">
-                        <div class="response-header" data-i18n="clickToSend">Нажмите на кнопку для отправки запроса...</div>
-                    </div>
+                    <div class="response-area response-area--hero" id="responseArea" data-testid="response-area"></div>
                 </div>
-            </section>
-
-            <section class="capability-strip" aria-label="Основные сценарии" data-i18n-aria-label="primaryWorkflowsLabel">
-                <button type="button" class="capability-chip capability-chip--upload active" data-tab-target="upload" data-scroll-target="advancedTools" aria-pressed="true">
-                    <span class="capability-chip__title" data-i18n="tabUpload">Загрузка файлов</span>
-                    <span class="capability-chip__desc" data-i18n="capabilityUploadDesc">Очередь файлов, выбор метода и быстрый обмен.</span>
-                </button>
-                <button type="button" class="capability-chip capability-chip--files" data-tab-target="files" data-scroll-target="advancedTools" aria-pressed="false">
-                    <span class="capability-chip__title" data-i18n="tabFiles">Файлы на сервере</span>
-                    <span class="capability-chip__desc" data-i18n="capabilityFilesDesc">Открыть, скачать, удалить или смuggle-файл.</span>
-                </button>
-                <button type="button" class="capability-chip capability-chip--opsec" data-tab-target="opsec" data-scroll-target="advancedTools" aria-pressed="false">
-                    <span class="capability-chip__title" data-i18n="tabOpsec">Режим OPSEC</span>
-                    <span class="capability-chip__desc" data-i18n="capabilityOpsecDesc">Скрытая загрузка без лишнего следа в URL и заголовках.</span>
-                </button>
-                <button type="button" class="capability-chip capability-chip--notepad" data-tab-target="notepad" data-scroll-target="advancedTools" aria-pressed="false">
-                    <span class="capability-chip__title" data-i18n="tabNotepad">Блокнот</span>
-                    <span class="capability-chip__desc" data-i18n="capabilityNotepadDesc">E2E-заметки через HTTP и WebSocket.</span>
-                </button>
             </section>
 
             <section class="advanced-tools" id="advancedTools">
-                <div class="advanced-tools__header">
-                    <div>
-                        <p class="eyebrow" data-i18n="advancedLabel">Расширенные инструменты</p>
-                        <h2 data-i18n="advancedToolsTitle">Загрузка, обзор, OPSEC и заметки</h2>
-                    </div>
-                    <p class="panel__hint" data-i18n="advancedToolsHint">Основной workflow сверху, продвинутые сценарии ниже.</p>
-                </div>
-
                 <div class="tabs tool-tabs" role="tablist" aria-label="Инструменты сервера" data-i18n-aria-label="serverToolsLabel">
-                    <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="upload-tab" tabindex="0" id="tab-upload" data-tab-target="upload" data-i18n="tabUpload">Загрузка файлов</button>
-                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="files-tab" tabindex="-1" id="tab-files" data-tab-target="files" data-i18n="tabFiles">Файлы на сервере</button>
-                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" tabindex="-1" id="tab-opsec" data-tab-target="opsec" data-i18n="tabOpsec">Режим OPSEC</button>
+                    <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="upload-tab" tabindex="0" id="tab-upload" data-tab-target="upload" data-i18n="tabUpload">Загрузка</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" tabindex="-1" id="tab-opsec" data-tab-target="opsec" data-i18n="tabOpsec">Загрузка (продвинутая)</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="files-tab" tabindex="-1" id="tab-files" data-tab-target="files" data-i18n="tabFiles">Скачивание</button>
                     <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="notepad-tab" tabindex="-1" id="tab-notepad" data-tab-target="notepad" data-i18n="tabNotepad">Блокнот</button>
                 </div>
 
                 <div id="upload-tab" class="tab-content active tool-pane" role="tabpanel" aria-labelledby="tab-upload">
                     <div class="tool-toolbar">
-                        <div>
-                            <h3 data-i18n="tabUpload">Загрузка файлов</h3>
-                            <p class="inline-hint" data-i18n="uploadHelper">Быстро загрузите файлы, выберите метод и сразу проверьте результат.</p>
-                        </div>
-                        <div class="segmented-control demo-buttons" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
+                        <div class="segmented-control" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
                             <button type="button" class="btn-post upload-method-btn active" data-upload-method="POST" role="radio" aria-checked="true" tabindex="0">POST</button>
                             <button type="button" class="btn-none upload-method-btn" data-upload-method="NONE" role="radio" aria-checked="false" tabindex="-1">NONE</button>
                             <button type="button" class="btn-put upload-method-btn" data-upload-method="PUT" role="radio" aria-checked="false" tabindex="-1">PUT</button>
@@ -148,9 +210,9 @@
                             <div class="upload-section dropzone" id="dropZone" tabindex="0" role="button" aria-controls="fileInput" aria-describedby="uploadMethodHint uploadSelectionState" aria-label="Выбрать файлы для загрузки" data-i18n-aria-label="uploadDropZoneLabel">
                                 <label class="upload-label" for="fileInput">
                                     <div class="upload-icon">⭳</div>
-                                    <div class="upload-text" data-i18n="dropFilesHere">Перетащите файлы сюда или нажмите для выбора</div>
-                                    <div class="upload-hint" id="uploadMethodHint">Метод загрузки: POST</div>
-                                    <div class="upload-selection" id="uploadSelectionState" data-i18n="uploadSelectionIdle">Файлы пока не выбраны</div>
+                                    <div class="upload-text" data-i18n="dropFilesHere">Выберите файлы</div>
+                                    <div class="sr-only" id="uploadMethodHint">POST</div>
+                                    <div class="upload-selection" id="uploadSelectionState" data-i18n="uploadSelectionIdle" hidden>Файлы не выбраны</div>
                                 </label>
                                 <input type="file" id="fileInput" multiple>
                             </div>
@@ -160,68 +222,43 @@
 
                         <div class="tool-card tool-card--output">
                             <div class="tool-card__actions">
-                                <button class="btn-none" id="uploadBtn" disabled data-i18n="uploadAllBtn" data-testid="upload-btn">Загрузить все файлы</button>
+                                <button
+                                    class="btn-none btn-icon"
+                                    id="uploadBtn"
+                                    disabled
+                                    title="Загрузить"
+                                    aria-label="Загрузить"
+                                    data-i18n-title="uploadAllBtn"
+                                    data-i18n-aria-label="uploadAllBtn"
+                                    data-testid="upload-btn"
+                                >↑</button>
                             </div>
 
                             <div class="sr-only" id="uploadResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="uploadResponseArea" data-testid="upload-response-area">
-                                <div class="response-header" data-i18n="selectFilesToUpload">Выберите файлы для загрузки...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="files-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
-                    <div class="tool-toolbar">
-                        <div>
-                            <h3 data-i18n="tabFiles">Файлы на сервере</h3>
-                            <p class="inline-hint" data-i18n="filesHelper">Обзор текущей директории, быстрые действия и детали ответа под списком.</p>
-                        </div>
-                    </div>
-
-                    <div class="tool-grid tool-grid--files">
-                        <div class="tool-card">
-                            <div class="file-browser__toolbar input-group">
-                                <button class="btn-fetch btn-icon" id="browseRootBtn" aria-label="Перейти в корень" data-i18n-aria-label="browseRootLabel">/</button>
-                                <button class="btn-ping btn-icon" id="browseUpBtn" aria-label="На уровень выше" data-i18n-aria-label="browseUpLabel">..</button>
-                                <label for="browsePathInput" class="sr-only" data-i18n="labelDirPath">Путь к директории</label>
-                                <input type="text" id="browsePathInput" data-i18n-placeholder="dirPathPlaceholder" placeholder="Путь к директории" value="/">
-                                <button class="btn-info" id="browseBtn" data-i18n="browseBtn">Обзор (INFO)</button>
-                            </div>
-
-                            <div class="uploaded-files file-browser__list" id="serverFiles" data-testid="server-files"></div>
-                        </div>
-
-                        <div class="tool-card tool-card--output">
-                            <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="filesResponseArea" data-testid="files-response-area">
-                                <div class="response-header" data-i18n="clickBrowse">Нажмите "Обзор" для просмотра файлов...</div>
-                            </div>
+                            <div class="response-area" id="uploadResponseArea" data-testid="upload-response-area"></div>
                         </div>
                     </div>
                 </div>
 
                 <div id="opsec-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-opsec" hidden>
-                    <div class="tool-toolbar">
-                        <div>
-                            <h3 data-i18n="opsecTitle">Режим OPSEC — скрытая загрузка</h3>
-                            <p class="inline-hint" data-i18n="opsecHelper">Отдельный сценарий для скрытой загрузки и выбора транспорта.</p>
-                        </div>
-                    </div>
-
                     <div class="tool-grid tool-grid--opsec">
                         <div class="tool-card">
-                            <p id="opsecModeWarning" class="inline-alert inline-alert--warning" hidden data-i18n="opsecWarning">⚠ Сервер запущен без флага --opsec. OPSEC-загрузка может не работать.</p>
-
                             <div class="input-group">
                                 <label for="opsecMethodInput" class="sr-only" data-i18n="httpMethodLabel">HTTP-метод</label>
-                                <input type="text" id="opsecMethodInput" data-i18n-placeholder="opsecMethodPlaceholder" placeholder="HTTP метод (любой, например: CHECKDATA)" value="">
-                                <button class="btn-info" id="opsecRandomMethodBtn" data-i18n="randomLabel">Случайно</button>
+                                <input type="text" id="opsecMethodInput" data-i18n-placeholder="opsecMethodPlaceholder" placeholder="Метод (CHECKDATA)" value="">
+                                <button
+                                    class="btn-info btn-icon"
+                                    id="opsecRandomMethodBtn"
+                                    title="Случайно"
+                                    aria-label="Случайно"
+                                    data-i18n-title="randomLabel"
+                                    data-i18n-aria-label="randomLabel"
+                                >↻</button>
                             </div>
 
                             <div class="control-cluster">
-                                <span class="field-label" data-i18n="opsecTransportLabel">Транспорт:</span>
-                                <div class="radio-row">
+                                <span class="sr-only" data-i18n="opsecTransportLabel">Транспорт:</span>
+                                <div class="radio-row" role="group" aria-label="Транспорт:" data-i18n-aria-label="opsecTransportLabel">
                                     <label><input type="radio" name="opsecTransport" value="body" checked> <span data-i18n="opsecTransportBody">Тело (JSON)</span></label>
                                     <label><input type="radio" name="opsecTransport" value="headers"> <span data-i18n="opsecTransportHeaders">Заголовки</span></label>
                                     <label><input type="radio" name="opsecTransport" value="url"> <span data-i18n="opsecTransportUrl">URL параметры</span></label>
@@ -230,60 +267,111 @@
 
                             <div id="opsecTransportWarning" class="inline-alert inline-alert--warning" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
-                            <div class="upload-section dropzone dropzone--opsec" id="opsecDropZone" tabindex="0" role="button" aria-controls="opsecFileInput" aria-describedby="opsecSelectionState" aria-label="Выбрать файл для OPSEC-загрузки" data-i18n-aria-label="opsecDropZoneLabel">
+                            <div class="upload-section dropzone dropzone--opsec" id="opsecDropZone" tabindex="0" role="button" aria-controls="opsecFileInput" aria-describedby="opsecSelectionState" aria-label="Выбрать файл для продвинутой загрузки" data-i18n-aria-label="opsecDropZoneLabel">
                                 <label class="upload-label" for="opsecFileInput">
                                     <div class="upload-icon">◌</div>
-                                    <div class="upload-text" data-i18n="opsecUploadText">Загрузка OPSEC — имя файла скрыто</div>
-                                    <div class="upload-hint" data-i18n="opsecUploadHint">Данные кодируются в Base64, путь не содержит имени файла</div>
-                                    <div class="upload-selection" id="opsecSelectionState" data-i18n="opsecSelectionIdle">Файл пока не выбран</div>
+                                    <div class="upload-text" data-i18n="opsecUploadText">Имя скрыто</div>
+                                    <div class="upload-hint" data-i18n="opsecUploadHint">Base64, без имени</div>
+                                    <div class="upload-selection" id="opsecSelectionState" data-i18n="opsecSelectionIdle" hidden>Файл не выбран</div>
                                 </label>
                                 <input type="file" id="opsecFileInput">
                             </div>
 
                             <div class="settings-stack">
-                                <label class="checkbox-row"><input type="checkbox" id="opsecIncludeName"> <span data-i18n="opsecIncludeName">Включить имя файла (менее скрытно)</span></label>
+                                <label class="checkbox-row"><input type="checkbox" id="opsecIncludeName"> <span data-i18n="opsecIncludeName">Имя</span></label>
                                 <div class="checkbox-with-input">
-                                    <label class="checkbox-row"><input type="checkbox" id="opsecEncrypt"> <span data-i18n="opsecEncryptXor">Шифровать XOR</span></label>
+                                    <label class="checkbox-row"><input type="checkbox" id="opsecEncrypt"> <span data-i18n="opsecEncryptXor">XOR</span></label>
                                     <label for="opsecPassword" class="sr-only">XOR Password</label>
-                                    <input type="password" id="opsecPassword" data-i18n-placeholder="opsecPasswordPlaceholder" placeholder="Пароль для XOR-шифрования" disabled>
+                                    <input type="password" id="opsecPassword" data-i18n-placeholder="opsecPasswordPlaceholder" placeholder="Пароль XOR" disabled>
                                 </div>
-                                <label class="checkbox-row checkbox-row--nested"><input type="checkbox" id="opsecSendKey"> <span data-i18n="opsecSendKey">Отправить ключ на сервер (автоматическая расшифровка)</span></label>
-                                <label class="checkbox-row checkbox-row--nested checkbox-row--deeper"><input type="checkbox" id="opsecKeyBase64" disabled> <span data-i18n="opsecKeyBase64">Кодировать ключ в Base64</span></label>
+                                <label class="checkbox-row checkbox-row--nested"><input type="checkbox" id="opsecSendKey"> <span data-i18n="opsecSendKey">Ключ</span></label>
+                                <label class="checkbox-row checkbox-row--nested checkbox-row--deeper"><input type="checkbox" id="opsecKeyBase64" disabled> <span data-i18n="opsecKeyBase64">Base64</span></label>
                             </div>
                         </div>
 
                         <div class="tool-card tool-card--output">
                             <div class="tool-card__actions">
-                                <button class="btn-opsec" id="opsecUploadBtn" disabled data-i18n="opsecUploadBtn" data-testid="opsec-upload-btn">Загрузить (OPSEC)</button>
+                                <button
+                                    class="btn-opsec btn-icon"
+                                    id="opsecUploadBtn"
+                                    disabled
+                                    title="Загрузить"
+                                    aria-label="Загрузить"
+                                    data-i18n-title="opsecUploadBtn"
+                                    data-i18n-aria-label="opsecUploadBtn"
+                                    data-testid="opsec-upload-btn"
+                                >↑</button>
                             </div>
 
                             <div class="sr-only" id="opsecResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="opsecResponseArea" data-testid="opsec-response-area">
-                                <div class="response-header" data-i18n="opsecSelectFile">Выберите файл для скрытой загрузки...</div>
+                            <div class="response-area" id="opsecResponseArea" data-testid="opsec-response-area"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="files-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
+                    <div class="tool-grid tool-grid--files">
+                        <div class="tool-card">
+                            <div class="file-browser__toolbar input-group">
+                                <button class="btn-fetch btn-icon" id="browseRootBtn" aria-label="Перейти в корень" data-i18n-aria-label="browseRootLabel">/</button>
+                                <button class="btn-ping btn-icon" id="browseUpBtn" aria-label="На уровень выше" data-i18n-aria-label="browseUpLabel">..</button>
+                                <label for="browsePathInput" class="sr-only" data-i18n="labelDirPath">Путь к директории</label>
+                                <input type="text" id="browsePathInput" data-i18n-placeholder="dirPathPlaceholder" placeholder="Путь к директории" value="/">
+                                <button
+                                    class="btn-info btn-icon"
+                                    id="browseBtn"
+                                    title="Обзор"
+                                    aria-label="Обзор"
+                                    data-i18n-title="browseBtn"
+                                    data-i18n-aria-label="browseBtn"
+                                >→</button>
+                                <button
+                                    class="btn-danger btn-icon"
+                                    id="deleteSelectedUploadsBtn"
+                                    disabled
+                                    title="Удалить выбранные файлы"
+                                    aria-label="Удалить выбранные файлы"
+                                    data-i18n-title="deleteSelectedFilesBtn"
+                                    data-i18n-aria-label="deleteSelectedFilesBtn"
+                                >×</button>
+                                <button
+                                    class="btn-danger btn-icon"
+                                    id="clearUploadsBtn"
+                                    title="Очистить uploads/"
+                                    aria-label="Очистить uploads/"
+                                    data-i18n-title="clearUploadsBtn"
+                                    data-i18n-aria-label="clearUploadsBtn"
+                                >⌫</button>
                             </div>
+
+                            <div class="uploaded-files file-browser__list" id="serverFiles" data-testid="server-files"></div>
+                        </div>
+
+                        <div class="tool-card tool-card--output">
+                            <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                            <div class="response-area" id="filesResponseArea" data-testid="files-response-area"></div>
                         </div>
                     </div>
                 </div>
 
                 <div id="notepad-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-notepad" hidden>
-                    <div class="tool-toolbar">
-                        <div>
-                            <h3 data-i18n="notepadTitle">Защищённый блокнот</h3>
-                            <p class="inline-hint" data-i18n="notepadDesc">Сквозное шифрование заметок. Ключи согласуются автоматически через ECDH — пароль не нужен.</p>
-                        </div>
-                    </div>
-
-                    <p class="inline-hint inline-hint--subtle" data-i18n="notepadRequirements">Требуется сервер с exphttp[crypto] и браузер с поддержкой Web Crypto.</p>
-
                     <div class="tool-card note-shell">
                         <div class="notepad-toolbar">
-                            <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Название заметки</label>
-                            <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Название заметки" maxlength="200" disabled>
+                            <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Заголовок</label>
+                            <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Заголовок" maxlength="200" disabled>
                             <button class="btn-note btn--sm" id="notepadNewBtn" data-i18n="notepadNewBtn">Новая</button>
-                            <button class="btn-danger btn--sm" id="notepadDeleteBtn" disabled data-i18n="notepadDeleteBtn">Удалить</button>
+                            <button
+                                class="btn-danger btn--sm btn-icon"
+                                id="notepadDeleteBtn"
+                                disabled
+                                title="Удалить"
+                                aria-label="Удалить"
+                                data-i18n-title="notepadDeleteBtn"
+                                data-i18n-aria-label="notepadDeleteBtn"
+                            >×</button>
                             <div class="transport-toggle">
                                 <label><input type="radio" name="notepadTransport" value="http" checked> <span data-i18n="notepadTransportHttp">HTTP</span></label>
-                                <label><input type="radio" name="notepadTransport" value="ws"> <span data-i18n="notepadTransportWs">WebSocket</span></label>
+                                <label><input type="radio" name="notepadTransport" value="ws"> <span data-i18n="notepadTransportWs">WS</span></label>
                                 <span class="notepad-connection-status" id="notepadConnStatus" title="">&#9679;</span>
                             </div>
                         </div>
@@ -292,14 +380,18 @@
                             <div class="notepad-sidebar">
                                 <div class="notepad-sidebar-header">
                                     <span data-i18n="notepadNotes">Заметки</span>
-                                    <button class="btn-ghost btn-icon" id="notepadRefreshBtn" title="Обновить" aria-label="Обновить" data-i18n-title="refreshLabel" data-i18n-aria-label="refreshLabel">&#8635;</button>
+                                    <div class="notepad-sidebar-actions">
+                                        <button class="btn-danger btn-icon" id="notepadDeleteSelectedBtn" disabled title="Удалить выбранные заметки" aria-label="Удалить выбранные заметки" data-i18n-title="notepadDeleteSelectedBtn" data-i18n-aria-label="notepadDeleteSelectedBtn">×</button>
+                                        <button class="btn-danger btn-icon" id="notepadClearBtn" disabled title="Очистить заметки" aria-label="Очистить заметки" data-i18n-title="notepadClearBtn" data-i18n-aria-label="notepadClearBtn">&#9003;</button>
+                                        <button class="btn-ghost btn-icon" id="notepadRefreshBtn" title="Обновить" aria-label="Обновить" data-i18n-title="refreshLabel" data-i18n-aria-label="refreshLabel">&#8635;</button>
+                                    </div>
                                 </div>
                                 <div id="notepadNoteList">
-                                    <div class="notepad-no-notes" data-i18n="notepadNoNotes">Заметок пока нет</div>
+                                    <div class="notepad-no-notes" data-i18n="notepadNoNotes">Нет заметок</div>
                                 </div>
                             </div>
                             <div class="notepad-editor">
-                                <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Введите текст... (шифруется перед сохранением)" disabled></textarea>
+                                <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Текст... (шифруется)" disabled></textarea>
                                 <div class="notepad-status-bar">
                                     <span class="save-indicator" id="notepadSaveIndicator" data-i18n="notepadConnecting">Подключение...</span>
                                     <span id="notepadCharCount">0 chars</span>
@@ -312,7 +404,7 @@
         </main>
 
         <footer class="site-footer">
-            <p>Experimental HTTP Server v2.0</p>
+            <p>v2.0</p>
             <a href="https://t.me/kgmnotes" target="_blank" rel="noopener" id="telegramLink" class="telegram-link">@kgmnotes</a>
         </footer>
     </div>

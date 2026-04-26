@@ -17,7 +17,7 @@ supersedes the old one.
 | ID | Status | Title |
 |----|--------|-------|
 | [ADR-001](ADR-001-handler-registry.md) | accepted | Handler dispatch: registry over mixin inheritance |
-| [ADR-002](ADR-002-opsec-xor-hmac.md) | accepted | OPSEC baseline cipher: XOR + HMAC with optional AES-GCM |
+| [ADR-002](ADR-002-advanced-upload-xor-hmac.md) | accepted | Advanced upload payload integrity: XOR + HMAC baseline |
 | [ADR-003](ADR-003-cryptography-optional.md) | accepted | `cryptography` as an optional dependency |
-| [ADR-004](ADR-004-sandbox-relative-to.md) | accepted | Sandbox enforcement via `Path.relative_to` |
+| [ADR-004](ADR-004-uploads-relative-to.md) | accepted | Uploads-only enforcement via `Path.relative_to` |
 | [ADR-005](ADR-005-threadpool-over-asyncio.md) | accepted | Concurrency model: ThreadPoolExecutor, not asyncio |

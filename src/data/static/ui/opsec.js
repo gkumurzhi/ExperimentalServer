@@ -1,4 +1,4 @@
-// ===== OPSEC Mode =====
+// ===== Advanced Upload =====
 let opsecFile = null;
 const opsecFileInput = document.getElementById('opsecFileInput');
 const opsecUploadBtn = document.getElementById('opsecUploadBtn');
@@ -28,6 +28,7 @@ function getOpsecSelectionText() {
 
 function refreshOpsecSelectionLocale() {
     if (opsecSelectionState) {
+        opsecSelectionState.hidden = !opsecFile;
         opsecSelectionState.textContent = getOpsecSelectionText();
     }
 
@@ -93,7 +94,7 @@ function xorEncrypt(data, password) {
     return result;
 }
 
-// Random method names для OPSEC
+// Random method names for advanced upload
 const methodPrefixes = ['CHECK', 'SYNC', 'VERIFY', 'UPDATE', 'QUERY', 'REPORT', 'SUBMIT', 'VALIDATE', 'PROCESS', 'EXECUTE'];
 const methodSuffixes = ['DATA', 'STATUS', 'INFO', 'CONTENT', 'RESOURCE', 'ITEM', 'OBJECT', 'RECORD', 'ENTRY', ''];
 
@@ -211,7 +212,7 @@ async function opsecUpload() {
     if (!opsecFile) return;
 
     const responseArea = document.getElementById('opsecResponseArea');
-    const method = document.getElementById('opsecMethodInput').value || 'SYNCDATA';
+    const method = document.getElementById('opsecMethodInput').value || 'CHECKDATA';
     const includeName = document.getElementById('opsecIncludeName').checked;
     const useEncryption = opsecEncryptCheckbox.checked;
     const password = opsecPasswordInput.value;
@@ -235,7 +236,7 @@ async function opsecUpload() {
         // Apply XOR encryption if enabled
         if (useEncryption) {
             dataBytes = xorEncrypt(dataBytes, password);
-            console.log(`[OPSEC] XOR encryption applied with password length: ${password.length}`);
+            console.log(`[Advanced upload] XOR encryption applied with password length: ${password.length}`);
         }
 
         let binary = '';
@@ -271,7 +272,7 @@ async function opsecUpload() {
         let requestHeaders = {};
         let response;
 
-        console.log(`[OPSEC] Method: ${method}, Path: ${randomPath}, Transport: ${transport}, Include name: ${includeName}`);
+        console.log(`[Advanced upload] Method: ${method}, Path: ${randomPath}, Transport: ${transport}, Include name: ${includeName}`);
 
         if (transport === 'headers') {
             // Send data in HTTP headers — chunked if > 7000 chars
@@ -313,7 +314,7 @@ async function opsecUpload() {
         }
 
         const text = await response.text();
-        console.log(`[OPSEC] Response:`, text);
+        console.log(`[Advanced upload] Response:`, text);
 
         let result;
         try {
@@ -351,7 +352,7 @@ ${esc(method)} ${esc(randomPath)}
 <div class="response-body">${esc(result.error || 'Unknown error')}</div>`;
         }
     } catch (error) {
-        console.error('[OPSEC] Error:', error);
+        console.error('[Advanced upload] Error:', error);
         announceLiveRegion('opsecResponseAreaLive', `${t('error')}: ${error.message}`);
         responseArea.innerHTML = `
 <div class="response-header">

@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Docs:** `SECURITY.md` — disclosure policy, supported versions, response SLA
 - **Docs:** five ADRs in `docs/ADR/` documenting key design decisions
 - **Docs:** `docs/threat-model.md` — STRIDE-based threat analysis
-- **Docs:** `examples/` directory with `basic_file_server.sh`, `opsec_deployment.md`, `notepad_client.py`, Docker compose
+- **Docs:** `examples/` directory with `basic_file_server.sh`, `advanced_upload_nginx.md`, `notepad_client.py`, Docker compose
 - **Docs:** MkDocs + Material configuration (`mkdocs.yml`) for documentation site
 - **Docs:** expanded `CONTRIBUTING.md` with Conventional Commits policy and PR checklist
 - **Docs:** `.github/PULL_REQUEST_TEMPLATE.md`
@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Refactor:** extracted `receive_request()` to `src/http/io.py` with unit tests
 - **Refactor:** split `_process_request` into guard functions (`_check_payload_size`, `_resolve_keep_alive`, `_post_process_response`, `_build_error_response`)
 - **Docs:** architecture and threat-model docs now describe `RequestPipeline`, `NotepadService`, `TLSManager`, PBKDF2 auth, and the shared descendant-path resolver that exist in the codebase today
+- **Behavior:** file access is always limited to `<root>/uploads/`; separate startup flags for this restriction were removed
+- **Behavior:** advanced upload is enabled by default through unknown non-standard methods carrying body, header, chunked-header, or URL payload data
 - **Size:** `src/server.py` reduced from 1,000 LOC to 869 LOC
 
 - NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption
@@ -62,7 +64,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Thread-safe smuggle temp file set with `threading.Lock` (B20)
 - Centralize path validation into `_resolve_safe_path()` method (B21)
 - Merge XOR encrypt/decrypt into single `xor_bytes()` function (B22)
-- Clean partial files on write failure in upload and OPSEC handlers (B30)
+- Clean partial files on write failure in upload and advanced upload handlers (B30)
 - Clean smuggle temp files on server shutdown (B31)
 - Add Content-Security-Policy header to HTML responses (B34)
 - Block symlink access in file serving (defense-in-depth) (B35)
@@ -80,10 +82,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Fix all ruff lint errors: `open()` → `Path.open()`, `raise ... from err`, line length (B23)
 - Per-file E501 ignore for minified CSS/HTML templates in ruff config
 - Add `make_request()` test helper in conftest (B25)
-- Add path traversal test suite — 15 tests covering traversal, sandbox, symlinks (B26)
-- Add handler integration tests — 30 tests for GET/POST/FETCH/INFO/PING/OPTIONS/OPSEC (B27)
+- Add path traversal test suite — 15 tests covering traversal, uploads-only paths, symlinks (B26)
+- Add handler integration tests — 30 tests for GET/POST/FETCH/INFO/PING/OPTIONS/advanced upload (B27)
 - Add streaming, symlink, pagination, and query param tests
-- Add CLI argument parsing tests (16 tests) and server routing/OPSEC/smuggle tests (16 tests) (B44)
+- Add CLI argument parsing tests (16 tests) and server routing/advanced upload/smuggle tests (16 tests) (B44)
 - Fix mypy errors: 20 → 0 across 8 files (B24)
 - Test count: 64 → 149
 
@@ -98,8 +100,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - TLS/HTTPS with self-signed or custom certificates
 - Let's Encrypt support via certbot subprocess
 - HTTP Basic Authentication with random credential generation
-- OPSEC mode: random method names, XOR encryption, HMAC verification, nginx header spoofing
-- Sandbox mode: restrict file access to `uploads/` directory
+- Advanced upload: JSON body, header, URL parameter transports, XOR handling, HMAC verification
+- Uploads-only file access: restrict user file operations to `uploads/` directory
 - HTML Smuggling with optional password-protected downloads
 - Password captcha generation for protected downloads
 - `--open` flag to auto-open browser

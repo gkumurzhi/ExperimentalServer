@@ -28,7 +28,6 @@ class SmuggleHandlersMixin(BaseHandler):
         """
         encrypt = request.query_params.get("encrypt") == "1"
 
-        # In sandbox mode, restrict to uploads
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists() or file_path.is_dir():
