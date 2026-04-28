@@ -9,7 +9,7 @@
 | STAGE-005 | CLOSED | HIGH | Make Inspector Asset Intentional | 2026-04-28 21:26:57 MSK | Inspector asset is intentionally tracked, package-covered, served, and browser-smoke verified; targeted tests, compile, ruff, wheel asset probe, and verifier subagents passed. | `stage-reports/STAGE-005-20260428-211543.md` |
 | STAGE-006 | CLOSED | HIGH | Redact Inspector Raw and Copy Output | 2026-04-28 21:46:30 MSK | Inspector render, copy source, and stored state now redact advanced-upload and notepad sensitive fields; targeted tests, compile, JS syntax, browser smoke, static review, and verifier subagents passed. | `stage-reports/STAGE-006-20260428-213004.md` |
 | STAGE-007 | CLOSED | HIGH | Harden Docker Build Context Ignores | 2026-04-28 22:40:57 MSK | Docker build context now excludes runtime data and secret-like files; runtime build, dummy-context checks, diff check, and verifier subagents passed. | `stage-reports/STAGE-007-20260428-223152.md` |
-| STAGE-008 | OPEN | HIGH | Repair pip-audit Security Workflow | — | — | — |
+| STAGE-008 | CLOSED | HIGH | Repair pip-audit Security Workflow | 2026-04-28 23:07:45 MSK | Security workflow now runs documented constraints-input `pip-audit`; updated command reaches real vulnerability findings instead of failing before audit. | `stage-reports/STAGE-008-20260428-225430.md` |
 | STAGE-009 | OPEN | HIGH | Correct SMUGGLE API Contract Docs | — | — | — |
 | STAGE-010 | OPEN | HIGH | Correct API Error Contract Docs | — | — | — |
 | STAGE-011 | OPEN | HIGH | Remove Stale CLAUDE Guidance | — | — | — |

@@ -41,3 +41,9 @@
 - Files changed: `.dockerignore`, `implementation-plan/20260428-154031/stages/STAGE-007-docker-context-hygiene.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-007-20260428-223152.md`
 - Verification: `docker buildx build --help >/dev/null`; `docker version --format '{{.Server.Version}}'`; `docker build --no-cache --target runtime .`; disposable Docker context checks for dummy runtime/secret paths including `notes/`, `.env*`, nested certs, credential JSON, `secret/`, and `examples/docker/data`; `git diff --check`; Docker verifier passed; security verifier findings were fixed and rechecked.
 - Report: `stage-reports/STAGE-007-20260428-223152.md`
+
+## 2026-04-28 23:07:45 MSK — STAGE-008
+- Status: CLOSED
+- Files changed: `.github/workflows/security.yml`, `implementation-plan/20260428-154031/stages/STAGE-008-pip-audit-workflow.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-008-20260428-225430.md`
+- Verification: `python -m pip_audit --help` in a disposable constrained venv; `python -m pip_audit --strict -r constraints/ci.txt` reached real vulnerability findings in existing pins; `python -m compileall src tests`; workflow YAML parse; scoped `git diff --check`; static workflow review; verifier subagents passed or were superseded by the final constraints-input mode.
+- Report: `stage-reports/STAGE-008-20260428-225430.md`

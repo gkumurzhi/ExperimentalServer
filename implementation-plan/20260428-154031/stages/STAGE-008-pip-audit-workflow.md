@@ -1,7 +1,7 @@
 # STAGE-008 — Repair pip-audit Security Workflow
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -63,4 +63,9 @@ The security workflow runs `pip-audit` in a documented mode that actually audits
 - Rollback: Revert the workflow command change for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-28 23:07:45 MSK by `close-plan-stage`.
+
+- `.github/workflows/security.yml` now installs the constrained `pip-audit` tool and runs `python -m pip_audit --strict -r constraints/ci.txt`.
+- The workflow no longer uses `--disable-pip`; `constraints/ci.txt` is the explicit audit input for this stage.
+- Local verification confirmed the updated command reaches real audit findings in existing pins instead of failing before audit. Existing vulnerability findings were not suppressed or accepted here.
+- Verification also passed `python -m compileall src tests`, workflow YAML parsing, scoped `git diff --check`, and verifier subagent review.
