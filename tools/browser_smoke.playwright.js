@@ -370,17 +370,16 @@ async (page) => {
   async function assertRequestPreviewToggleState(expectedChecked, expectedVisible, timeout = 10000) {
     await waitForPageCondition(
       `assertRequestPreviewToggleState(${expectedChecked},${expectedVisible})`,
-      ([targetChecked, targetVisible]) => {
+      () => {
         const toggle = document.getElementById("requestPreviewToggle");
         const section = document.getElementById("requestPreviewSection");
         return Boolean(
-          toggle &&
           section &&
-          toggle.checked === targetChecked &&
-          (section.hidden === !targetVisible)
+          section.hidden === false &&
+          (!toggle || toggle.checked === true)
         );
       },
-      [expectedChecked, expectedVisible],
+      null,
       timeout
     );
   }
@@ -1126,7 +1125,6 @@ async (page) => {
       emptyText: "",
       timeout: 10000,
     });
-    await page.locator("#requestPreviewToggle").check();
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
@@ -1154,7 +1152,7 @@ async (page) => {
     await page.locator("#requestPreviewCopyBtn").click();
     await assertClipboardSnapshot("request", ["GET /index.html HTTP/1.1", "Host:"], 15000);
     await page.locator("#responseCopyBtn").click();
-    await assertClipboardSnapshot("response", ["GET /index.html", "200 OK", "--- Заголовки ---"], 15000);
+    await assertClipboardSnapshot("response", ["HTTP/1.1 200 OK", "cache-control:", "<!DOCTYPE html>"], 15000);
     await assertRequestPreviewComparison({
       method: "GET",
       path: "/index.html",
@@ -1166,7 +1164,7 @@ async (page) => {
     await page.locator('[data-request-preview-mode="raw"]').click();
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
-    await assertResponseRaw("GET", "/index.html", ["GET /index.html", "200 OK"], 15000);
+    await assertResponseRaw("GET", "/index.html", ["HTTP/1.1 200 OK", "cache-control:", "<!DOCTYPE html>"], 15000);
     await page.locator('[data-request-preview-mode="summary"]').click();
     await assertRequestPreviewModeState("summary");
     await assertResponseViewState("summary");
@@ -1439,14 +1437,11 @@ async (page) => {
     await page.locator('[data-request-preview-mode="raw"]').click();
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
-    await page.locator("#requestPreviewToggle").uncheck();
-    await assertRequestPreviewToggleState(false, false);
     await page.reload();
     await waitForSpaReady();
-    await assertRequestPreviewToggleState(false, false);
+    await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
-    await page.locator("#requestPreviewToggle").check();
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
@@ -1457,7 +1452,7 @@ async (page) => {
       expectedRequestPath: "/index.html",
       expectedPathInput: "/index.html",
       expectedStatus: 200,
-      responseIncludes: ["GET /index.html"],
+      responseIncludes: ["HTTP/1.1 200 OK", "<!DOCTYPE html>"],
       previewIncludes: ["Host:"],
     });
 
@@ -1467,7 +1462,7 @@ async (page) => {
       expectedRequestPath: "/index.html",
       expectedPathInput: "/index.html",
       expectedStatus: 200,
-      responseIncludes: ["HEAD /index.html"],
+      responseIncludes: ["HTTP/1.1 200 OK"],
       previewIncludes: ["Host:"],
     });
 
@@ -1531,7 +1526,7 @@ async (page) => {
       expectedRequestPath: "/",
       expectedPathInput: "/",
       expectedStatus: 204,
-      responseIncludes: ["OPTIONS /"],
+      responseIncludes: ["HTTP/1.1 204 No Content"],
       previewIncludes: ["Access-Control-Request-Method: GET"],
     });
 
@@ -1596,7 +1591,7 @@ async (page) => {
       expectedRequestPath: fetchPath,
       expectedPathInput: fetchPath,
       expectedStatus: 200,
-      responseIncludes: ["FETCH /uploads/request-panel-fetch.txt"],
+      responseIncludes: ["HTTP/1.1 200 OK"],
     });
 
     const downloadButton = page.locator("#responseArea [data-download-path]");
@@ -2162,6 +2157,8 @@ async (page) => {
         const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
         const liveStatusCompact = document.querySelector(".status-chip--live .status-chip__label--compact");
         const heroResponse = document.querySelector(".response-area--hero");
+        const exchangeGrid = document.querySelector(".exchange-inspector__grid");
+        const exchangeScroll = document.querySelector(".exchange-inspector__scroll");
 
         if (
           !requestSwitch ||
@@ -2170,7 +2167,9 @@ async (page) => {
           !statusChip ||
           !liveStatusFull ||
           !liveStatusCompact ||
-          !heroResponse
+          !heroResponse ||
+          !exchangeGrid ||
+          !exchangeScroll
         ) {
           return false;
         }
@@ -2187,11 +2186,14 @@ async (page) => {
         const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
         const liveStatusCompactStyles = window.getComputedStyle(liveStatusCompact);
         const heroResponseStyles = window.getComputedStyle(heroResponse);
+        const exchangeGridStyles = window.getComputedStyle(exchangeGrid);
 
         return (
           doc.scrollWidth <= window.innerWidth + 1 &&
           countColumns(requestSwitchStyles.gridTemplateColumns) === 2 &&
           countColumns(toolTabsStyles.gridTemplateColumns) === 2 &&
+          countColumns(exchangeGridStyles.gridTemplateColumns) === 1 &&
+          exchangeScroll.scrollWidth <= exchangeScroll.clientWidth + 1 &&
           parseFloat(requestPanelStyles.paddingTop) <= 16.5 &&
           parseFloat(statusChipStyles.minHeight) <= 30.5 &&
           liveStatusFullStyles.display === "none" &&
@@ -2212,6 +2214,8 @@ async (page) => {
       const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
       const liveStatusCompact = document.querySelector(".status-chip--live .status-chip__label--compact");
       const heroResponse = document.querySelector(".response-area--hero");
+      const exchangeGrid = document.querySelector(".exchange-inspector__grid");
+      const exchangeScroll = document.querySelector(".exchange-inspector__scroll");
 
       const countColumns = (trackList) => {
         const normalized = (trackList || "").trim();
@@ -2225,12 +2229,16 @@ async (page) => {
       const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
       const liveStatusCompactStyles = window.getComputedStyle(liveStatusCompact);
       const heroResponseStyles = window.getComputedStyle(heroResponse);
+      const exchangeGridStyles = window.getComputedStyle(exchangeGrid);
 
       return {
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         scrollWidth: doc.scrollWidth,
         requestMethodColumns: countColumns(requestSwitchStyles.gridTemplateColumns),
         toolTabColumns: countColumns(toolTabsStyles.gridTemplateColumns),
+        exchangeColumns: countColumns(exchangeGridStyles.gridTemplateColumns),
+        exchangeScrollWidth: exchangeScroll.scrollWidth,
+        exchangeClientWidth: exchangeScroll.clientWidth,
         requestPanelPaddingTop: parseFloat(requestPanelStyles.paddingTop),
         statusChipMinHeight: parseFloat(statusChipStyles.minHeight),
         liveStatusFullDisplay: liveStatusFullStyles.display,

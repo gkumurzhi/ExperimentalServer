@@ -113,6 +113,7 @@ class BaseHandler:
     upload_dir: Path
     notes_dir: Path
     method_handlers: Mapping[str, "Handler"]
+    advanced_upload_enabled: bool
     _temp_smuggle_files: set[str]
     _smuggle_lock: "threading.Lock"
     _ecdh_manager: "ECDHKeyManager | None"
@@ -205,9 +206,13 @@ class BaseHandler:
         return response
 
     def _is_hidden_file(self, path: str) -> bool:
-        """Check if file is hidden."""
-        filename = Path(path).name
-        return filename in HIDDEN_FILES
+        """Return True when any URL path segment is hidden or service-owned."""
+        normalized = path.replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part]
+        return any(
+            (part not in {".", ".."} and part.startswith(".")) or part in HIDDEN_FILES
+            for part in parts
+        )
 
     def _error_response(self, status: int, error: str) -> HTTPResponse:
         """Unified JSON error response."""

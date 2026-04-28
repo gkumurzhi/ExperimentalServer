@@ -233,6 +233,20 @@
     background: color-mix(in srgb, var(--bg-strong) 56%, transparent);
 }
 
+.request-batch-summary__row[data-batch-exchange-id]:not([data-batch-exchange-id=""]) {
+    cursor: pointer;
+}
+
+.request-batch-summary__row--selected {
+    border-color: color-mix(in srgb, var(--accent-secondary) 54%, var(--border-subtle));
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-secondary) 18%, transparent);
+}
+
+.request-batch-summary__row:focus-visible {
+    border-color: var(--accent-secondary);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .request-batch-summary__identity,
 .request-batch-summary__details {
     display: grid;
@@ -419,6 +433,68 @@
     min-height: 0;
 }
 
+.exchange-inspector {
+    min-width: 0;
+}
+
+.exchange-inspector__scroll {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    contain: layout paint;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    padding-bottom: 2px;
+}
+
+.exchange-inspector__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.exchange-pane {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.exchange-pane__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.exchange-pane__body {
+    min-height: 320px;
+    max-height: 460px;
+}
+
+.exchange-inspector--tool {
+    width: 100%;
+}
+
+.exchange-inspector--tool .exchange-pane__body {
+    min-height: 240px;
+    max-height: 380px;
+}
+
+.exchange-inspector--notepad {
+    margin-top: var(--space-4);
+}
+
+.tool-grid--upload > .tool-card--output,
+.tool-grid--files > .tool-card--output,
+.tool-grid--opsec > .tool-card--output {
+    grid-column: 1 / -1;
+}
+
 .panel__header--with-actions {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -453,8 +529,8 @@
 }
 
 .request-preview-area {
-    min-height: 240px;
-    max-height: 340px;
+    min-height: 320px;
+    max-height: 460px;
 }
 
 .request-preview-summary {
@@ -1322,9 +1398,15 @@
         gap: var(--space-3);
     }
 
+    .exchange-inspector__grid {
+        grid-template-columns: minmax(0, 1fr);
+        min-width: 0;
+    }
+
+    .exchange-pane__body,
     .request-preview-area {
-        min-height: 180px;
-        max-height: 280px;
+        min-height: 220px;
+        max-height: 48vh;
     }
 
     .request-batch-summary {

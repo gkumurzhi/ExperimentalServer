@@ -1,11 +1,7 @@
 """Registry of HTTP method handlers.
 
-Replaces the hard-coded `method_handlers` dict with a first-class object that
-supports dynamic registration for custom methods and provides a single place
-to look up handlers during request dispatch.
-
-The legacy `method_handlers` dict on the server is kept as a live view of the
-registry for backwards compatibility with tests and the INFO handler.
+Provides a first-class object for method registration, introspection, and
+dispatch lookup.
 """
 
 from __future__ import annotations
@@ -22,9 +18,8 @@ Handler = Callable[["HTTPRequest"], "HTTPResponse"]
 class HandlerRegistry(Mapping[str, Handler]):
     """Maps HTTP method names to handler callables.
 
-    Implements the Mapping protocol so it can be passed anywhere a
-    ``dict[str, Callable]`` is expected — keeps existing test fixtures
-    working without modification.
+    Implements the Mapping protocol for read-only introspection by handlers,
+    tests, and status endpoints.
     """
 
     def __init__(self) -> None:
@@ -49,7 +44,7 @@ class HandlerRegistry(Mapping[str, Handler]):
         """List of registered method names, preserving insertion order."""
         return list(self._handlers.keys())
 
-    # ---- Mapping protocol (for dict compatibility) ----
+    # ---- Mapping protocol ----
 
     def __getitem__(self, key: str) -> Handler:
         return self._handlers[key.upper()]

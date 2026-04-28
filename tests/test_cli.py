@@ -26,12 +26,9 @@ def _find_free_port() -> int:
 def _wait_for_server(port: int, timeout: float = 5.0) -> None:
     """Poll the live server until it answers a minimal PING request."""
     deadline = time.time() + timeout
-    request = (
-        f"PING / HTTP/1.1\r\n"
-        f"Host: 127.0.0.1:{port}\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    ).encode("ascii")
+    request = (f"PING / HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nConnection: close\r\n\r\n").encode(
+        "ascii"
+    )
     while time.time() < deadline:
         try:
             with socket.create_connection(("127.0.0.1", port), timeout=0.2) as sock:
@@ -62,6 +59,7 @@ class TestCLIParser:
         assert args.max_size == 100
         assert args.workers == 10
         assert args.cors_origin == ""
+        assert args.advanced_upload is False
 
     def test_custom_host_port(self):
         args = self.parser.parse_args(["-H", "0.0.0.0", "-p", "443"])
@@ -114,6 +112,10 @@ class TestCLIParser:
     def test_cors_origin_flag(self):
         args = self.parser.parse_args(["--cors-origin", "https://app.example"])
         assert args.cors_origin == "https://app.example"
+
+    def test_advanced_upload_flag(self):
+        args = self.parser.parse_args(["--advanced-upload"])
+        assert args.advanced_upload is True
 
     def test_letsencrypt_requires_domain(self):
         """--letsencrypt without --domain should be caught by main()."""
@@ -172,6 +174,7 @@ class TestCLIMain:
                 "--json-log",
                 "--cors-origin",
                 "https://app.example",
+                "--advanced-upload",
                 "-m",
                 "250",
                 "-w",
@@ -200,6 +203,7 @@ class TestCLIMain:
             "open_browser": True,
             "json_log": True,
             "cors_origin": "https://app.example",
+            "advanced_upload": True,
             "started": True,
         }
 

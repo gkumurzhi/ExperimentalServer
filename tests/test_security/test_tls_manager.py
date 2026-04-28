@@ -54,18 +54,11 @@ class TestTLSManagerSelfSigned:
 
         m.setup()
         try:
-            # Either OpenSSL is available and we got a context, or TLS was
-            # disabled due to missing openssl. Both are valid outcomes.
-            if m.enabled:
-                assert isinstance(m.ssl_context, ssl.SSLContext)
-                assert m.ssl_context.minimum_version == ssl.TLSVersion.TLSv1_2
-                assert m.cert_file and Path(m.cert_file).exists()
-                assert m.describe() == "self-signed"
-                # Temporary cert tracked for cleanup
-                assert m.temp_cert_files
-            else:
-                # OpenSSL missing — cert files should not exist
-                assert m.ssl_context is None
+            assert isinstance(m.ssl_context, ssl.SSLContext)
+            assert m.ssl_context.minimum_version == ssl.TLSVersion.TLSv1_2
+            assert m.cert_file and Path(m.cert_file).exists()
+            assert m.describe() == "self-signed"
+            assert m.temp_cert_files
         finally:
             m.cleanup()
             # After cleanup, temp files should be removed
@@ -107,7 +100,7 @@ class TestTLSManagerWithProvidedCert:
 
 
 class TestTLSManagerDescribe:
-    def test_letsencrypt_description(self) -> None:
+    def test_provided_cert_description_does_not_claim_letsencrypt(self) -> None:
         m = TLSManager(
             enabled=True,
             cert_file="/tmp/fake.pem",
@@ -117,11 +110,11 @@ class TestTLSManagerDescribe:
             email=None,
             host="example.com",
         )
-        assert m.describe() == "Let's Encrypt (example.com)"
+        assert m.describe() == "/tmp/fake.pem"
 
 
 class TestTLSManagerControlFlow:
-    def test_generate_self_signed_disables_tls_when_openssl_missing(self, monkeypatch) -> None:
+    def test_generate_self_signed_fails_when_openssl_missing(self, monkeypatch) -> None:
         m = TLSManager(
             enabled=True,
             cert_file=None,
@@ -134,8 +127,9 @@ class TestTLSManagerControlFlow:
 
         monkeypatch.setattr("src.security.tls_manager.check_openssl_available", lambda: False)
 
-        assert m._generate_self_signed() is False
-        assert m.enabled is False
+        with pytest.raises(RuntimeError, match="OpenSSL not found"):
+            m._generate_self_signed()
+        assert m.enabled is True
         assert m.cert_file is None
         assert m.key_file is None
 
@@ -171,6 +165,7 @@ class TestTLSManagerControlFlow:
 
         assert m.cert_file == str(cert_path)
         assert m.key_file == str(key_path)
+        assert m.describe() == "Let's Encrypt (example.com)"
         obtain_mock.assert_not_called()
 
     def test_try_letsencrypt_obtains_when_certificate_needs_renewal(
@@ -207,23 +202,13 @@ class TestTLSManagerControlFlow:
 
         assert m.cert_file == str(obtained_cert)
         assert m.key_file == str(obtained_key)
+        assert m.describe() == "Let's Encrypt (example.com)"
 
-    def test_setup_falls_back_from_missing_certbot_to_self_signed(
+    def test_setup_fails_from_missing_certbot(
         self,
-        tmp_path: Path,
         monkeypatch,
     ) -> None:
-        cert_path = tmp_path / "cert.pem"
-        key_path = tmp_path / "key.pem"
-        cert_path.write_text("cert", encoding="utf-8")
-        key_path.write_text("key", encoding="utf-8")
-
         monkeypatch.setattr("src.security.tls_manager.check_certbot_available", lambda: False)
-        monkeypatch.setattr("src.security.tls_manager.check_openssl_available", lambda: True)
-        monkeypatch.setattr(
-            "src.security.tls_manager.generate_self_signed_cert",
-            lambda **_kwargs: (cert_path, key_path),
-        )
 
         m = TLSManager(
             enabled=True,
@@ -235,20 +220,10 @@ class TestTLSManagerControlFlow:
             host="127.0.0.1",
         )
 
-        def fake_build_context() -> None:
-            m.ssl_context = "built"  # type: ignore[assignment]
+        with pytest.raises(RuntimeError, match="certbot not found"):
+            m.setup()
 
-        monkeypatch.setattr(m, "_build_context", fake_build_context)
-
-        m.setup()
-
-        assert m.enabled is True
-        assert m.cert_file == str(cert_path)
-        assert m.key_file == str(key_path)
-        assert m.describe() == "Let's Encrypt (example.com)"
-        assert m.ssl_context == "built"
-
-    def test_setup_returns_without_context_when_self_signed_generation_fails(
+    def test_setup_propagates_self_signed_generation_failure(
         self,
         monkeypatch,
     ) -> None:
@@ -262,15 +237,31 @@ class TestTLSManagerControlFlow:
             host="127.0.0.1",
         )
 
-        monkeypatch.setattr(m, "_generate_self_signed", lambda: False)
+        def fail_self_signed() -> None:
+            raise RuntimeError("no openssl")
+
+        monkeypatch.setattr(m, "_generate_self_signed", fail_self_signed)
 
         build_mock = Mock()
         monkeypatch.setattr(m, "_build_context", build_mock)
 
-        m.setup()
-
-        assert m.ssl_context is None
+        with pytest.raises(RuntimeError, match="no openssl"):
+            m.setup()
         build_mock.assert_not_called()
+
+    def test_setup_requires_cert_and_key_together(self) -> None:
+        m = TLSManager(
+            enabled=True,
+            cert_file="/tmp/cert.pem",
+            key_file=None,
+            letsencrypt=False,
+            domain=None,
+            email=None,
+            host="127.0.0.1",
+        )
+
+        with pytest.raises(RuntimeError, match="--cert and --key"):
+            m.setup()
 
     def test_cleanup_ignores_unlink_errors_and_clears_list(self, monkeypatch) -> None:
         m = TLSManager(

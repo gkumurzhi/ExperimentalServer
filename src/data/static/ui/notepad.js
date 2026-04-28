@@ -35,6 +35,76 @@ const notepadConnStatus = document.getElementById('notepadConnStatus');
 const notepadNoteListEl = document.getElementById('notepadNoteList');
 const notepadTransportInputs = Array.from(document.querySelectorAll('input[name="notepadTransport"]'));
 const notepadSelectedIds = new Set();
+let notepadLastExchangeRequest = null;
+
+function notepadTraceRequest(request, response = null, phase = 'sending') {
+    notepadLastExchangeRequest = request || notepadLastExchangeRequest;
+    setExchangeInspector('notepad', {
+        phase,
+        request: notepadLastExchangeRequest || {
+            phase: 'empty',
+            emptyText: t('exchangeRequestEmpty'),
+        },
+        response: response || {
+            phase,
+            startLine: t('statusPending'),
+            body: createExchangeTextBody(t('statusPending')),
+        },
+    });
+}
+
+function notepadBuildHttpExchangeRequest(path, body = null, headers = {}) {
+    return {
+        transport: 'http',
+        method: 'NOTE',
+        path,
+        headers,
+        body: body ? createExchangeTextBody(body, { contentType: headers['Content-Type'] || 'application/json' }) : null,
+    };
+}
+
+function notepadTraceHttpStart(path, body = null, headers = {}) {
+    const request = notepadBuildHttpExchangeRequest(path, body, headers);
+    notepadTraceRequest(request, {
+        phase: 'sending',
+        startLine: `NOTE ${path}`,
+        body: createExchangeTextBody(t('statusPending')),
+    });
+    return request;
+}
+
+function notepadTraceHttpComplete(request, path, response, text, phase = 'complete') {
+    setExchangeInspector('notepad', {
+        phase,
+        request,
+        response: {
+            transport: 'http',
+            method: 'NOTE',
+            path,
+            phase,
+            startLine: `NOTE ${path}\n${response.status} ${response.statusText || ''}`.trim(),
+            status: response.status,
+            statusText: response.statusText || '',
+            headers: response.headers || {},
+            body: createExchangeTextBody(text, { contentType: 'application/json' }),
+        },
+    });
+}
+
+function notepadTraceHttpError(request, path, error) {
+    setExchangeInspector('notepad', {
+        phase: 'error',
+        request,
+        response: {
+            transport: 'http',
+            method: 'NOTE',
+            path,
+            phase: 'error',
+            startLine: `NOTE ${path}\n${t('error')}`,
+            body: createExchangeTextBody(error.message || String(error)),
+        },
+    });
+}
 
 if (notepadNewBtnEl) {
     notepadNewBtnEl.addEventListener('click', notepadNewNote);
@@ -360,8 +430,10 @@ async function notepadInitSession() {
     }
 
     // 1. Get server public key
+    const keyTrace = notepadTraceHttpStart('/notes/key');
     const keyResp = await sendCustomRequest('NOTE', SERVER_URL + '/notes/key');
     const keyText = await keyResp.text();
+    notepadTraceHttpComplete(keyTrace, '/notes/key', keyResp, keyText, keyResp.ok ? 'complete' : 'error');
     if (!keyResp.ok) {
         throw new Error(keyResp.status === 501 ? 'server-crypto-unavailable' : 'session-init-failed');
     }
@@ -382,11 +454,14 @@ async function notepadInitSession() {
     const clientPubRaw = await crypto.subtle.exportKey('raw', clientKeyPair.publicKey);
     const clientPubB64 = uint8ToBase64(new Uint8Array(clientPubRaw));
 
+    const exchangeBody = JSON.stringify({ clientPublicKey: clientPubB64 });
+    const exchangeTrace = notepadTraceHttpStart('/notes/exchange', exchangeBody, { 'Content-Type': 'application/json' });
     const exchangeResp = await sendCustomRequest('NOTE', SERVER_URL + '/notes/exchange',
-        JSON.stringify({ clientPublicKey: clientPubB64 }),
+        exchangeBody,
         { 'Content-Type': 'application/json' }
     );
     const exchangeText = await exchangeResp.text();
+    notepadTraceHttpComplete(exchangeTrace, '/notes/exchange', exchangeResp, exchangeText, exchangeResp.ok ? 'complete' : 'error');
     if (!exchangeResp.ok) {
         throw new Error(
             exchangeResp.status === 501 ? 'server-crypto-unavailable' : 'session-init-failed'
@@ -495,7 +570,7 @@ function notepadConnectWs() {
     notepadWs.onmessage = (evt) => {
         try {
             const msg = JSON.parse(evt.data);
-            notepadHandleWsMessage(msg);
+            notepadHandleWsMessage(msg, evt.data);
         } catch (e) {
             console.error('[Notepad WS] Parse error:', e);
         }
@@ -529,11 +604,40 @@ function notepadDisconnectWs(skipStatus) {
 
 function notepadSendWs(msg) {
     if (notepadWs && notepadWs.readyState === WebSocket.OPEN) {
-        notepadWs.send(JSON.stringify(msg));
+        const messageText = JSON.stringify(msg);
+        notepadTraceRequest({
+            transport: 'ws',
+            type: msg.type || 'message',
+            path: '/notes/ws',
+            body: createExchangeTextBody(messageText, { contentType: 'application/json' }),
+        }, {
+            transport: 'ws',
+            phase: 'sending',
+            path: '/notes/ws',
+            body: createExchangeTextBody(t('statusPending')),
+        });
+        notepadWs.send(messageText);
     }
 }
 
-function notepadHandleWsMessage(msg) {
+function notepadHandleWsMessage(msg, rawText = '') {
+    setExchangeInspector('notepad', {
+        phase: msg.type === 'error' ? 'error' : 'complete',
+        request: notepadLastExchangeRequest || {
+            transport: 'ws',
+            type: 'message',
+            path: '/notes/ws',
+            body: null,
+        },
+        response: {
+            transport: 'ws',
+            type: msg.type || 'message',
+            path: '/notes/ws',
+            phase: msg.type === 'error' ? 'error' : 'complete',
+            body: createExchangeJsonBody(msg, { rawText }),
+        },
+    });
+
     if (msg.type === 'saved') {
         if (msg.success) {
             if (!notepadCurrentId) notepadCurrentId = msg.id;
@@ -594,8 +698,11 @@ async function notepadSave() {
             const headers = { 'Content-Type': 'application/json' };
             if (notepadSessionId) headers['X-Session-Id'] = notepadSessionId;
 
-            const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', JSON.stringify(payload), headers);
+            const body = JSON.stringify(payload);
+            const trace = notepadTraceHttpStart('/notes', body, headers);
+            const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', body, headers);
             const respText = await response.text();
+            notepadTraceHttpComplete(trace, '/notes', response, respText, response.ok ? 'complete' : 'error');
             const result = JSON.parse(respText);
 
             if (result.success) {
@@ -623,8 +730,10 @@ async function notepadRefreshList() {
     }
 
     try {
+        const trace = notepadTraceHttpStart('/notes?list');
         const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes?list');
         const text = await response.text();
+        notepadTraceHttpComplete(trace, '/notes?list', response, text, response.ok ? 'complete' : 'error');
         const result = JSON.parse(text);
         notepadRenderList(result.notes || []);
     } catch (e) {
@@ -679,8 +788,11 @@ async function notepadLoadNote(id) {
     notepadSetStatus('loading');
 
     try {
-        const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes/' + id);
+        const path = '/notes/' + id;
+        const trace = notepadTraceHttpStart(path);
+        const response = await sendCustomRequest('NOTE', SERVER_URL + path);
         const text = await response.text();
+        notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
         const result = JSON.parse(text);
 
         if (response.status === 404) {
@@ -760,8 +872,11 @@ async function notepadDeleteNote() {
         if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
             notepadSendWs({ type: 'delete', id: notepadCurrentId });
         } else {
-            const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes/' + notepadCurrentId + '?delete');
+            const path = '/notes/' + notepadCurrentId + '?delete';
+            const trace = notepadTraceHttpStart(path);
+            const response = await sendCustomRequest('NOTE', SERVER_URL + path);
             const text = await response.text();
+            notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
             let result = null;
             try {
                 result = JSON.parse(text);
@@ -830,8 +945,11 @@ async function notepadDeleteSelectedNotes() {
 
     for (const noteId of selectedIds) {
         try {
-            const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes/' + noteId + '?delete');
+            const path = '/notes/' + noteId + '?delete';
+            const trace = notepadTraceHttpStart(path);
+            const response = await sendCustomRequest('NOTE', SERVER_URL + path);
             const text = await response.text();
+            notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
             let result = null;
             try {
                 result = JSON.parse(text);
@@ -898,8 +1016,10 @@ async function notepadClearNotes() {
     if (!confirmed) return;
 
     try {
+        const trace = notepadTraceHttpStart('/notes?clear=1');
         const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes?clear=1');
         const text = await response.text();
+        notepadTraceHttpComplete(trace, '/notes?clear=1', response, text, response.ok ? 'complete' : 'error');
         let result = null;
         try {
             result = JSON.parse(text);

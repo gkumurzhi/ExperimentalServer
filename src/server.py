@@ -6,9 +6,9 @@ import gzip
 import json
 import logging
 import secrets
-import shutil
 import socket
 import ssl
+import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -16,7 +16,6 @@ from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
 from .handlers import HandlerMixin
-from .handlers.registry import HandlerRegistry
 from .http import HTTPRequest, HTTPResponse
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
@@ -85,6 +84,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         json_log: bool = False,
         # CORS
         cors_origin: str | None = None,
+        # Advanced upload
+        advanced_upload: bool = False,
     ):
         self.host = host
         self.port = port
@@ -97,6 +98,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.open_browser = open_browser
         self.json_log = json_log
         self.cors_origin = cors_origin or None
+        self.advanced_upload_enabled = advanced_upload
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
         # views used by status printing and request handling).
@@ -149,33 +151,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Directory for encrypted notepad blobs, kept separate from uploads/.
         self.notes_dir = self.root_dir / "notes"
         self.notes_dir.mkdir(exist_ok=True)
-        self._migrate_legacy_notes_dir()
 
         # Clean up stale SMUGGLE files from previous sessions
         self._cleanup_old_smuggle_files()
 
-        # Register method handlers via registry (exposed as a dict-like Mapping
-        # so tests and handlers that expect `self.method_handlers[...]` keep
-        # working unchanged).
-        method_handlers = HandlerRegistry()
-        method_handlers.register_many(
-            {
-                "GET": self.handle_get,
-                "HEAD": self.handle_head,
-                "POST": self.handle_post,
-                "PUT": self.handle_none,  # PUT also handles file upload
-                "PATCH": self.handle_patch,  # PATCH also handles file upload
-                "DELETE": self.handle_delete,
-                "OPTIONS": self.handle_options,
-                "FETCH": self.handle_fetch,
-                "INFO": self.handle_info,
-                "PING": self.handle_ping,
-                "NONE": self.handle_none,
-                "NOTE": self.handle_note,
-                "SMUGGLE": self.handle_smuggle,
-            }
-        )
-        self.method_handlers = method_handlers
+        self.method_handlers = self.build_method_handlers()
         self._request_pipeline = RequestPipeline(self)
 
     def _setup_auth(self, auth: str | None) -> None:
@@ -186,9 +166,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         if auth == "random":
             username, password = generate_random_credentials()
             self.authenticator = BasicAuthenticator({username: password})
-            print("\n[AUTH] Generated credentials:")
-            print(f"  Username: {username}")
-            print(f"  Password: {password}")
+            self._print_generated_credentials(username, password)
         elif ":" in auth:
             username, password = auth.split(":", 1)
             self.authenticator = BasicAuthenticator({username: password})
@@ -196,7 +174,19 @@ class ExperimentalHTTPServer(HandlerMixin):
             # Username only, password = random
             password = secrets.token_urlsafe(16)
             self.authenticator = BasicAuthenticator({auth: password})
-            print(f"\n[AUTH] Generated password for '{auth}': {password}")
+            self._print_generated_credentials(auth, password)
+
+    @staticmethod
+    def _print_generated_credentials(username: str, password: str) -> None:
+        """Print generated credentials only for an interactive terminal."""
+        if not sys.stdout.isatty():
+            raise RuntimeError(
+                "--auth random refuses to print generated credentials to non-interactive "
+                "stdout; pass explicit --auth user:password instead."
+            )
+        print("\n[AUTH] Generated credentials:")
+        print(f"  Username: {username}")
+        print(f"  Password: {password}")
 
     def _setup_logging(self, quiet: bool) -> None:
         """Set up logging."""
@@ -301,35 +291,6 @@ class ExperimentalHTTPServer(HandlerMixin):
         if count > 0:
             logger.info(f"Cleaned up {count} stale SMUGGLE files")
 
-    def _migrate_legacy_notes_dir(self) -> None:
-        """Move legacy uploads/notes contents into the top-level notes/ directory."""
-        legacy_notes_dir = self.upload_dir / "notes"
-        if not legacy_notes_dir.is_dir():
-            return
-
-        moved = 0
-        for entry in sorted(legacy_notes_dir.iterdir(), key=lambda path: path.name):
-            target = self.notes_dir / entry.name
-            if target.exists():
-                logger.warning("Legacy note migration skipped existing target: %s", target)
-                continue
-            try:
-                shutil.move(str(entry), str(target))
-                moved += 1
-            except OSError as exc:
-                logger.warning("Legacy note migration failed for %s: %s", entry, exc)
-
-        try:
-            legacy_notes_dir.rmdir()
-        except OSError:
-            logger.warning(
-                "Legacy notes directory still contains entries: %s",
-                legacy_notes_dir,
-            )
-        else:
-            if moved:
-                logger.info("Migrated %s legacy notepad files into %s", moved, self.notes_dir)
-
     def start(self) -> None:
         """Start the server."""
         # Set up TLS
@@ -358,7 +319,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload: {self.max_upload_size // (1024 * 1024)} MB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
-        print("  Advanced upload: enabled")
+        print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")
 
         if self.tls_enabled:
             print(f"\n  [TLS]     certificate: {self._tls.describe()}")
@@ -498,27 +459,6 @@ class ExperimentalHTTPServer(HandlerMixin):
             self._rate_limiter.reset(ip)
         return None
 
-    def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
-        """Look up and invoke the handler for *request*.method."""
-        handler = self.method_handlers.get(request.method)
-        if handler:
-            return handler(request)
-
-        if self._has_advanced_upload_payload(request):
-            return self.handle_advanced_upload(request)
-
-        return self._method_not_allowed(request.method)
-
-    @staticmethod
-    def _has_advanced_upload_payload(request: HTTPRequest) -> bool:
-        """Return True when an unknown method carries advanced upload data."""
-        return bool(
-            request.body
-            or request.headers.get("x-d")
-            or request.headers.get("x-d-0")
-            or request.query_params.get("d")
-        )
-
     def _send_response(
         self,
         response: HTTPResponse,
@@ -530,23 +470,29 @@ class ExperimentalHTTPServer(HandlerMixin):
         Handles both streamed (file) and buffered (body) responses.
         For streamed responses, ``_bld`` is overridden to close the connection.
         """
-        if response.stream_path is not None:
-            _bld_close: ResponseBuildArgs = {**_bld, "keep_alive": False}
-            header_bytes = response.build_headers(**_bld_close)
-            client_socket.sendall(header_bytes)
-            bytes_sent = len(header_bytes)
-            with response.stream_path.open("rb") as f:
-                while True:
-                    chunk = f.read(65536)
-                    if not chunk:
-                        break
-                    client_socket.sendall(chunk)
-                    bytes_sent += len(chunk)
-            return bytes_sent
+        try:
+            if response.stream_path is not None:
+                _bld_close: ResponseBuildArgs = {**_bld, "keep_alive": False}
+                bytes_sent = 0
+                header_bytes = response.build_headers(**_bld_close)
+                client_socket.sendall(header_bytes)
+                bytes_sent = len(header_bytes)
+                with response.stream_path.open("rb") as f:
+                    while True:
+                        chunk = f.read(65536)
+                        if not chunk:
+                            break
+                        client_socket.sendall(chunk)
+                        bytes_sent += len(chunk)
+                return bytes_sent
 
-        response_bytes = response.build(**_bld)
-        client_socket.sendall(response_bytes)
-        return len(response_bytes)
+            response_bytes = response.build(**_bld)
+            client_socket.sendall(response_bytes)
+            return len(response_bytes)
+        finally:
+            if response.stream_cleanup is not None:
+                response.stream_cleanup()
+                response.stream_cleanup = None
 
     def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None:
         """Reject requests whose Content-Length exceeds the configured cap."""
@@ -588,6 +534,8 @@ class ExperimentalHTTPServer(HandlerMixin):
     ) -> None:
         """Apply response decorations."""
         response.set_header("X-Request-Id", request_id)
+        if request.headers.get("x-exphttp-no-gzip", "").lower() in {"1", "true", "yes"}:
+            return
         if "gzip" in request.headers.get("accept-encoding", ""):
             self._maybe_gzip_response(response)
 
@@ -611,9 +559,7 @@ class ExperimentalHTTPServer(HandlerMixin):
 
         if configured_origin:
             allowed_origins = {
-                item.strip()
-                for item in configured_origin.split(",")
-                if item.strip()
+                item.strip() for item in configured_origin.split(",") if item.strip()
             }
             if origin in allowed_origins:
                 return True

@@ -41,7 +41,7 @@ Additionally:
 
 - Symlinks are resolved *before* the check, so a symlink under `uploads/`
   pointing to `/etc/passwd` is rejected.
-- Hidden files (`.env`, `.gitignore`, legacy service files, …) are blocked by
+- Hidden files (`.env`, `.gitignore`, service files, …) are blocked by
   an explicit `HIDDEN_FILES` frozenset in `src/config.py`.
 - The check is centralised in `resolve_descendant_path()` and
   `BaseHandler._resolve_safe_path()` so handlers do not implement their own

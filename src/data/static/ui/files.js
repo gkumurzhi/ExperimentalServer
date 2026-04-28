@@ -124,13 +124,26 @@ function updateSelectedUploadsButton() {
 
 async function browseDirectory() {
     const path = document.getElementById('browsePathInput').value || '/';
-    const filesResponseArea = document.getElementById('filesResponseArea');
     const serverFiles = document.getElementById('serverFiles');
     selectedUploadPaths.clear();
     updateSelectedUploadsButton();
 
     announceLiveRegion('filesResponseAreaLive', `${t('loadingInfo')} ${path}`);
-    filesResponseArea.innerHTML = `<div class="response-header">${t('loadingInfo')} ${esc(path)}...</div>`;
+    setExchangeInspector('files', {
+        phase: 'sending',
+        request: {
+            transport: 'http',
+            method: 'INFO',
+            path,
+            headers: {},
+            body: null,
+        },
+        response: {
+            phase: 'sending',
+            startLine: `${t('loadingInfo')} ${path}`,
+            body: createExchangeTextBody(`${t('loadingInfo')} ${path}...`),
+        },
+    });
 
     try {
         const response = await sendCustomRequest('INFO', SERVER_URL + path);
@@ -228,22 +241,49 @@ async function browseDirectory() {
         }
 
         const uploadsOnlyNote = info.access_scope === 'uploads' ? '\n--- ' + t('uploadsOnlyMode') + ' ---\n' : '';
-        filesResponseArea.innerHTML = `
-<div class="response-header">
-INFO ${path}
-<span class="status success">200 OK</span>${info.access_scope === 'uploads' ? ' <span class="response-flag response-flag--sandbox">[uploads/]</span>' : ''}
-</div>
-<div class="response-body">${esc(uploadsOnlyNote)}${esc(JSON.stringify(info, null, 2))}</div>`;
+        setExchangeInspector('files', {
+            phase: 'complete',
+            request: {
+                transport: 'http',
+                method: 'INFO',
+                path,
+                headers: {},
+                body: null,
+            },
+            response: {
+                transport: 'http',
+                method: 'INFO',
+                path,
+                phase: 'complete',
+                startLine: `INFO ${path}\n200 OK${info.access_scope === 'uploads' ? ' [uploads/]' : ''}`,
+                status: 200,
+                statusText: 'OK',
+                headers: response.headers,
+                body: createExchangeTextBody(`${uploadsOnlyNote}${JSON.stringify(info, null, 2)}`, { contentType: 'application/json' }),
+            },
+        });
         announceLiveRegion('filesResponseAreaLive', `INFO ${path} 200 OK`);
 
     } catch (error) {
         announceLiveRegion('filesResponseAreaLive', `INFO ${path} ${t('error')}: ${error.message}`);
-        filesResponseArea.innerHTML = `
-<div class="response-header">
-INFO ${path}
-<span class="status error">${t('error')}</span>
-</div>
-<div class="response-body">${esc(error.message)}</div>`;
+        setExchangeInspector('files', {
+            phase: 'error',
+            request: {
+                transport: 'http',
+                method: 'INFO',
+                path,
+                headers: {},
+                body: null,
+            },
+            response: {
+                transport: 'http',
+                method: 'INFO',
+                path,
+                phase: 'error',
+                startLine: `INFO ${path}\n${t('error')}`,
+                body: createExchangeTextBody(error.message),
+            },
+        });
     }
 }
 
@@ -263,9 +303,22 @@ async function clearUploads(triggerEl = null) {
     });
     if (!confirmed) return;
 
-    const filesResponseArea = document.getElementById('filesResponseArea');
     announceLiveRegion('filesResponseAreaLive', t('clearUploadsRunning'));
-    filesResponseArea.innerHTML = `<div class="response-header">${esc(t('clearUploadsRunning'))}</div>`;
+    setExchangeInspector('files', {
+        phase: 'sending',
+        request: {
+            transport: 'http',
+            method: 'DELETE',
+            path: '/uploads?clear=1',
+            headers: {},
+            body: null,
+        },
+        response: {
+            phase: 'sending',
+            startLine: t('clearUploadsRunning'),
+            body: createExchangeTextBody(t('clearUploadsRunning')),
+        },
+    });
 
     try {
         const response = await sendCustomRequest('DELETE', `${SERVER_URL}/uploads?clear=1`);
@@ -284,14 +337,27 @@ async function clearUploads(triggerEl = null) {
             await browseDirectory();
             const summary = `${t('clearUploadsSuccess')}: ${result.deleted_files || 0} ${t('filesDeleted')}, ${result.deleted_dirs || 0} ${t('dirsDeleted')}`;
             announceLiveRegion('filesResponseAreaLive', summary);
-            filesResponseArea.innerHTML = `
-<div class="response-header">
-DELETE /uploads?clear=1
-<span class="status success">200 OK</span>
-</div>
-<div class="response-body">${esc(summary)}
-
-${esc(JSON.stringify(result, null, 2))}</div>`;
+            setExchangeInspector('files', {
+                phase: 'complete',
+                request: {
+                    transport: 'http',
+                    method: 'DELETE',
+                    path: '/uploads?clear=1',
+                    headers: {},
+                    body: null,
+                },
+                response: {
+                    transport: 'http',
+                    method: 'DELETE',
+                    path: '/uploads?clear=1',
+                    phase: 'complete',
+                    startLine: 'DELETE /uploads?clear=1\n200 OK',
+                    status: 200,
+                    statusText: 'OK',
+                    headers: response.headers,
+                    body: createExchangeTextBody(`${summary}\n\n${JSON.stringify(result, null, 2)}`, { contentType: 'application/json' }),
+                },
+            });
             focusFilesBrowserAnchor();
             return;
         }
@@ -327,9 +393,23 @@ async function deleteSelectedUploadFiles(triggerEl = null) {
     });
     if (!confirmed) return;
 
-    const filesResponseArea = document.getElementById('filesResponseArea');
     const deleted = [];
     const errors = [];
+    setExchangeInspector('files', {
+        phase: 'sending',
+        request: {
+            transport: 'http',
+            method: 'DELETE',
+            path: t('deleteSelectedFilesBtn'),
+            headers: {},
+            body: createExchangeTextBody(paths.join('\n')),
+        },
+        response: {
+            phase: 'sending',
+            startLine: t('statusPending'),
+            body: createExchangeTextBody(t('statusPending')),
+        },
+    });
 
     for (const path of paths) {
         try {
@@ -357,13 +437,26 @@ async function deleteSelectedUploadFiles(triggerEl = null) {
     await browseDirectory();
     const summary = `${t('deleteSelectedFilesSuccess')}: ${deleted.length}`;
     announceLiveRegion('filesResponseAreaLive', summary);
-    filesResponseArea.innerHTML = `
-<div class="response-header">
-DELETE ${esc(t('deleteSelectedFilesBtn'))}
-<span class="status ${errors.length ? 'error' : 'success'}">${errors.length ? esc(t('error')) : '200 OK'}</span>
-</div>
-<div class="response-body">${esc(summary)}
-${errors.length ? '\n\n' + esc(errors.join('\n')) : ''}</div>`;
+    setExchangeInspector('files', {
+        phase: errors.length ? 'error' : 'complete',
+        request: {
+            transport: 'http',
+            method: 'DELETE',
+            path: t('deleteSelectedFilesBtn'),
+            headers: {},
+            body: createExchangeTextBody(paths.join('\n')),
+        },
+        response: {
+            transport: 'http',
+            method: 'DELETE',
+            path: t('deleteSelectedFilesBtn'),
+            phase: errors.length ? 'error' : 'complete',
+            startLine: `DELETE ${t('deleteSelectedFilesBtn')}\n${errors.length ? t('error') : '200 OK'}`,
+            status: errors.length ? 400 : 200,
+            statusText: errors.length ? t('error') : 'OK',
+            body: createExchangeTextBody(`${summary}${errors.length ? '\n\n' + errors.join('\n') : ''}`),
+        },
+    });
 
     if (errors.length) {
         await showNoticeDialog({
@@ -466,12 +559,29 @@ function showSmuggleDialog(filePath, triggerEl = null) {
 async function executeSmuggle(filePath, usePassword = false) {
     // Формируем URL
     let url = SERVER_URL + filePath;
+    let requestPath = filePath;
     if (usePassword) {
         url += '?encrypt=1';  // Сервер сгенерирует пароль
+        requestPath += '?encrypt=1';
     }
 
     // Запрашиваем создание HTML файла
     try {
+        setExchangeInspector('files', {
+            phase: 'sending',
+            request: {
+                transport: 'http',
+                method: 'SMUGGLE',
+                path: requestPath,
+                headers: {},
+                body: null,
+            },
+            response: {
+                phase: 'sending',
+                startLine: `SMUGGLE ${filePath}`,
+                body: createExchangeTextBody(t('statusPending')),
+            },
+        });
         const response = await sendCustomRequest('SMUGGLE', url);
         const text = await response.text();
 
@@ -482,26 +592,76 @@ async function executeSmuggle(filePath, usePassword = false) {
             window.open(SERVER_URL + result.url, '_blank');
 
             // Показываем результат
-            const filesResponseArea = document.getElementById('filesResponseArea');
-            filesResponseArea.innerHTML = `
-<div class="response-header">
-SMUGGLE ${esc(filePath)}
-<span class="status success">${t('smuggleGenerated')}</span>
-</div>
-<div class="response-body">${esc(result.file)}
+            const responseSummary = `${result.file}
 ${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}
-URL: ${esc(result.url)}
+URL: ${result.url}
 
-${t('smuggleOpened')}</div>`;
+${t('smuggleOpened')}`;
+            setExchangeInspector('files', {
+                phase: 'complete',
+                request: {
+                    transport: 'http',
+                    method: 'SMUGGLE',
+                    path: requestPath,
+                    headers: {},
+                    body: null,
+                },
+                response: {
+                    transport: 'http',
+                    method: 'SMUGGLE',
+                    path: filePath,
+                    phase: 'complete',
+                    startLine: `SMUGGLE ${filePath}\n${t('smuggleGenerated')}`,
+                    status: 200,
+                    statusText: 'OK',
+                    headers: response.headers,
+                    body: createExchangeTextBody(responseSummary, { contentType: 'text/plain' }),
+                },
+            });
             announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleGenerated')}`);
         } else {
-            const filesResponseArea = document.getElementById('filesResponseArea');
             announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}`);
-            filesResponseArea.innerHTML = `<div class="response-header">SMUGGLE ${esc(filePath)} <span class="status error">${t('error')}</span></div><div class="response-body">${esc(text)}</div>`;
+            setExchangeInspector('files', {
+                phase: 'error',
+                request: {
+                    transport: 'http',
+                    method: 'SMUGGLE',
+                    path: requestPath,
+                    headers: {},
+                    body: null,
+                },
+                response: {
+                    transport: 'http',
+                    method: 'SMUGGLE',
+                    path: filePath,
+                    phase: 'error',
+                    startLine: `SMUGGLE ${filePath}\n${t('error')}`,
+                    status: response.status,
+                    statusText: response.statusText || t('error'),
+                    headers: response.headers,
+                    body: createExchangeTextBody(text),
+                },
+            });
         }
     } catch (error) {
-        const filesResponseArea = document.getElementById('filesResponseArea');
         announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}: ${error.message}`);
-        filesResponseArea.innerHTML = `<div class="response-header">SMUGGLE ${esc(filePath)} <span class="status error">${t('error')}</span></div><div class="response-body">${esc(error.message)}</div>`;
+        setExchangeInspector('files', {
+            phase: 'error',
+            request: {
+                transport: 'http',
+                method: 'SMUGGLE',
+                path: requestPath,
+                headers: {},
+                body: null,
+            },
+            response: {
+                transport: 'http',
+                method: 'SMUGGLE',
+                path: filePath,
+                phase: 'error',
+                startLine: `SMUGGLE ${filePath}\n${t('error')}`,
+                body: createExchangeTextBody(error.message),
+            },
+        });
     }
 }

@@ -172,5 +172,8 @@ class TestHiddenFiles:
     def test_hidden_opsec_config(self, handler):
         assert handler._is_hidden_file("/.opsec_config.json") is True
 
+    def test_hidden_upload_segment(self, handler):
+        assert handler._is_hidden_file("/uploads/.secret") is True
+
     def test_normal_file_not_hidden(self, handler):
         assert handler._is_hidden_file("/readme.txt") is False

@@ -98,10 +98,7 @@ label {
 }
 
 .hero-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-    gap: var(--space-4);
-    align-items: stretch;
+    display: block;
 }
 
 .advanced-tools__header,
@@ -210,11 +207,6 @@ label {
         gap: 6px;
     }
 
-    .hero-shell {
-        grid-template-columns: minmax(0, 1.14fr) minmax(300px, 0.86fr);
-        gap: var(--space-3);
-    }
-
     .advanced-tools {
         gap: var(--space-2);
     }
@@ -229,8 +221,7 @@ label {
         padding: var(--space-6);
     }
 
-    .request-panel,
-    .response-panel {
+    .request-panel {
         display: grid;
         align-content: start;
         gap: var(--space-3);
@@ -330,10 +321,6 @@ label {
     .status-cluster,
     .lang-switcher {
         gap: 6px;
-    }
-
-    .hero-shell {
-        gap: var(--space-3);
     }
 
     .advanced-tools__header,

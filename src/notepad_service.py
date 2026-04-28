@@ -22,9 +22,8 @@ NOTE_ID_LENGTH = 32
 
 def is_valid_note_id(note_id: str) -> bool:
     """Return ``True`` when *note_id* matches the stored-note identifier format."""
-    return (
-        1 <= len(note_id) <= NOTE_ID_LENGTH
-        and all(char in "0123456789abcdef" for char in note_id)
+    return 1 <= len(note_id) <= NOTE_ID_LENGTH and all(
+        char in "0123456789abcdef" for char in note_id
     )
 
 

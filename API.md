@@ -1,7 +1,8 @@
 # API Reference
 
-All responses include standard headers: `Server`, `Date`, and `Connection`
-(`close` by default, `keep-alive` when the server keeps the socket open).
+All responses include standard headers: `Server`, `Date`, `Connection`, and
+`X-Content-Type-Options: nosniff` (`close` by default, `keep-alive` when the
+server keeps the socket open).
 CORS headers are only emitted when CORS is explicitly enabled.
 Error responses use JSON format: `{"error": "message", "status": NNN}`.
 
@@ -20,7 +21,9 @@ GET /uploads/path/to/file HTTP/1.1
 the built-in UI assets. Other file paths are resolved inside `uploads/`;
 `/file.txt` and `/uploads/file.txt` both target `<root>/uploads/file.txt`.
 
-**Response:** File contents with appropriate `Content-Type`. HTML files include `Content-Security-Policy` header.
+**Response:** File contents with appropriate `Content-Type`. Bundled HTML files
+include `Content-Security-Policy`; uploaded HTML/SVG files are forced to
+download as attachments.
 
 **Status codes:** `200` OK, `404` Not Found
 
@@ -118,9 +121,9 @@ DELETE /uploads?clear=1 HTTP/1.1
 }
 ```
 
-Hidden service files such as `.gitkeep` are preserved. A legacy `uploads/notes/`
-directory is also preserved; current notepad storage lives in the separate
-top-level `notes/` directory.
+Hidden service files such as `.gitkeep` are preserved. Current notepad storage
+lives in the separate top-level `notes/` directory; `uploads/notes/` is treated
+as ordinary upload content.
 
 **Status codes:** `200` OK, `403` Outside uploads/, `404` Not Found, `400` Cannot delete directory
 
@@ -198,7 +201,7 @@ PING / HTTP/1.1
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
   "access_scope": "uploads",
-  "advanced_upload": true,
+  "advanced_upload": false,
   "metrics": {
     "uptime_seconds": 3600.5,
     "total_requests": 150,
@@ -470,9 +473,9 @@ CORS preflight handler. Returns allowed methods.
 
 ## Advanced Upload
 
-Advanced upload is enabled by default and does not require a startup flag. Any
-unknown, non-standard HTTP method that carries advanced upload data is treated
-as an upload request and writes only to `uploads/`.
+Advanced upload is disabled by default. Start the server with
+`--advanced-upload` to treat unknown, non-standard HTTP methods carrying
+advanced upload data as upload requests. Writes are still limited to `uploads/`.
 
 The advanced upload endpoint accepts encoded payloads via JSON body, HTTP
 headers, or query parameters. Common fields are:

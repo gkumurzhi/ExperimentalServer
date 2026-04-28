@@ -65,7 +65,9 @@ def _note_request(
     if headers:
         request_headers.update(headers)
 
-    conn_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    conn_cls = (
+        http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+    )
     conn = conn_cls(parsed.hostname, parsed.port, timeout=10)
     request_path = f"{parsed.path.rstrip('/')}{path}" if parsed.path else path
 
@@ -162,7 +164,9 @@ def load_note(url: str, note_id: str) -> dict[str, object]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--url", required=True, help="Base server URL, for example http://127.0.0.1:8080")
+    parser.add_argument(
+        "--url", required=True, help="Base server URL, for example http://127.0.0.1:8080"
+    )
     parser.add_argument("--title", default="Example Note", help="Note title to save")
     parser.add_argument("--text", required=True, help="Plaintext note content to encrypt and save")
     parser.add_argument(

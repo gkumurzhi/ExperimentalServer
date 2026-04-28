@@ -44,9 +44,18 @@ function setOpsecFile(file) {
 
     if (opsecFile) {
         announceLiveRegion('opsecResponseAreaLive', `${t('opsecFileSelected')}: ${opsecFile.name}`);
-        document.getElementById('opsecResponseArea').innerHTML = `
-            <div class="response-header">${esc(t('opsecFileSelected'))}: ${esc(opsecFile.name)} (${formatSize(opsecFile.size)})</div>
-        `;
+        setExchangeInspector('opsec', {
+            phase: 'ready',
+            request: {
+                phase: 'empty',
+                emptyText: t('exchangeRequestEmpty'),
+            },
+            response: {
+                phase: 'ready',
+                startLine: `${t('opsecFileSelected')}: ${opsecFile.name}`,
+                body: createExchangeTextBody(`${opsecFile.name} (${formatSize(opsecFile.size)})`),
+            },
+        });
     }
 
     checkOpsecTransportWarning();
@@ -211,7 +220,6 @@ opsecDropZone.addEventListener('drop', (e) => {
 async function opsecUpload() {
     if (!opsecFile) return;
 
-    const responseArea = document.getElementById('opsecResponseArea');
     const method = document.getElementById('opsecMethodInput').value || 'CHECKDATA';
     const includeName = document.getElementById('opsecIncludeName').checked;
     const useEncryption = opsecEncryptCheckbox.checked;
@@ -221,12 +229,34 @@ async function opsecUpload() {
     // Validate password if encryption is enabled
     if (useEncryption && !password) {
         announceLiveRegion('opsecResponseAreaLive', t('opsecPasswordRequired'));
-        responseArea.innerHTML = `<div class="response-header"><span class="status error">${esc(t('opsecPasswordRequired'))}</span></div>`;
+        setExchangeInspector('opsec', {
+            phase: 'error',
+            request: {
+                phase: 'empty',
+                emptyText: t('exchangeRequestEmpty'),
+            },
+            response: {
+                phase: 'error',
+                startLine: t('opsecPasswordRequired'),
+                body: createExchangeTextBody(t('opsecPasswordRequired')),
+            },
+        });
         return;
     }
 
     announceLiveRegion('opsecResponseAreaLive', `${t('opsecUploading')} ${method} [${transport}]`);
-    responseArea.innerHTML = `<div class="response-header">${esc(t('opsecUploading'))} ${esc(method)}${useEncryption ? ' (' + esc(t('opsecXorEncryption')) + ')' : ''} [${esc(transport)}]...</div>`;
+    setExchangeInspector('opsec', {
+        phase: 'sending',
+        request: {
+            phase: 'empty',
+            emptyText: t('exchangeRequestEmpty'),
+        },
+        response: {
+            phase: 'sending',
+            startLine: `${t('opsecUploading')} ${method} [${transport}]`,
+            body: createExchangeTextBody(`${t('opsecUploading')} ${method}${useEncryption ? ' (' + t('opsecXorEncryption') + ')' : ''} [${transport}]...`),
+        },
+    });
     opsecUploadBtn.disabled = true;
 
     try {
@@ -271,6 +301,8 @@ async function opsecUpload() {
         let requestBody = null;
         let requestHeaders = {};
         let response;
+        let requestPath = randomPath;
+        let requestBodyDescriptor = null;
 
         console.log(`[Advanced upload] Method: ${method}, Path: ${randomPath}, Transport: ${transport}, Include name: ${includeName}`);
 
@@ -289,6 +321,26 @@ async function opsecUpload() {
             if (fields.kb64) requestHeaders['X-Kb64'] = fields.kb64;
             if (fields.n) requestHeaders['X-N'] = fields.n;
             if (fields.h) requestHeaders['X-H'] = fields.h;
+            requestBodyDescriptor = createExchangePreviewBody({
+                label: t('opsecTransportHeaders'),
+                size: base64Std.length,
+                text: Object.entries(requestHeaders).map(([key, value]) => `${key}: ${value}`).join('\n'),
+            });
+            setExchangeInspector('opsec', {
+                phase: 'sending',
+                request: {
+                    transport: 'http',
+                    method,
+                    path: requestPath,
+                    headers: requestHeaders,
+                    body: requestBodyDescriptor,
+                },
+                response: {
+                    phase: 'sending',
+                    startLine: `${t('opsecUploading')} ${method} [${transport}]`,
+                    body: createExchangeTextBody(t('statusPending')),
+                },
+            });
             response = await sendCustomRequest(method, requestUrl, null, requestHeaders);
         } else if (transport === 'url') {
             // Send data in URL query parameters with URL-safe base64
@@ -301,6 +353,27 @@ async function opsecUpload() {
             if (fields.n) params.set('n', fields.n);
             if (fields.h) params.set('h', fields.h);
             requestUrl += '?' + params.toString();
+            requestPath = randomPath + '?' + params.toString();
+            requestBodyDescriptor = createExchangePreviewBody({
+                label: t('opsecTransportUrl'),
+                size: params.toString().length,
+                text: params.toString(),
+            });
+            setExchangeInspector('opsec', {
+                phase: 'sending',
+                request: {
+                    transport: 'http',
+                    method,
+                    path: requestPath,
+                    headers: {},
+                    body: requestBodyDescriptor,
+                },
+                response: {
+                    phase: 'sending',
+                    startLine: `${t('opsecUploading')} ${method} [${transport}]`,
+                    body: createExchangeTextBody(t('statusPending')),
+                },
+            });
             response = await sendCustomRequest(method, requestUrl, null, {});
         } else {
             // Default: send as JSON body
@@ -310,7 +383,24 @@ async function opsecUpload() {
             if (fields.kb64) payload.kb64 = true;
             if (fields.n) payload.n = fields.n;
             requestHeaders['Content-Type'] = 'application/json';
-            response = await sendCustomRequest(method, requestUrl, JSON.stringify(payload), requestHeaders);
+            requestBody = JSON.stringify(payload);
+            requestBodyDescriptor = createExchangeTextBody(requestBody, { contentType: 'application/json' });
+            setExchangeInspector('opsec', {
+                phase: 'sending',
+                request: {
+                    transport: 'http',
+                    method,
+                    path: requestPath,
+                    headers: requestHeaders,
+                    body: requestBodyDescriptor,
+                },
+                response: {
+                    phase: 'sending',
+                    startLine: `${t('opsecUploading')} ${method} [${transport}]`,
+                    body: createExchangeTextBody(t('statusPending')),
+                },
+            });
+            response = await sendCustomRequest(method, requestUrl, requestBody, requestHeaders);
         }
 
         const text = await response.text();
@@ -324,41 +414,76 @@ async function opsecUpload() {
         }
 
         if (result.ok) {
-            responseArea.innerHTML = `
-<div class="response-header">
-${esc(method)} ${esc(randomPath)}
-<span class="status success">${esc(t('opsecUploaded'))}</span>
-</div>
-<div class="response-body">--- ${esc(t('opsecSuccess'))} ---
-${esc(t('opsecId'))}: ${esc(result.id)}
-${esc(t('opsecSize'))}: ${esc(result.sz)} ${esc(t('opsecBytes'))}
-${esc(t('opsecTransportUsed'))}: ${esc(result.transport || transport)}
+            const responseSummary = `--- ${t('opsecSuccess')} ---
+${t('opsecId')}: ${result.id}
+${t('opsecSize')}: ${result.sz} ${t('opsecBytes')}
+${t('opsecTransportUsed')}: ${result.transport || transport}
 
-${t('methodLabel')} ${esc(method)} ${esc(t('opsecMethodRandom'))}
-Path: ${esc(randomPath)} ${esc(t('opsecPathNoName'))}
-${esc(t('opsecNameInReq'))}: ${includeName ? esc(t('opsecYes')) : esc(t('opsecNoHidden'))}
-${esc(t('opsecEncryption'))}: ${useEncryption ? (sendKeyToServer ? esc(t('opsecXorDecrypted')) + (encodeKeyBase64 ? esc(t('opsecKeyInBase64')) : '') + ')' : esc(t('opsecXorEncrypted'))) : esc(t('opsecNone'))}
-</div>`;
+${t('methodLabel')} ${method} ${t('opsecMethodRandom')}
+Path: ${randomPath} ${t('opsecPathNoName')}
+${t('opsecNameInReq')}: ${includeName ? t('opsecYes') : t('opsecNoHidden')}
+${t('opsecEncryption')}: ${useEncryption ? (sendKeyToServer ? t('opsecXorDecrypted') + (encodeKeyBase64 ? t('opsecKeyInBase64') : '') + ')' : t('opsecXorEncrypted')) : t('opsecNone')}`;
+            setExchangeInspector('opsec', {
+                phase: 'complete',
+                request: {
+                    transport: 'http',
+                    method,
+                    path: requestPath,
+                    headers: requestHeaders,
+                    body: requestBodyDescriptor,
+                },
+                response: {
+                    transport: 'http',
+                    method,
+                    path: randomPath,
+                    phase: 'complete',
+                    status: response.status,
+                    statusText: response.statusText || t('opsecUploaded'),
+                    headers: response.headers,
+                    body: createExchangeTextBody(responseSummary, { contentType: 'text/plain' }),
+                },
+            });
             announceLiveRegion('opsecResponseAreaLive', `${t('opsecSuccess')}: ${result.id}`);
             // Generate new random method for next upload
             generateRandomMethod();
         } else {
             announceLiveRegion('opsecResponseAreaLive', `${method} ${t('error')}: ${result.error || 'Unknown error'}`);
-            responseArea.innerHTML = `
-<div class="response-header">
-${esc(method)} ${esc(randomPath)}
-<span class="status error">${t('error')}</span>
-</div>
-<div class="response-body">${esc(result.error || 'Unknown error')}</div>`;
+            setExchangeInspector('opsec', {
+                phase: 'error',
+                request: {
+                    transport: 'http',
+                    method,
+                    path: requestPath,
+                    headers: requestHeaders,
+                    body: requestBodyDescriptor,
+                },
+                response: {
+                    transport: 'http',
+                    method,
+                    path: randomPath,
+                    phase: 'error',
+                    status: response.status,
+                    statusText: response.statusText || t('error'),
+                    headers: response.headers,
+                    body: createExchangeTextBody(result.error || 'Unknown error'),
+                },
+            });
         }
     } catch (error) {
         console.error('[Advanced upload] Error:', error);
         announceLiveRegion('opsecResponseAreaLive', `${t('error')}: ${error.message}`);
-        responseArea.innerHTML = `
-<div class="response-header">
-<span class="status error">${t('error')}</span>
-</div>
-<div class="response-body">${esc(error.message)}</div>`;
+        setExchangeInspector('opsec', {
+            phase: 'error',
+            request: {
+                phase: 'empty',
+                emptyText: t('exchangeRequestEmpty'),
+            },
+            response: {
+                phase: 'error',
+                startLine: t('error'),
+                body: createExchangeTextBody(error.message),
+            },
+        });
     }
 
     opsecUploadBtn.disabled = false;

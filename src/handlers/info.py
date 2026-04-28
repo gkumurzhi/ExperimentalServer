@@ -103,7 +103,7 @@ class InfoHandlersMixin(BaseHandler):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "supported_methods": list(self.method_handlers.keys()),
             "access_scope": "uploads",
-            "advanced_upload": True,
+            "advanced_upload": bool(getattr(self, "advanced_upload_enabled", False)),
         }
         get_metrics = getattr(self, "get_metrics", None)
         if callable(get_metrics):

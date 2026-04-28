@@ -3,7 +3,6 @@ const responseAreaEl = document.getElementById('responseArea');
 const pathInputEl = document.getElementById('pathInput');
 const requestMethodButtons = Array.from(document.querySelectorAll('[data-request-method]'));
 const requestPanelPrepMethods = new Set(['DELETE', 'FETCH', 'SMUGGLE']);
-const requestPreviewStorageKey = 'requestPreviewVisible';
 const requestPreviewModeStorageKey = 'requestPreviewMode';
 const requestPreviewToggleEl = document.getElementById('requestPreviewToggle');
 const requestPreviewSectionEl = document.getElementById('requestPreviewSection');
@@ -19,6 +18,8 @@ const requestBatchSummaryEl = document.getElementById('requestBatchSummary');
 const requestPreviewModeButtons = Array.from(document.querySelectorAll('[data-request-preview-mode]'));
 const responseCopyBtnEl = document.getElementById('responseCopyBtn');
 const requestPreviewModes = new Set(['summary', 'raw']);
+const uiNoGzipHeader = 'X-Exphttp-No-Gzip';
+const uiNoGzipHeaderValue = '1';
 const requestPreviewExpectedStatuses = {
     GET: { code: 200, text: 'OK' },
     HEAD: { code: 200, text: 'OK' },
@@ -55,17 +56,7 @@ const requestBatchInitialPaths = {
     NOTE: '/ignored-note',
     SMUGGLE: '/ignored-smuggle',
 };
-if (requestPreviewToggleEl) {
-    try {
-        const storedValue = localStorage.getItem(requestPreviewStorageKey);
-        if (storedValue === 'true' || storedValue === 'false') {
-            requestPreviewToggleEl.checked = storedValue === 'true';
-        }
-    } catch (_error) {
-        // Ignore storage access failures and keep the default unchecked state.
-    }
-}
-let showRequestPreview = Boolean(requestPreviewToggleEl?.checked);
+let showRequestPreview = true;
 let requestPreviewMode = 'raw';
 try {
     const storedRequestPreviewMode = localStorage.getItem(requestPreviewModeStorageKey);
@@ -87,6 +78,7 @@ let requestBatchRunState = {
     completed: 0,
     total: 0,
     results: [],
+    selectedExchangeId: '',
 };
 let responseViewState = {
     phase: 'idle',
@@ -104,12 +96,8 @@ requestMethodButtons.forEach(button => {
 
 if (requestPreviewToggleEl) {
     requestPreviewToggleEl.addEventListener('change', () => {
-        showRequestPreview = requestPreviewToggleEl.checked;
-        try {
-            localStorage.setItem(requestPreviewStorageKey, String(showRequestPreview));
-        } catch (_error) {
-            // Ignore storage access failures and keep the in-memory toggle state.
-        }
+        showRequestPreview = true;
+        requestPreviewToggleEl.checked = true;
         renderRequestPreview();
     });
 }
@@ -148,6 +136,9 @@ function setRequestPreviewMode(mode, btn, options = {}) {
 
     renderRequestPreview();
     renderResponseView();
+    if (typeof renderAllExchangeInspectors === 'function') {
+        renderAllExchangeInspectors();
+    }
 }
 
 requestPreviewModeButtons.forEach(button => {
@@ -215,10 +206,28 @@ if (requestBatchSummaryEl) {
     requestBatchSummaryEl.addEventListener('click', (event) => {
         const rerunButton = event.target.closest('[data-batch-rerun-method]');
         if (!rerunButton) {
+            const row = event.target.closest('[data-batch-exchange-id]');
+            if (row && !event.target.closest('button, a, input, label, summary')) {
+                selectRequestBatchExchange(row.dataset.batchExchangeId || '');
+            }
             return;
         }
 
         void rerunRequestBatchRow(rerunButton);
+    });
+
+    requestBatchSummaryEl.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        const row = event.target.closest('[data-batch-exchange-id]');
+        if (!row || event.target.closest('button, a, input, label, summary')) {
+            return;
+        }
+
+        event.preventDefault();
+        selectRequestBatchExchange(row.dataset.batchExchangeId || '');
     });
 }
 
@@ -311,6 +320,37 @@ function cloneRequestPreviewState(state) {
             }
             : null,
     };
+}
+
+function cloneResponseViewState(state) {
+    return {
+        phase: state.phase,
+        model: state.model
+            ? {
+                ...state.model,
+                headers: state.model.headers ? { ...state.model.headers } : undefined,
+            }
+            : null,
+    };
+}
+
+function createRequestExchangeSnapshot() {
+    return {
+        id: `exchange-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        requestPreviewState: cloneRequestPreviewState(requestPreviewState),
+        responseViewState: cloneResponseViewState(responseViewState),
+    };
+}
+
+function applyRequestExchangeSnapshot(snapshot) {
+    if (!snapshot) {
+        return;
+    }
+
+    requestPreviewState = cloneRequestPreviewState(snapshot.requestPreviewState || { phase: 'empty', model: null });
+    responseViewState = cloneResponseViewState(snapshot.responseViewState || { phase: 'idle', model: null });
+    renderRequestPreview();
+    renderResponseView();
 }
 
 function normalizePreviewBody(body) {
@@ -685,9 +725,11 @@ function buildRequestBatchRow(result) {
         ? `<span class="request-batch-summary__rerun-outcome request-batch-summary__rerun-outcome--${esc(rerunOutcome.tone)}">${esc(t('requestBatchLastRerun'))}: ${esc(rerunOutcome.label)}</span>`
         : '';
     const attemptHistory = buildRequestBatchAttemptHistory(result, attempts);
+    const exchangeId = result.exchangeSnapshot?.id || '';
+    const isSelected = exchangeId && requestBatchRunState.selectedExchangeId === exchangeId;
     return `
         <div
-            class="request-batch-summary__row"
+            class="request-batch-summary__row${isSelected ? ' request-batch-summary__row--selected' : ''}"
             data-batch-method="${esc(result.method)}"
             data-batch-path="${esc(result.path)}"
             data-batch-expected-status="${esc(result.expectedStatus)}"
@@ -696,6 +738,9 @@ function buildRequestBatchRow(result) {
             data-batch-attempt-count="${esc(String(attemptCount))}"
             data-batch-rerun-outcome="${esc(rerunOutcome?.state || '')}"
             data-batch-rerun-outcome-tone="${esc(rerunOutcome?.tone || '')}"
+            data-batch-exchange-id="${esc(exchangeId)}"
+            tabindex="${exchangeId ? '0' : '-1'}"
+            role="${exchangeId ? 'button' : 'group'}"
         >
             <div class="request-batch-summary__identity">
                 <span class="request-batch-summary__method">${esc(result.method)}</span>
@@ -890,6 +935,7 @@ function clearRequestBatchRun(options = {}) {
         completed: 0,
         total: 0,
         results: [],
+        selectedExchangeId: '',
     };
 
     clearRequestBatchExportState();
@@ -935,8 +981,27 @@ function updateRequestBatchResult(previousMethod, previousPath, nextResult) {
         completed: Math.max(requestBatchRunState.completed, results.length),
         total: Math.max(requestBatchRunState.total, results.length),
         results,
+        selectedExchangeId: nextResult.exchangeSnapshot?.id || requestBatchRunState.selectedExchangeId,
     };
     clearRequestBatchExportState();
+    renderRequestBatchSummary();
+}
+
+function selectRequestBatchExchange(exchangeId) {
+    if (!exchangeId) {
+        return;
+    }
+
+    const result = requestBatchRunState.results.find(item => item.exchangeSnapshot?.id === exchangeId);
+    if (!result?.exchangeSnapshot) {
+        return;
+    }
+
+    applyRequestExchangeSnapshot(result.exchangeSnapshot);
+    requestBatchRunState = {
+        ...requestBatchRunState,
+        selectedExchangeId: exchangeId,
+    };
     renderRequestBatchSummary();
 }
 
@@ -1074,6 +1139,11 @@ function buildRequestPreviewHeaderLines(model, bodyText) {
             continue;
         }
         headerLines.push([key, String(value)]);
+    }
+
+    const hasNoGzipHeader = headerLines.some(([key]) => key.toLowerCase() === uiNoGzipHeader.toLowerCase());
+    if (!hasNoGzipHeader) {
+        headerLines.push([uiNoGzipHeader, uiNoGzipHeaderValue]);
     }
 
     const hasContentLength = headerLines.some(([key]) => key.toLowerCase() === 'content-length');
@@ -1219,34 +1289,19 @@ function buildSummaryResponseErrorView(model) {
 }
 
 function buildRawResponseView(model) {
-    const statusClass = model.status < 400 ? 'success' : 'error';
-    const headersText = formatResponseHeaders(model.headers);
-    const bodyDisplay = formatResponseBody(model.bodyText);
-    return `
-<div class="response-header">
-${esc(model.method)} ${esc(model.path)}
-<span class="status ${statusClass}">${model.status} ${esc(model.statusText || '')}</span>
-${t('time')}: ${model.duration}ms
-</div>
-<div class="response-body">--- ${t('headers')} ---
-${esc(headersText)}
---- ${t('responseBody')} ---
-${esc(bodyDisplay)}</div>`;
+    return `<div class="response-body">${esc(buildRawResponseText(model))}</div>`;
 }
 
 function buildRawResponseText(model) {
-    const headersText = formatResponseHeaders(model.headers);
-    const bodyDisplay = formatResponseBody(model.bodyText);
+    const headersText = formatResponseHeaders(model.headers).trimEnd();
+    const bodyDisplay = formatResponseBody(model.bodyText, { raw: true });
+    const statusLine = `HTTP/1.1 ${model.status} ${String(model.statusText || '').trim()}`.trim();
     return [
-        `${model.method} ${model.path}`,
-        `${model.status} ${String(model.statusText || '').trim()}`.trim(),
-        `${t('time')}: ${model.duration}ms`,
-        '',
-        `--- ${t('headers')} ---`,
+        statusLine,
         headersText,
-        `--- ${t('responseBody')} ---`,
+        '',
         bodyDisplay,
-    ].join('\n');
+    ].filter((part, index) => index === 2 || part !== '').join('\n');
 }
 
 function buildRawResponseErrorView(model) {
@@ -1332,7 +1387,7 @@ async function writeTextToClipboard(text, kind) {
             rememberClipboardWrite(kind, normalizedText);
             return;
         } catch (_error) {
-            // Fall through to the legacy textarea copy path.
+            // Fall through to the textarea-based copy path.
         }
     }
 
@@ -1404,6 +1459,7 @@ function renderResponseView() {
     responseAreaEl.dataset.requestView = requestPreviewMode;
     updateResponseCopyButtonState();
     if (responseViewState.phase === 'idle') {
+        responseAreaEl.textContent = t('exchangeResponseEmpty');
         return;
     }
 
@@ -1560,13 +1616,17 @@ function formatResponseHeaders(headers) {
     return headersText || t('headersNA');
 }
 
-function formatResponseBody(text) {
+function formatResponseBody(text, options = {}) {
+    const normalized = String(text || '');
+    if (options.raw) {
+        return normalized.length > 500 ? `${normalized.substring(0, 500)}\n... (truncated)` : normalized;
+    }
+
     const parsed = parseJsonSafe(text);
     if (parsed !== null) {
         return JSON.stringify(parsed, null, 2);
     }
 
-    const normalized = String(text || '');
     return normalized.length > 500 ? `${normalized.substring(0, 500)}\n... (truncated)` : normalized;
 }
 
@@ -1820,6 +1880,7 @@ async function sendRequest(method) {
     } finally {
         setRequestButtonsBusy(false);
     }
+    requestResult.exchangeSnapshot = createRequestExchangeSnapshot();
     return requestResult;
 }
 
@@ -1837,6 +1898,7 @@ async function runAllRequestMethods() {
         completed: 0,
         total: plan.length,
         results: [],
+        selectedExchangeId: '',
     };
     setRequestBatchBusy(true);
     renderRequestBatchSummary();
@@ -1855,19 +1917,21 @@ async function runAllRequestMethods() {
                 );
             }
 
+            const batchResult = buildRequestBatchResult(
+                result || buildRequestExecutionResult(
+                    step.method,
+                    normalizeRequestPath(step.initialPath, '/'),
+                    { kind: 'error', message: t('error') }
+                )
+            );
             requestBatchRunState = {
                 ...requestBatchRunState,
                 completed: requestBatchRunState.completed + 1,
                 results: [
                     ...requestBatchRunState.results,
-                    buildRequestBatchResult(
-                        result || buildRequestExecutionResult(
-                            step.method,
-                            normalizeRequestPath(step.initialPath, '/'),
-                            { kind: 'error', message: t('error') }
-                        )
-                    ),
+                    batchResult,
                 ],
+                selectedExchangeId: batchResult.exchangeSnapshot?.id || requestBatchRunState.selectedExchangeId,
             };
             renderRequestBatchSummary();
         }
@@ -1892,7 +1956,13 @@ function sendCustomRequest(method, path, body, headers = {}, onUploadProgress = 
             xhr.upload.onprogress = onUploadProgress;
         }
 
-        for (const [key, value] of Object.entries(headers)) {
+        const requestHeaders = { ...(headers || {}) };
+        const hasNoGzipHeader = Object.keys(requestHeaders).some(key => key.toLowerCase() === uiNoGzipHeader.toLowerCase());
+        if (!hasNoGzipHeader) {
+            requestHeaders[uiNoGzipHeader] = uiNoGzipHeaderValue;
+        }
+
+        for (const [key, value] of Object.entries(requestHeaders)) {
             xhr.setRequestHeader(key, value);
         }
 

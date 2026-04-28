@@ -1,6 +1,22 @@
 // ===== UI bootstrap =====
 checkServerMode();
 
+if (typeof setExchangeInspector === 'function') {
+    ['upload', 'opsec', 'files', 'notepad'].forEach(scope => {
+        setExchangeInspector(scope, {
+            phase: 'empty',
+            request: {
+                phase: 'empty',
+                emptyText: t('exchangeRequestEmpty'),
+            },
+            response: {
+                phase: 'empty',
+                emptyText: t('exchangeResponseEmpty'),
+            },
+        });
+    });
+}
+
 window.addEventListener('beforeunload', (e) => {
     if (notepadIsDirty) {
         e.preventDefault();

@@ -173,7 +173,7 @@ def xor_bytes(data: bytes, password: str) -> bytes:
     return bytes(result)
 
 
-# Backward-compatible aliases
+# Public XOR convenience names
 xor_encrypt = xor_bytes
 xor_decrypt = xor_bytes
 
@@ -201,7 +201,7 @@ def xor_file(input_path: str, output_path: str, password: str) -> int:
     return len(result)
 
 
-# Backward-compatible aliases
+# Public XOR file convenience names
 xor_encrypt_file = xor_file
 xor_decrypt_file = xor_file
 

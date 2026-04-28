@@ -34,20 +34,12 @@ class StubServer(HandlerMixin):
         self.cors_origin = kwargs.get("cors_origin")
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "HEAD": self.handle_head,
-            "POST": self.handle_post,
-            "DELETE": self.handle_delete,
-            "FETCH": self.handle_fetch,
-            "INFO": self.handle_info,
-            "PING": self.handle_ping,
-            "NONE": self.handle_none,
-            "OPTIONS": self.handle_options,
-        }
+        self.advanced_upload_enabled = kwargs.get("advanced_upload", False)
+        self.method_handlers = self.build_method_handlers()
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
+        self._ecdh_manager = None
 
     def get_metrics(self):
         return {
@@ -103,6 +95,22 @@ class TestHandleGet:
         req = make_request("GET", "/.env")
         resp = server.handle_get(req)
         assert resp.status_code == 404
+
+    def test_get_hidden_upload_file(self, server, upload_dir):
+        (upload_dir / ".secret").write_text("SECRET=x")
+        req = make_request("GET", "/uploads/.secret")
+        resp = server.handle_get(req)
+        assert resp.status_code == 404
+
+    def test_get_uploaded_html_forces_download(self, server, upload_dir):
+        (upload_dir / "evil.html").write_text("<script>alert(1)</script>")
+        req = make_request("GET", "/uploads/evil.html")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.headers["Content-Type"] == "application/octet-stream"
+        assert resp.headers["Content-Disposition"] == 'attachment; filename="evil.html"'
+        assert "Content-Security-Policy" not in resp.headers
 
     def test_get_upload_in_sandbox(self, sandbox_server, upload_dir):
         (upload_dir / "data.bin").write_bytes(b"\xde\xad")
@@ -297,7 +305,7 @@ class TestHandlePing:
         resp = srv.handle_ping(req)
         data = json.loads(resp.body)
         assert data["access_scope"] == "uploads"
-        assert data["advanced_upload"] is True
+        assert data["advanced_upload"] is False
 
 
 # ── OPTIONS tests ──────────────────────────────────────────────────
@@ -822,9 +830,9 @@ class TestHandleDelete:
         subdir = upload_dir / "nested"
         subdir.mkdir()
         (subdir / "child.txt").write_text("child")
-        legacy_notes = upload_dir / "notes"
-        legacy_notes.mkdir()
-        (legacy_notes / "legacy.enc").write_text("keep")
+        notes_dir = upload_dir / "notes"
+        notes_dir.mkdir()
+        (notes_dir / "regular-upload.txt").write_text("remove")
 
         req = make_request("DELETE", "/uploads?clear=1")
         resp = server.handle_delete(req)
@@ -834,10 +842,10 @@ class TestHandleDelete:
         assert data["success"] is True
         assert data["cleared"] is True
         assert data["deleted_files"] == 1
-        assert data["deleted_dirs"] == 1
-        assert data["preserved"] == [".gitkeep", "notes"]
+        assert data["deleted_dirs"] == 2
+        assert data["preserved"] == [".gitkeep"]
         assert (upload_dir / ".gitkeep").exists()
-        assert (legacy_notes / "legacy.enc").exists()
+        assert not notes_dir.exists()
         assert not (upload_dir / "file.txt").exists()
         assert not subdir.exists()
 

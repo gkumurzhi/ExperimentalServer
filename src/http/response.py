@@ -2,6 +2,7 @@
 HTTP Response builder.
 """
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,7 @@ class HTTPResponse:
         self.headers: dict[str, str] = {}
         self.body: bytes = b""
         self.stream_path: Path | None = None
+        self.stream_cleanup: Callable[[], None] | None = None
 
     def set_header(self, key: str, value: str) -> None:
         """Set a response header."""
@@ -26,12 +28,22 @@ class HTTPResponse:
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.body = body
+        self.stream_path = None
+        self.stream_cleanup = None
         self.set_header("Content-Type", content_type)
         self.set_header("Content-Length", str(len(self.body)))
 
-    def set_file(self, file_path: Path, content_type: str) -> None:
+    def set_file(
+        self,
+        file_path: Path,
+        content_type: str,
+        *,
+        stream_cleanup: Callable[[], None] | None = None,
+    ) -> None:
         """Set a file for streaming response (no memory copy)."""
         self.stream_path = file_path
+        self.stream_cleanup = stream_cleanup
+        self.body = b""
         size = file_path.stat().st_size
         self.set_header("Content-Type", content_type)
         self.set_header("Content-Length", str(size))
@@ -87,6 +99,8 @@ class HTTPResponse:
     ) -> None:
         """Add standard headers (Server, Date, Connection, CORS)."""
         self.set_header("Server", f"ExperimentalHTTPServer/{__version__}")
+        if "X-Content-Type-Options" not in self.headers:
+            self.set_header("X-Content-Type-Options", "nosniff")
 
         self.set_header("Date", datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"))
 
@@ -115,7 +129,8 @@ class HTTPResponse:
         if "Access-Control-Allow-Headers" not in self.headers:
             self.set_header(
                 "Access-Control-Allow-Headers",
-                "Content-Type, X-File-Name, X-Session-Id, X-D, X-E, X-K, X-Kb64, X-N, X-H, "
+                "Content-Type, X-File-Name, X-Session-Id, X-Exphttp-No-Gzip, "
+                "X-D, X-E, X-K, X-Kb64, X-N, X-H, "
                 "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9",
             )
 

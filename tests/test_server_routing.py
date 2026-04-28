@@ -23,20 +23,8 @@ class StubServer(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "HEAD": self.handle_head,
-            "POST": self.handle_post,
-            "PUT": self.handle_none,
-            "DELETE": self.handle_delete,
-            "OPTIONS": self.handle_options,
-            "FETCH": self.handle_fetch,
-            "INFO": self.handle_info,
-            "PING": self.handle_ping,
-            "NOTE": self.handle_note,
-            "NONE": self.handle_none,
-            "SMUGGLE": self.handle_smuggle,
-        }
+        self.advanced_upload_enabled = False
+        self.method_handlers = self.build_method_handlers()
 
     def get_metrics(self):
         return {
@@ -46,15 +34,6 @@ class StubServer(HandlerMixin):
             "bytes_sent": 0,
             "status_counts": {},
         }
-
-    @staticmethod
-    def _has_advanced_upload_payload(request: HTTPRequest) -> bool:
-        return bool(
-            request.body
-            or request.headers.get("x-d")
-            or request.headers.get("x-d-0")
-            or request.query_params.get("d")
-        )
 
 
 def _make_request(
@@ -101,6 +80,7 @@ class TestMethodRouting:
             "HEAD",
             "POST",
             "PUT",
+            "PATCH",
             "DELETE",
             "OPTIONS",
             "FETCH",

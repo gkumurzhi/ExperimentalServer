@@ -139,6 +139,20 @@ const translations = {
         responseSummaryFieldContentType: "Content-Type",
         requestBody: "Тело запроса",
         requestPreviewNoBody: "Без тела",
+        exchangeRequestTitle: "Исходящий запрос",
+        exchangeResponseTitle: "Входящий ответ",
+        exchangeRequestEmpty: "Запрос появится здесь после действия.",
+        exchangeResponseEmpty: "Ответ появится здесь после выполнения запроса.",
+        exchangeCopied: "Raw скопирован",
+        exchangeTransport: "Транспорт",
+        exchangeBodyKind: "Тип тела",
+        exchangeBinaryBody: "Бинарные данные",
+        exchangeHexPreview: "Hex-превью",
+        exchangeTruncated: "усечено, осталось символов/байт",
+        exchangeRedacted: "скрыто",
+        exchangeWsSend: "WS отправка",
+        exchangeWsReceive: "WS получение",
+        fileName: "Имя файла",
         requestPreviewCheckPending: "Ожидание ответа",
         requestPreviewCheckMatch: "Совпадает",
         requestPreviewCheckMismatch: "Не совпадает",
@@ -417,6 +431,20 @@ const translations = {
         responseSummaryFieldContentType: "Content-Type",
         requestBody: "Request body",
         requestPreviewNoBody: "No body",
+        exchangeRequestTitle: "Outgoing request",
+        exchangeResponseTitle: "Incoming response",
+        exchangeRequestEmpty: "The request will appear here after an action.",
+        exchangeResponseEmpty: "The response will appear here after the request runs.",
+        exchangeCopied: "Raw copied",
+        exchangeTransport: "Transport",
+        exchangeBodyKind: "Body type",
+        exchangeBinaryBody: "Binary data",
+        exchangeHexPreview: "Hex preview",
+        exchangeTruncated: "truncated, remaining chars/bytes",
+        exchangeRedacted: "redacted",
+        exchangeWsSend: "WS send",
+        exchangeWsReceive: "WS receive",
+        fileName: "File name",
         requestPreviewCheckPending: "Waiting for response",
         requestPreviewCheckMatch: "Matches",
         requestPreviewCheckMismatch: "Mismatch",
@@ -653,6 +681,10 @@ function applyTranslations() {
 
     if (typeof renderResponseView === 'function') {
         renderResponseView();
+    }
+
+    if (typeof renderAllExchangeInspectors === 'function') {
+        renderAllExchangeInspectors();
     }
 }
 

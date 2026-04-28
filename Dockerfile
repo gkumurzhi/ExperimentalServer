@@ -61,4 +61,4 @@ r = u.Request('http://127.0.0.1:8080/', method='PING'); \
 sys.exit(0 if u.urlopen(r, timeout=2).status == 200 else 1)"
 
 ENTRYPOINT ["exphttp"]
-CMD ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data", "--sandbox"]
+CMD ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data"]

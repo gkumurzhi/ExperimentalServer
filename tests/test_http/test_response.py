@@ -61,6 +61,13 @@ class TestHTTPResponse:
 
         assert b"Server: ExperimentalHTTPServer/2.0.0\r\n" in built
 
+    def test_build_sets_nosniff_header(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build()
+
+        assert b"X-Content-Type-Options: nosniff\r\n" in built
+
     def test_cors_headers_disabled_by_default(self):
         """CORS should be opt-in."""
         response = HTTPResponse(200)

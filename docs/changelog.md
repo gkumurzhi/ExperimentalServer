@@ -29,7 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - **Refactor:** extracted `MetricsCollector` to `src/metrics.py`
 - **Refactor:** extracted `TLSManager` to `src/security/tls_manager.py` — SSL context, cert acquisition, cleanup
-- **Refactor:** introduced `HandlerRegistry` in `src/handlers/registry.py` (Mapping-compatible) to replace the plain dict while keeping backwards-compatible lookups
+- **Refactor:** introduced `HandlerRegistry` in `src/handlers/registry.py` to replace the plain dict with typed routing lookups
 - **Refactor:** extracted `receive_request()` to `src/http/io.py` with unit tests
 - **Refactor:** split `_process_request` into guard functions (`_check_payload_size`, `_resolve_keep_alive`, `_post_process_response`, `_build_error_response`)
 - **Docs:** architecture and threat-model docs now describe `RequestPipeline`, `NotepadService`, `TLSManager`, PBKDF2 auth, and the shared descendant-path resolver that exist in the codebase today

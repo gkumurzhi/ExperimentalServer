@@ -46,30 +46,26 @@ class TLSManager:
         self.ssl_context: ssl.SSLContext | None = None
         self.temp_cert_files: list[str] = []
         self._used_self_signed = False
+        self._used_letsencrypt = False
 
     def setup(self) -> None:
-        """Acquire a certificate and build the SSL context.
-
-        On failure to locate tooling, disables TLS and logs a warning instead
-        of raising — callers check `self.enabled` afterwards.
-        """
+        """Acquire a certificate and build the SSL context."""
         if not self.enabled:
             return
+        if (self.cert_file is None) != (self.key_file is None):
+            raise RuntimeError("--cert and --key must be provided together")
 
         if self.letsencrypt and self.domain:
             self._try_letsencrypt()
 
         if not self.cert_file or not self.key_file:
-            if not self._generate_self_signed():
-                return
+            self._generate_self_signed()
 
         self._build_context()
 
     def _try_letsencrypt(self) -> None:
         if not check_certbot_available():
-            print("[WARNING] certbot not found. Falling back to self-signed certificate.")
-            print("  Install certbot: https://certbot.eff.org/")
-            return
+            raise RuntimeError("certbot not found. Install certbot or remove --letsencrypt.")
 
         assert self.domain is not None
         config_dir = Path.home() / ".exphttp" / "letsencrypt"
@@ -89,13 +85,11 @@ class TLSManager:
 
         self.cert_file = str(cert_path)
         self.key_file = str(key_path)
+        self._used_letsencrypt = True
 
-    def _generate_self_signed(self) -> bool:
+    def _generate_self_signed(self) -> None:
         if not check_openssl_available():
-            print("[WARNING] OpenSSL not found. TLS disabled.")
-            print("  Install OpenSSL or provide --cert and --key files.")
-            self.enabled = False
-            return False
+            raise RuntimeError("OpenSSL not found. Install OpenSSL or provide --cert and --key.")
 
         print("[TLS] Generating self-signed certificate...")
         common_name = self.host if self.host != "0.0.0.0" else "localhost"
@@ -105,7 +99,6 @@ class TLSManager:
         self.temp_cert_files = [self.cert_file, self.key_file]
         self._used_self_signed = True
         atexit.register(self.cleanup)
-        return True
 
     def _build_context(self) -> None:
         assert self.cert_file is not None and self.key_file is not None
@@ -117,7 +110,7 @@ class TLSManager:
 
     def describe(self) -> str:
         """Short human-readable description of the active certificate."""
-        if self.letsencrypt and self.domain:
+        if self._used_letsencrypt and self.domain:
             return f"Let's Encrypt ({self.domain})"
         if self._used_self_signed:
             return "self-signed"

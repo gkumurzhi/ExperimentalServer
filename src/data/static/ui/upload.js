@@ -236,13 +236,43 @@ function removeFile(index) {
     refreshUploadSelectionLocale();
 }
 
+function buildUploadRequestExchange(fileData, arrayBuffer, encodedFileName) {
+    return {
+        transport: 'http',
+        method: uploadMethod,
+        path: '/' + encodedFileName,
+        headers: {
+            'Content-Type': fileData.file.type || 'application/octet-stream',
+            'X-File-Name': encodedFileName,
+            'Content-Length': String(arrayBuffer.byteLength),
+        },
+        body: createExchangeBinaryBody({
+            filename: fileData.name,
+            contentType: fileData.file.type || 'application/octet-stream',
+            size: arrayBuffer.byteLength,
+            bytes: new Uint8Array(arrayBuffer),
+        }),
+    };
+}
+
 async function uploadAllFiles() {
-    const uploadResponseArea = document.getElementById('uploadResponseArea');
     announceLiveRegion('uploadResponseAreaLive', t('uploadStarting'));
-    uploadResponseArea.innerHTML = `<div class="response-header">${t('uploadStarting')}</div>`;
+    setExchangeInspector('upload', {
+        phase: 'sending',
+        request: {
+            phase: 'empty',
+            emptyText: t('exchangeRequestEmpty'),
+        },
+        response: {
+            phase: 'sending',
+            startLine: t('uploadStarting'),
+            body: createExchangeTextBody(t('uploadStarting')),
+        },
+    });
     uploadBtn.disabled = true;
 
     const results = [];
+    let lastRequestExchange = null;
 
     for (let i = 0; i < filesToUpload.length; i++) {
         const fileData = filesToUpload[i];
@@ -258,6 +288,16 @@ async function uploadAllFiles() {
 
             // Кодируем имя файла для передачи в заголовке (поддержка кириллицы)
             const encodedFileName = encodeURIComponent(fileData.name);
+            lastRequestExchange = buildUploadRequestExchange(fileData, arrayBuffer, encodedFileName);
+            setExchangeInspector('upload', {
+                phase: 'sending',
+                request: lastRequestExchange,
+                response: {
+                    phase: 'sending',
+                    startLine: `${t('statusUploading')} ${fileData.name}`,
+                    body: createExchangeTextBody(`${t('statusUploading')} ${fileData.name}`),
+                },
+            });
 
             const response = await sendCustomRequest(
                 uploadMethod,
@@ -311,18 +351,30 @@ async function uploadAllFiles() {
     // Показываем результаты
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;
+    const resultText = results.map(r =>
+        r.success
+            ? `✓ ${r.name} -> ${r.path}`
+            : `✗ ${r.name}: ${r.error}`
+    ).join('\n');
 
-    uploadResponseArea.innerHTML = `
-<div class="response-header">
-${t('uploadComplete')}
-<span class="status ${failCount === 0 ? 'success' : 'error'}">${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}</span>
-</div>
-<div class="response-body">${results.map(r =>
-    r.success
-? `✓ ${esc(r.name)} -> ${esc(r.path)}`
-: `✗ ${esc(r.name)}: ${esc(r.error)}`
-).join('\n')}</div>
-${successCount > 0 ? `<div class="upload-response-actions"><button class="btn-info btn--sm" data-upload-response-action="view-files">${t('viewInFiles')}</button></div>` : ''}`;
+    setExchangeInspector('upload', {
+        phase: failCount === 0 ? 'complete' : 'error',
+        request: lastRequestExchange || {
+            phase: 'empty',
+            emptyText: t('exchangeRequestEmpty'),
+        },
+        response: {
+            phase: failCount === 0 ? 'complete' : 'error',
+            startLine: t('uploadComplete'),
+            status: failCount === 0 ? 201 : 400,
+            statusText: failCount === 0 ? 'Created' : t('error'),
+            body: createExchangeTextBody(`${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}\n\n${resultText}`),
+        },
+    });
+    if (successCount > 0) {
+        const uploadResponseArea = document.getElementById('uploadResponseArea');
+        uploadResponseArea.innerHTML += `<div class="upload-response-actions"><button class="btn-info btn--sm" data-upload-response-action="view-files">${t('viewInFiles')}</button></div>`;
+    }
     announceLiveRegion('uploadResponseAreaLive', `${t('uploadComplete')}: ${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}`);
 
     // Очищаем успешно загруженные файлы

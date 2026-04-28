@@ -63,12 +63,13 @@ High-level assumptions:
 
 ## Advanced Upload Caveats
 
-Advanced upload is a transport convenience with optional payload obfuscation,
-not a replacement for TLS or authentication:
+Advanced upload is an opt-in transport convenience with optional payload
+obfuscation, not a replacement for TLS or authentication:
 
 - XOR + HMAC is *not* a substitute for authenticated encryption.
-- Any unknown non-standard method carrying `d`/`data`, `X-D`, `X-D-0`, or
-  `?d=` payload data is treated as an upload request.
+- Only servers started with `--advanced-upload` treat unknown non-standard
+  methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=` payload data as upload
+  requests.
 - Payload placement in headers or URL parameters may be logged by upstream
   proxies; use JSON body transport for sensitive data and pair it with TLS.
 
@@ -79,7 +80,9 @@ Do not rely on advanced upload as the sole defense against a motivated attacker.
 When running the server outside a trusted lab:
 
 - Always use `--tls` with a real certificate (Let's Encrypt or internal CA).
-- Always use `--auth random` or supply a strong `user:password`.
+- Use `--auth random` only in an interactive terminal; for services,
+  containers, and CI pass an explicit strong `user:password` from a secret
+  manager.
 - Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.

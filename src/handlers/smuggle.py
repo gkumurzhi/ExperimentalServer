@@ -13,9 +13,13 @@ from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
 
+SMUGGLE_SOURCE_SIZE_LIMIT = 10 * 1024 * 1024
+
 
 class SmuggleHandlersMixin(BaseHandler):
     """Mixin with HTML Smuggling handler."""
+
+    smuggle_source_size_limit = SMUGGLE_SOURCE_SIZE_LIMIT
 
     # Temporary SMUGGLE files attribute (defined in server)
     _temp_smuggle_files: set[str]
@@ -37,6 +41,11 @@ class SmuggleHandlersMixin(BaseHandler):
             )
             return response
 
+        source_size_limit = self._smuggle_source_size_limit()
+        source_size = file_path.stat().st_size
+        if source_size > source_size_limit:
+            return self._smuggle_too_large_response(source_size, source_size_limit)
+
         # Generate random password server-side if encryption requested
         password = None
         password_captcha = None
@@ -49,9 +58,11 @@ class SmuggleHandlersMixin(BaseHandler):
 
         logger.debug(f"SMUGGLE {file_path.name}, encrypt={encrypt}")
 
-        # Read file
+        # Read at most one byte past the cap to avoid a race with file growth after stat().
         with file_path.open("rb") as f:
-            file_data = f.read()
+            file_data = f.read(source_size_limit + 1)
+        if len(file_data) > source_size_limit:
+            return self._smuggle_too_large_response(len(file_data), source_size_limit)
 
         # Generate HTML
         html = generate_smuggling_html(
@@ -85,4 +96,33 @@ class SmuggleHandlersMixin(BaseHandler):
         )
         response.set_header("X-Smuggle-URL", f"/uploads/{temp_name}")
 
+        return response
+
+    def _smuggle_source_size_limit(self) -> int:
+        """Return the effective SMUGGLE source cap in bytes."""
+        configured_limit = int(
+            getattr(self, "smuggle_source_size_limit", SMUGGLE_SOURCE_SIZE_LIMIT)
+        )
+        upload_limit = int(getattr(self, "max_upload_size", configured_limit))
+        return min(configured_limit, upload_limit)
+
+    def _smuggle_too_large_response(self, source_size: int, source_size_limit: int) -> HTTPResponse:
+        """Build a stable JSON 413 response for over-limit SMUGGLE sources."""
+        response = HTTPResponse(413)
+        response.set_body(
+            json.dumps(
+                {
+                    "error": (
+                        "SMUGGLE source too large. "
+                        f"Max size: {self.format_size(source_size_limit)}"
+                    ),
+                    "status": 413,
+                    "file_size": source_size,
+                    "file_size_human": self.format_size(source_size),
+                    "max_size": source_size_limit,
+                    "max_size_human": self.format_size(source_size_limit),
+                }
+            ),
+            "application/json",
+        )
         return response

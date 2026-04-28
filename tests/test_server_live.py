@@ -155,7 +155,7 @@ class TestLiveRequestHandling:
                 ping1 = json.loads(body1)
                 assert ping1["status"] == "pong"
                 assert ping1["access_scope"] == "uploads"
-                assert ping1["advanced_upload"] is True
+                assert ping1["advanced_upload"] is False
 
                 sock.sendall(
                     (
@@ -171,7 +171,7 @@ class TestLiveRequestHandling:
                 ping2 = json.loads(body2)
                 assert ping2["status"] == "pong"
                 assert ping2["access_scope"] == "uploads"
-                assert ping2["advanced_upload"] is True
+                assert ping2["advanced_upload"] is False
 
     def test_basic_auth_rejects_missing_header_and_accepts_valid_credentials(
         self,
@@ -181,11 +181,7 @@ class TestLiveRequestHandling:
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 sock.sendall(
-                    (
-                        f"PING / HTTP/1.1\r\n"
-                        f"Host: 127.0.0.1:{live.port}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
+                    (f"PING / HTTP/1.1\r\nHost: 127.0.0.1:{live.port}\r\n\r\n").encode("ascii")
                 )
                 status, headers, body = _recv_http_response(sock)
                 assert status.startswith("HTTP/1.1 401")
@@ -235,7 +231,7 @@ class TestLiveRequestHandling:
 
 
 class TestLiveAdvancedUploadRouting:
-    def test_advanced_upload_is_available_without_mode_flags(
+    def test_advanced_upload_is_disabled_without_mode_flags(
         self,
         temp_dir: Path,
     ) -> None:
@@ -244,25 +240,19 @@ class TestLiveAdvancedUploadRouting:
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 sock.sendall(
-                    (
-                        f"PING / HTTP/1.1\r\n"
-                        f"Host: 127.0.0.1:{live.port}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
+                    (f"PING / HTTP/1.1\r\nHost: 127.0.0.1:{live.port}\r\n\r\n").encode("ascii")
                 )
                 status, headers, body = _recv_http_response(sock)
                 assert status.startswith("HTTP/1.1 200")
                 assert headers["server"].startswith("ExperimentalHTTPServer/")
-                assert json.loads(body)["status"] == "pong"
+                ping = json.loads(body)
+                assert ping["status"] == "pong"
+                assert ping["advanced_upload"] is False
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 sock.sendall(
-                    (
-                        f"INFO / HTTP/1.1\r\n"
-                        f"Host: 127.0.0.1:{live.port}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
+                    (f"INFO / HTTP/1.1\r\nHost: 127.0.0.1:{live.port}\r\n\r\n").encode("ascii")
                 )
                 status, _headers, body = _recv_http_response(sock)
                 info = json.loads(body)
@@ -287,13 +277,15 @@ class TestLiveAdvancedUploadRouting:
                 )
                 status, _headers, body = _recv_http_response(sock)
                 result = json.loads(body)
-                assert status.startswith("HTTP/1.1 200")
-                assert result["ok"] is True
-                assert result["transport"] == "body"
-                assert (temp_dir / "uploads" / "advanced.txt").read_bytes() == b"advanced live upload"
+                assert status.startswith("HTTP/1.1 405")
+                assert "not allowed" in result["error"]
+                assert not (temp_dir / "uploads" / "advanced.txt").exists()
 
-    def test_unknown_method_with_data_falls_back_to_advanced_upload(self, temp_dir: Path) -> None:
-        with _LiveServer(temp_dir) as live:
+    def test_unknown_method_with_data_uses_advanced_upload_when_enabled(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(temp_dir, advanced_upload=True) as live:
             payload = base64.b64encode(b"fallback upload").decode("ascii")
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:

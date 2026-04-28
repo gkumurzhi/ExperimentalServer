@@ -22,10 +22,7 @@ class NotepadStubServer(HandlerMixin):
         self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "NOTE": self.handle_note,
-        }
+        self.advanced_upload_enabled = False
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
@@ -34,6 +31,7 @@ class NotepadStubServer(HandlerMixin):
         self._ecdh_manager = None
         if HAS_ECDH:
             self._ecdh_manager = ECDHKeyManager()
+        self.method_handlers = self.build_method_handlers()
 
 
 @pytest.fixture

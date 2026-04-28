@@ -20,13 +20,12 @@
 """
 
 import sys
-import os
 from pathlib import Path
 
 # Добавляем корень проекта в путь
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.security.crypto import xor_decrypt, xor_encrypt, xor_decrypt_file, xor_encrypt_file
+from src.security.crypto import xor_decrypt_file, xor_encrypt_file
 
 
 def format_size(size: int) -> str:
@@ -43,7 +42,7 @@ def process_file(
     password: str,
     output_path: str | None = None,
     encrypt: bool = False,
-    quiet: bool = False
+    quiet: bool = False,
 ) -> bool:
     """
     Обработка одного файла.
@@ -95,11 +94,7 @@ def process_file(
 
 
 def process_directory(
-    dir_path: str,
-    password: str,
-    encrypt: bool = False,
-    pattern: str = "*",
-    quiet: bool = False
+    dir_path: str, password: str, encrypt: bool = False, pattern: str = "*", quiet: bool = False
 ) -> tuple[int, int]:
     """
     Обработка всех файлов в директории.
@@ -194,20 +189,14 @@ def main():
     # Выполнение
     if process_all or Path(input_path).is_dir():
         success, errors = process_directory(
-            input_path, password,
-            encrypt=encrypt,
-            pattern=pattern,
-            quiet=quiet
+            input_path, password, encrypt=encrypt, pattern=pattern, quiet=quiet
         )
         if not quiet:
             print(f"\nОбработано: {success} успешно, {errors} ошибок")
         sys.exit(0 if errors == 0 else 1)
     else:
         success = process_file(
-            input_path, password,
-            output_path=output_path,
-            encrypt=encrypt,
-            quiet=quiet
+            input_path, password, output_path=output_path, encrypt=encrypt, quiet=quiet
         )
         sys.exit(0 if success else 1)
 

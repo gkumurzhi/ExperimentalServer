@@ -12,9 +12,12 @@ cycle short.
 git clone <repo-url>
 cd ExperimentalHTTPServer
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[crypto,dev,lint]"
+pip install -e ".[crypto,dev,lint,test]"
 pre-commit install           # recommended: runs ruff/mypy/yaml checks on commit
 ```
+
+On Windows PowerShell, activate the environment with
+`.venv\Scripts\Activate.ps1` and use the same `pip install` command.
 
 To reproduce the pinned CI/docs/security toolchain locally, use the shared
 constraints file:
@@ -129,9 +132,9 @@ restates this):
 1. Create a mixin in `src/handlers/` that inherits `BaseHandler`, or extend
    an existing mixin whose scope already covers the new method.
 2. Define `def handle_<name>(self, request: HTTPRequest) -> HTTPResponse`.
-3. Register the method with the registry in `ExperimentalHTTPServer.__init__`:
-   `self.method_handlers.register("<NAME>", self.handle_<name>)`.
-4. If the mixin is new, add it to the composition in
+3. Register the method in `HandlerMixin.build_method_handlers()` in
+   `src/handlers/__init__.py`.
+4. If the mixin is new, add it to the `HandlerMixin` composition in
    `src/handlers/__init__.py`.
 5. Document the method in `API.md` and, if it has non-trivial semantics,
    add a short ADR in `docs/ADR/`.

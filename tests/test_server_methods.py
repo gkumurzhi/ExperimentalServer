@@ -1,4 +1,4 @@
-"""Tests for extracted server methods: _authenticate_request, _dispatch_handler."""
+"""Tests for extracted server methods: auth and handler dispatch."""
 
 import base64
 import gzip
@@ -28,7 +28,8 @@ class ServerStub(HandlerMixin):
         *,
         auth: BasicAuthenticator | None = None,
         opsec: bool = False,
-        ):
+        advanced_upload: bool = False,
+    ):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
         self.notes_dir = root_dir / "notes"
@@ -37,21 +38,12 @@ class ServerStub(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
+        self.advanced_upload_enabled = advanced_upload
 
         self.authenticator = auth
         self._rate_limiter = AuthRateLimiter() if auth else None
 
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "HEAD": self.handle_head,
-            "POST": self.handle_post,
-            "PING": self.handle_ping,
-            "INFO": self.handle_info,
-            "FETCH": self.handle_fetch,
-            "NOTE": self.handle_note,
-            "OPTIONS": self.handle_options,
-            "NONE": self.handle_none,
-        }
+        self.method_handlers = self.build_method_handlers()
 
     def get_metrics(self):
         return {
@@ -96,24 +88,6 @@ class ServerStub(HandlerMixin):
             self._rate_limiter.reset(ip)
         return None
 
-    # Mirror of ExperimentalHTTPServer._dispatch_handler
-    def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
-        handler = self.method_handlers.get(request.method)
-        if handler:
-            return handler(request)
-        if self._has_advanced_upload_payload(request):
-            return self.handle_advanced_upload(request)
-        return self._method_not_allowed(request.method)
-
-    @staticmethod
-    def _has_advanced_upload_payload(request):
-        return bool(
-            request.body
-            or request.headers.get("x-d")
-            or request.headers.get("x-d-0")
-            or request.query_params.get("d")
-        )
-
 
 @pytest.fixture
 def server(temp_dir, upload_dir):
@@ -131,7 +105,7 @@ def auth_server(temp_dir, upload_dir):
 @pytest.fixture
 def advanced_upload_server(temp_dir, upload_dir):
     (temp_dir / "index.html").write_text("<html>ok</html>")
-    return ServerStub(temp_dir, upload_dir)
+    return ServerStub(temp_dir, upload_dir, advanced_upload=True)
 
 
 ADDR = ("127.0.0.1", 12345)
@@ -198,11 +172,35 @@ class TestDispatchHandler:
         resp = advanced_upload_server._dispatch_handler(req)
         assert resp.status_code == 405
 
-    def test_real_server_unknown_method_with_advanced_payload_uploads(self, temp_dir):
+    def test_real_server_unknown_method_with_advanced_payload_is_rejected_by_default(
+        self,
+        temp_dir,
+    ):
         import base64
 
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+
+        payload = base64.b64encode(b"advanced upload").decode("ascii")
+        resp = server._dispatch_handler(
+            make_request("CONNECT", "/", headers={"X-D": payload, "X-N": "advanced.txt"})
+        )
+
+        assert resp.status_code == 405
+        assert not (server.upload_dir / "advanced.txt").exists()
+
+    def test_real_server_unknown_method_with_advanced_payload_uploads_when_enabled(
+        self,
+        temp_dir,
+    ):
+        import base64
+
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            advanced_upload=True,
+        )
 
         payload = base64.b64encode(b"advanced upload").decode("ascii")
         resp = server._dispatch_handler(
@@ -411,20 +409,20 @@ class TestServerHelpers:
         assert not stale.exists()
         assert keep.exists()
 
-    def test_server_migrates_legacy_upload_notes_to_top_level_notes(self, temp_dir):
+    def test_server_leaves_upload_notes_as_regular_upload_content(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        legacy_notes = temp_dir / "uploads" / "notes"
-        legacy_notes.mkdir(parents=True)
-        (legacy_notes / "abc.enc").write_bytes(b"ciphertext")
-        (legacy_notes / "abc.meta.json").write_text("{}", encoding="utf-8")
+        upload_notes = temp_dir / "uploads" / "notes"
+        upload_notes.mkdir(parents=True)
+        (upload_notes / "abc.enc").write_bytes(b"ciphertext")
+        (upload_notes / "abc.meta.json").write_text("{}", encoding="utf-8")
 
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
-        assert (server.notes_dir / "abc.enc").read_bytes() == b"ciphertext"
-        assert (server.notes_dir / "abc.meta.json").read_text(encoding="utf-8") == "{}"
-        assert not legacy_notes.exists()
+        assert not (server.notes_dir / "abc.enc").exists()
+        assert (upload_notes / "abc.enc").read_bytes() == b"ciphertext"
+        assert (upload_notes / "abc.meta.json").read_text(encoding="utf-8") == "{}"
 
-    def test_server_does_not_generate_legacy_method_config(self, temp_dir):
+    def test_server_does_not_generate_method_config_file(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
@@ -474,6 +472,173 @@ class TestServerHelpers:
         assert response is not None
         assert response.status_code == 413
         assert "Max size: 2 MB" in json.loads(response.body)["error"]
+
+    def test_smuggle_rejects_over_source_limit_without_temp_artifact(self, server, upload_dir):
+        server.smuggle_source_size_limit = 4
+        source_path = upload_dir / "large.bin"
+        source_path.write_bytes(b"12345")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/large.bin"))
+
+        assert response.status_code == 413
+        body = json.loads(response.body)
+        assert body["status"] == 413
+        assert body["file_size"] == 5
+        assert body["max_size"] == 4
+        assert body["error"] == "SMUGGLE source too large. Max size: 4.0 B"
+        assert "X-Smuggle-URL" not in response.headers
+        assert server._temp_smuggle_files == set()
+        assert list(upload_dir.glob("smuggle_*.html")) == []
+
+    def test_smuggle_rejects_encrypted_over_source_limit_before_artifact(
+        self,
+        server,
+        upload_dir,
+    ):
+        server.smuggle_source_size_limit = 4
+        source_path = upload_dir / "large.bin"
+        source_path.write_bytes(b"12345")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/large.bin?encrypt=1"))
+
+        assert response.status_code == 413
+        assert "X-Smuggle-URL" not in response.headers
+        assert server._temp_smuggle_files == set()
+        assert list(upload_dir.glob("smuggle_*.html")) == []
+
+    def test_smuggle_source_limit_boundary(self, server, upload_dir):
+        server.smuggle_source_size_limit = 4
+        source_path = upload_dir / "edge.bin"
+        source_path.write_bytes(b"1234")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/edge.bin"))
+
+        assert response.status_code == 200
+
+    def test_smuggle_small_file_generates_registered_temp_html(self, server, upload_dir):
+        server.smuggle_source_size_limit = 64
+        source_path = upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["url"].startswith("/uploads/smuggle_")
+        assert body["file"] == "small.txt"
+        assert body["encrypted"] is False
+
+        temp_path = upload_dir / body["url"].removeprefix("/uploads/")
+        assert temp_path.exists()
+        assert str(temp_path) in server._temp_smuggle_files
+        assert "small.txt" in temp_path.read_text(encoding="utf-8")
+
+    def test_smuggle_temp_get_streams_and_cleans_up_without_full_read(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        source_path = server.upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+        smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+        smuggle_body = json.loads(smuggle_response.body)
+        temp_path = server.upload_dir / smuggle_body["url"].removeprefix("/uploads/")
+
+        def fail_read_bytes(_path):
+            raise AssertionError("smuggle temp response must stream instead of full-read")
+
+        monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
+        get_response = server.handle_get(make_request("GET", smuggle_body["url"]))
+        assert get_response.status_code == 200
+        assert get_response.stream_path == temp_path
+        assert get_response.body == b""
+
+        sock = _SendSocketStub()
+        server._send_response(
+            get_response,
+            sock,
+            {
+                "cors_origin": None,
+                "keep_alive": True,
+                "keep_alive_timeout": 15,
+                "keep_alive_max": 3,
+            },
+        )
+
+        assert len(sock.sent) >= 2
+        assert not temp_path.exists()
+        assert server._temp_smuggle_files == set()
+
+    def test_smuggle_temp_head_cleans_up_one_shot_artifact(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        source_path = server.upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+        smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+        smuggle_body = json.loads(smuggle_response.body)
+        temp_path = server.upload_dir / smuggle_body["url"].removeprefix("/uploads/")
+
+        head_response = server.handle_head(make_request("HEAD", smuggle_body["url"]))
+        assert head_response.status_code == 200
+        assert head_response.stream_path is None
+        assert head_response.stream_cleanup is not None
+        assert head_response.body == b""
+
+        sock = _SendSocketStub()
+        server._send_response(
+            head_response,
+            sock,
+            {
+                "cors_origin": None,
+                "keep_alive": True,
+                "keep_alive_timeout": 15,
+                "keep_alive_max": 3,
+            },
+        )
+
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 200 OK" in sock.sent[0]
+        assert not temp_path.exists()
+        assert server._temp_smuggle_files == set()
+        assert head_response.stream_cleanup is None
+
+    def test_smuggle_temp_conditional_get_cleans_up_one_shot_artifact(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        source_path = server.upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+        smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+        smuggle_body = json.loads(smuggle_response.body)
+        temp_path = server.upload_dir / smuggle_body["url"].removeprefix("/uploads/")
+        etag = server._compute_etag(temp_path)
+
+        response = server.handle_get(
+            make_request("GET", smuggle_body["url"], headers={"If-None-Match": etag})
+        )
+
+        assert response.status_code == 304
+        assert response.stream_cleanup is not None
+
+        sock = _SendSocketStub()
+        server._send_response(
+            response,
+            sock,
+            {
+                "cors_origin": None,
+                "keep_alive": True,
+                "keep_alive_timeout": 15,
+                "keep_alive_max": 3,
+            },
+        )
+
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 304 Not Modified" in sock.sent[0]
+        assert not temp_path.exists()
+        assert server._temp_smuggle_files == set()
+        assert response.stream_cleanup is None
 
     def test_maybe_gzip_response_compresses_large_buffered_body(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -568,15 +733,36 @@ class TestServerHelpers:
         assert response.headers["Content-Encoding"] == "gzip"
         assert gzip.decompress(response.body) == payload
 
+    def test_post_process_response_skips_gzip_when_ui_requests_identity_body(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        request = make_request(
+            "GET",
+            "/",
+            headers={"Accept-Encoding": "br, gzip", "X-Exphttp-No-Gzip": "1"},
+        )
+        response = HTTPResponse(200)
+        payload = ("compress-me-" * 300).encode("utf-8")
+        response.set_body(payload, "application/json")
+
+        server._post_process_response(request, response, "req-123")
+
+        assert response.headers["X-Request-Id"] == "req-123"
+        assert "Content-Encoding" not in response.headers
+        assert response.body == payload
+
     def test_advanced_upload_payload_detection(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
 
         assert server._has_advanced_upload_payload(make_request("STEALTH", "/")) is False
         assert server._has_advanced_upload_payload(make_request("STEALTH", "/?d=abc")) is True
-        assert server._has_advanced_upload_payload(
-            make_request("STEALTH", "/", headers={"X-D": "abc"})
-        ) is True
+        assert (
+            server._has_advanced_upload_payload(
+                make_request("STEALTH", "/", headers={"X-D": "abc"})
+            )
+            is True
+        )
 
     def test_send_response_streams_file_with_close_connection(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -779,7 +965,7 @@ class TestServerHelpers:
         assert "[TLS]     certificate: self-signed" in output
         assert "[AUTH]    Basic Auth enabled" in output
         assert "File access: uploads/ only" in output
-        assert "Advanced upload: enabled" in output
+        assert "Advanced upload: disabled" in output
         assert "Shutting down..." in output
         assert "Server stopped" in output
         assert listening_socket.bound == ("127.0.0.1", 8080)

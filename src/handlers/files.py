@@ -6,6 +6,7 @@ import json
 import logging
 import mimetypes
 import shutil
+from collections.abc import Callable
 from datetime import datetime
 from email.utils import formatdate
 from pathlib import Path
@@ -66,6 +67,10 @@ class FileHandlersMixin(BaseHandler):
         etag = self._compute_etag(file_path)
         st = file_path.stat()
         last_modified = formatdate(st.st_mtime, usegmt=True)
+        is_user_upload = self._is_upload_descendant(file_path)
+        file_path_str = str(file_path)
+        with self._smuggle_lock:
+            is_smuggle = file_path_str in self._temp_smuggle_files
 
         if_none_match = request.headers.get("if-none-match", "")
         if if_none_match and if_none_match == etag:
@@ -73,6 +78,8 @@ class FileHandlersMixin(BaseHandler):
             response.set_header("ETag", etag)
             response.set_header("Last-Modified", last_modified)
             response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
+            if is_smuggle:
+                response.stream_cleanup = self._cleanup_smuggle_stream(file_path, file_path_str)
             return response
 
         response = HTTPResponse(200)
@@ -82,32 +89,31 @@ class FileHandlersMixin(BaseHandler):
         # Cache headers
         response.set_header("ETag", etag)
         response.set_header("Last-Modified", last_modified)
-        if url_path.startswith("uploads/") or url_path == "uploads":
+        if is_user_upload or url_path.startswith("uploads/") or url_path == "uploads":
             response.set_header("Cache-Control", "no-cache")
         else:
             response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
 
-        # Smuggle files need a full read so they can be deleted after serving.
-        file_path_str = str(file_path)
-        with self._smuggle_lock:
-            is_smuggle = file_path_str in self._temp_smuggle_files
-
-        needs_full_read = is_smuggle
-
-        if needs_full_read:
-            content = file_path.read_bytes()
-            response.set_body(content, content_type)
-
-            if is_smuggle:
-                try:
-                    file_path.unlink()
-                    with self._smuggle_lock:
-                        self._temp_smuggle_files.discard(file_path_str)
-                    logger.debug(f"Smuggle file cleaned up: {file_path.name}")
-                except OSError:
-                    pass
+        # Smuggle files use a cleanup callback so they can stream and still be one-shot.
+        force_download = (
+            is_user_upload and not is_smuggle and self._should_force_download(content_type)
+        )
+        content_type = self._safe_upload_content_type(content_type, force_download)
+        if is_smuggle:
+            response.set_file(
+                file_path,
+                content_type,
+                stream_cleanup=self._cleanup_smuggle_stream(file_path, file_path_str),
+            )
         else:
             response.set_file(file_path, content_type)
+
+        if force_download:
+            safe_download_name = file_path.name.replace('"', "")
+            response.set_header(
+                "Content-Disposition",
+                f'attachment; filename="{safe_download_name}"',
+            )
 
         # CSP header for HTML responses
         if content_type.startswith("text/html"):
@@ -119,6 +125,43 @@ class FileHandlersMixin(BaseHandler):
             )
 
         return response
+
+    def _cleanup_smuggle_stream(self, file_path: Path, file_path_str: str) -> Callable[[], None]:
+        """Return a cleanup callback for a streamed temporary SMUGGLE file."""
+
+        def cleanup() -> None:
+            try:
+                file_path.unlink()
+                logger.debug(f"Smuggle file cleaned up: {file_path.name}")
+            except OSError:
+                pass
+            with self._smuggle_lock:
+                self._temp_smuggle_files.discard(file_path_str)
+
+        return cleanup
+
+    def _is_upload_descendant(self, file_path: Path) -> bool:
+        """Return True when *file_path* resolves under the user upload directory."""
+        try:
+            file_path.resolve().relative_to(self.upload_dir.resolve())
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _should_force_download(content_type: str) -> bool:
+        """Return True for browser-executable uploaded content."""
+        return content_type.startswith("text/html") or content_type == "image/svg+xml"
+
+    def _safe_upload_content_type(
+        self,
+        content_type: str,
+        force_download: bool,
+    ) -> str:
+        """Prevent ordinary user uploads from executing as same-origin HTML/SVG."""
+        if force_download:
+            return "application/octet-stream"
+        return content_type
 
     def handle_get(self, request: HTTPRequest) -> HTTPResponse:
         """Handle GET request — return file contents."""
@@ -147,7 +190,9 @@ class FileHandlersMixin(BaseHandler):
         if file_path is None or not file_path.exists():
             return self._not_found(request.path)
 
-        if file_path.resolve() == self.upload_dir.resolve() and self._is_clear_uploads_request(request):
+        if file_path.resolve() == self.upload_dir.resolve() and self._is_clear_uploads_request(
+            request
+        ):
             return self._clear_uploads_directory()
 
         # Reject directories
@@ -202,7 +247,7 @@ class FileHandlersMixin(BaseHandler):
         errors: list[str] = []
 
         for entry in sorted(self.upload_dir.iterdir(), key=lambda path: path.name):
-            if entry.name == "notes" or entry.name.startswith(".") or entry.name in HIDDEN_FILES:
+            if entry.name.startswith(".") or entry.name in HIDDEN_FILES:
                 preserved.append(entry.name)
                 continue
 

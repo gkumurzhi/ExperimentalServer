@@ -28,12 +28,19 @@ def _find_free_port() -> int:
 class _LiveServer:
     """Manage a short-lived server instance for browser smoke checks."""
 
-    def __init__(self, root_dir: Path, *, disable_ecdh: bool = False) -> None:
+    def __init__(
+        self,
+        root_dir: Path,
+        *,
+        advanced_upload: bool = False,
+        disable_ecdh: bool = False,
+    ) -> None:
         self.server = ExperimentalHTTPServer(
             host="127.0.0.1",
             port=_find_free_port(),
             root_dir=str(root_dir),
             quiet=True,
+            advanced_upload=advanced_upload,
         )
         if disable_ecdh:
             self.server._ecdh_manager = None
@@ -139,7 +146,9 @@ def run_browser_smoke() -> dict[str, object]:
         config_path = work_dir / "cli.config.json"
         local_smoke_script = work_dir / smoke_script.name
         upload_fixture = work_dir / "browser-smoke-upload.txt"
-        opsec_upload_url_boundary_fixture = work_dir / "browser-smoke-opsec-url-no-switch-boundary.bin"
+        opsec_upload_url_boundary_fixture = (
+            work_dir / "browser-smoke-opsec-url-no-switch-boundary.bin"
+        )
         opsec_upload_fixture = work_dir / "browser-smoke-opsec-auto-switch-small.bin"
         opsec_upload_boundary_fixture = work_dir / "browser-smoke-opsec-no-switch-boundary.bin"
         opsec_upload_large_fixture = work_dir / "browser-smoke-opsec-auto-switch-large.bin"
@@ -150,7 +159,7 @@ def run_browser_smoke() -> dict[str, object]:
         opsec_upload_boundary_fixture.write_bytes(b"C" * 18000)
         opsec_upload_large_fixture.write_bytes(b"B" * 18001)
 
-        live = _LiveServer(normal_root)
+        live = _LiveServer(normal_root, advanced_upload=True)
         unavailable_live = _LiveServer(unavailable_root, disable_ecdh=True)
         try:
             live.start()

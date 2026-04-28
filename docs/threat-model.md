@@ -48,7 +48,7 @@ trusted *after* it is validated at the boundary.
 
 | Threat | Mitigation |
 |--------|------------|
-| Hidden file access (`.env`, legacy service files) | `HIDDEN_FILES` blocks GET/INFO access |
+| Hidden file access (`.env`, dotfiles, service files) | Hidden path segments are blocked for GET/INFO access |
 | Directory listing in production | INFO is limited to `uploads/`; protect deployments with Basic Auth and a reverse proxy when exposed |
 | Auth timing side channel | Dummy password verification on unknown users (`verify_password`) |
 | TLS downgrade | Minimum TLS 1.2; modern cipher suite only |
@@ -73,7 +73,7 @@ a reverse proxy / CDN if that is a concern.
 | Threat | Mitigation |
 |--------|------------|
 | Symlink escape from uploads | `resolve_descendant_path()` enforces base-dir containment; handler policy blocks serving symlink targets directly |
-| Uploading an executable to a served directory | Writes are restricted to `uploads/`; any downstream layer serving uploads should set `X-Content-Type-Options: nosniff` |
+| Uploading executable browser content to a served directory | Writes are restricted to `uploads/`; uploaded HTML/SVG is forced to download; responses set `X-Content-Type-Options: nosniff` |
 | Advanced upload used as sole security layer | Documented in `SECURITY.md`; always pair external exposure with TLS + Auth |
 
 ## Non-goals

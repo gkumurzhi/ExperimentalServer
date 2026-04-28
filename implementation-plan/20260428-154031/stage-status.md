@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|---|
 | STAGE-001 | CLOSED | HIGH | Constrain Static Resource Paths | 2026-04-28 16:10:40 MSK | Static resource traversal blocked; targeted tests, compile, ruff, and verifier subagents passed. | `stage-reports/STAGE-001-20260428-155734.md` |
 | STAGE-002 | CLOSED | HIGH | Preserve Streaming for Gzip Responses | 2026-04-28 18:32:48 MSK | Streamed gzip no longer buffers files; targeted tests, compile, ruff, and verifier subagents passed. | `stage-reports/STAGE-002-20260428-182050.md` |
-| STAGE-003 | OPEN | HIGH | Bound SMUGGLE Memory Use | — | — | — |
+| STAGE-003 | CLOSED | HIGH | Bound SMUGGLE Memory Use | 2026-04-28 20:46:27 MSK | SMUGGLE source reads are capped and temp HTML streams with one-shot cleanup; targeted tests, compile, ruff, and verifier subagents passed. | `stage-reports/STAGE-003-20260428-203152.md` |
 | STAGE-004 | OPEN | HIGH | Enforce WebSocket Client Masking | — | — | — |
 | STAGE-005 | OPEN | HIGH | Make Inspector Asset Intentional | — | — | — |
 | STAGE-006 | OPEN | HIGH | Redact Inspector Raw and Copy Output | — | — | — |

@@ -26,9 +26,9 @@ Problems:
 
 Introduce `HandlerRegistry` (implements `Mapping[str, Callable]`) as the
 single source of truth for method → handler resolution. The server keeps the
-`HandlerMixin` inheritance for now — bound methods are registered into the
-registry at construction time — but new handlers can be added from outside
-the class via `server.method_handlers.register(...)`.
+`HandlerMixin` inheritance for now, but the canonical registry is built by
+`HandlerMixin.build_method_handlers()` so routing stays owned by the handler
+layer instead of `ExperimentalHTTPServer.__init__`.
 
 Full disentanglement of the mixin would require passing server state
 (root_dir, locks, metrics) explicitly into each handler's constructor. That
@@ -38,11 +38,10 @@ is a larger change and is deferred.
 
 ### Positive
 
-- Dynamic registration for custom methods and plugin handlers is now ergonomic.
 - `server.method_handlers` remains a `Mapping`, so existing tests and the
   INFO handler work unchanged.
-- Routing becomes testable in isolation — pass a plain registry and dispatch
-  without instantiating the server.
+- Routing becomes testable in isolation through small `HandlerMixin` stubs
+  that use the same registry builder as the real server.
 
 ### Negative
 

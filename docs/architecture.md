@@ -49,7 +49,8 @@ sequenceDiagram
     RequestPipeline->>Auth: _authenticate_request()
     RequestPipeline->>WS: check_websocket_upgrade() for /notes/ws
     RequestPipeline->>RequestPipeline: _check_payload_size()
-    RequestPipeline->>HandlerRegistry: dispatch
+    RequestPipeline->>HandlerMixin: dispatch
+    HandlerMixin->>HandlerRegistry: lookup
     HandlerRegistry-->>Handler: bound method
     Handler->>NotepadService: NOTE/WS note operations (when applicable)
     Handler-->>RequestPipeline: HTTPResponse
@@ -74,8 +75,9 @@ See [ADR-005](ADR/ADR-005-threadpool-over-asyncio.md). One accept loop,
 4. **Upload scope** — all user-visible file reads and writes are constrained
    to `<root>/uploads/`; the built-in UI and `/static/...` are served
    read-only package resources.
-5. **Advanced upload** — unknown non-standard methods carrying upload payload
-   data are routed to `AdvancedUploadHandlersMixin`, which supports JSON body,
-   header, chunked-header, and URL transports.
+5. **Advanced upload** — servers started with `--advanced-upload` route
+   unknown non-standard methods carrying upload payload data to
+   `AdvancedUploadHandlersMixin`, which supports JSON body, header,
+   chunked-header, and URL transports.
 
 See the [threat model](threat-model.md) for what each layer buys you.

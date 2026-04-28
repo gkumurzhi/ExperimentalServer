@@ -73,11 +73,6 @@
                         </div>
 
                         <div class="request-detail-toolbar">
-                            <label class="checkbox-row request-preview-toggle" for="requestPreviewToggle">
-                                <input type="checkbox" id="requestPreviewToggle">
-                                <span data-i18n="requestPreviewToggleLabel">Показывать отправляемое</span>
-                            </label>
-
                             <div class="segmented-control request-preview-mode" role="radiogroup" aria-label="Режим показа исходящего запроса" data-i18n-aria-label="requestPreviewModeLabel">
                                 <button type="button" class="request-preview-mode-btn" data-request-preview-mode="summary" role="radio" aria-checked="false" tabindex="-1" data-i18n="requestPreviewModeSummary">Сводка</button>
                                 <button type="button" class="request-preview-mode-btn active" data-request-preview-mode="raw" role="radio" aria-checked="true" tabindex="0" data-i18n="requestPreviewModeRaw">Raw HTTP</button>
@@ -141,49 +136,55 @@
 
                         <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
 
-                        <div class="request-preview-section" id="requestPreviewSection" hidden>
-                            <div class="request-preview-header">
-                                <p class="request-preview-title" data-i18n="requestPreviewTitle">Что отправляется</p>
-                                <div class="request-copy-actions">
-                                    <button
-                                        type="button"
-                                        class="btn-info btn--sm request-copy-btn"
-                                        id="requestPreviewCopyBtn"
-                                        data-i18n="copyRaw"
-                                        data-i18n-title="copyRawRequestLabel"
-                                        data-i18n-aria-label="copyRawRequestLabel"
-                                        disabled
-                                    >
-                                        Копировать raw
-                                    </button>
+                        <div class="request-preview-section exchange-inspector exchange-inspector--main" id="requestPreviewSection" data-exchange-scope="requests">
+                            <div class="exchange-inspector__scroll">
+                                <div class="exchange-inspector__grid">
+                                    <section class="exchange-pane exchange-pane--request" aria-labelledby="requestPreviewTitle">
+                                        <div class="exchange-pane__header">
+                                            <h3 class="request-preview-title" id="requestPreviewTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                            <div class="request-copy-actions">
+                                                <button
+                                                    type="button"
+                                                    class="btn-info btn--sm request-copy-btn"
+                                                    id="requestPreviewCopyBtn"
+                                                    data-i18n="copyRaw"
+                                                    data-i18n-title="copyRawRequestLabel"
+                                                    data-i18n-aria-label="copyRawRequestLabel"
+                                                    disabled
+                                                >
+                                                    Копировать raw
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="sr-only" id="requestPreviewCopyLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                        <div class="response-area request-preview-area exchange-pane__body" id="requestPreviewArea" data-testid="request-preview-area" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="requestPreviewTitle"></div>
+                                    </section>
+
+                                    <section class="exchange-pane exchange-pane--response" aria-labelledby="responsePaneTitle">
+                                        <div class="exchange-pane__header">
+                                            <h3 class="request-preview-title" id="responsePaneTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                            <div class="request-copy-actions">
+                                                <button
+                                                    type="button"
+                                                    class="btn-info btn--sm request-copy-btn"
+                                                    id="responseCopyBtn"
+                                                    data-i18n="copyRaw"
+                                                    data-i18n-title="copyRawResponseLabel"
+                                                    data-i18n-aria-label="copyRawResponseLabel"
+                                                    disabled
+                                                >
+                                                    Копировать raw
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div class="sr-only" id="responseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                        <div class="response-area response-area--hero exchange-pane__body" id="responseArea" data-testid="response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="responsePaneTitle"></div>
+                                    </section>
                                 </div>
                             </div>
-                            <div class="sr-only" id="requestPreviewCopyLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area request-preview-area" id="requestPreviewArea" data-testid="request-preview-area"></div>
                         </div>
                     </div>
-                </div>
-
-                <div class="panel response-panel">
-                    <div class="panel__header panel__header--with-actions">
-                        <h2 data-i18n="responsePanelTitle">Ответ</h2>
-                        <div class="request-copy-actions">
-                            <button
-                                type="button"
-                                class="btn-info btn--sm request-copy-btn"
-                                id="responseCopyBtn"
-                                data-i18n="copyRaw"
-                                data-i18n-title="copyRawResponseLabel"
-                                data-i18n-aria-label="copyRawResponseLabel"
-                                disabled
-                            >
-                                Копировать raw
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="sr-only" id="responseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                    <div class="response-area response-area--hero" id="responseArea" data-testid="response-area"></div>
                 </div>
             </section>
 
@@ -235,7 +236,26 @@
                             </div>
 
                             <div class="sr-only" id="uploadResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="uploadResponseArea" data-testid="upload-response-area"></div>
+                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="upload">
+                                <div class="exchange-inspector__scroll">
+                                    <div class="exchange-inspector__grid">
+                                        <section class="exchange-pane" aria-labelledby="uploadRequestTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="uploadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="uploadRequestArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="uploadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="uploadRequestTitle"></div>
+                                        </section>
+                                        <section class="exchange-pane" aria-labelledby="uploadResponseTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="uploadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="uploadResponseArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="uploadResponseArea" data-testid="upload-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="uploadResponseTitle"></div>
+                                        </section>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -304,7 +324,26 @@
                             </div>
 
                             <div class="sr-only" id="opsecResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="opsecResponseArea" data-testid="opsec-response-area"></div>
+                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="opsec">
+                                <div class="exchange-inspector__scroll">
+                                    <div class="exchange-inspector__grid">
+                                        <section class="exchange-pane" aria-labelledby="opsecRequestTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="opsecRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="opsecRequestArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="opsecRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="opsecRequestTitle"></div>
+                                        </section>
+                                        <section class="exchange-pane" aria-labelledby="opsecResponseTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="opsecResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="opsecResponseArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="opsecResponseArea" data-testid="opsec-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="opsecResponseTitle"></div>
+                                        </section>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -349,7 +388,26 @@
 
                         <div class="tool-card tool-card--output">
                             <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="response-area" id="filesResponseArea" data-testid="files-response-area"></div>
+                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="files">
+                                <div class="exchange-inspector__scroll">
+                                    <div class="exchange-inspector__grid">
+                                        <section class="exchange-pane" aria-labelledby="filesRequestTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="filesRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="filesRequestArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="filesRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="filesRequestTitle"></div>
+                                        </section>
+                                        <section class="exchange-pane" aria-labelledby="filesResponseTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="filesResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="filesResponseArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="filesResponseArea" data-testid="files-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="filesResponseTitle"></div>
+                                        </section>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -398,6 +456,28 @@
                                 </div>
                             </div>
                         </div>
+
+                        <div class="exchange-inspector exchange-inspector--tool exchange-inspector--notepad" data-exchange-scope="notepad">
+                            <div class="exchange-inspector__scroll">
+                                <div class="exchange-inspector__grid">
+                                    <section class="exchange-pane" aria-labelledby="notepadRequestTitle">
+                                        <div class="exchange-pane__header">
+                                            <h3 class="request-preview-title" id="notepadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                            <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="notepadRequestArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                        </div>
+                                        <div class="sr-only" id="notepadTraceLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                        <div class="response-area exchange-pane__body" id="notepadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="notepadRequestTitle"></div>
+                                    </section>
+                                    <section class="exchange-pane" aria-labelledby="notepadResponseTitle">
+                                        <div class="exchange-pane__header">
+                                            <h3 class="request-preview-title" id="notepadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                            <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="notepadResponseArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                        </div>
+                                        <div class="response-area exchange-pane__body" id="notepadResponseArea" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="notepadResponseTitle"></div>
+                                    </section>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -411,6 +491,7 @@
 
     <script src="/static/ui/core.js"></script>
     <script src="/static/ui/dialogs.js"></script>
+    <script src="/static/ui/inspector.js"></script>
     <script src="/static/ui/upload.js"></script>
     <script src="/static/ui/requests.js"></script>
     <script src="/static/ui/files.js"></script>

@@ -69,19 +69,17 @@ class WSServerStub(HandlerMixin):
         self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = False
         self.opsec_mode = False
+        self.advanced_upload_enabled = False
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
-        self.method_handlers = {
-            "GET": self.handle_get,
-            "NOTE": self.handle_note,
-        }
 
         self._ecdh_manager = None
         if HAS_ECDH:
             from src.security.keys import ECDHKeyManager
 
             self._ecdh_manager = ECDHKeyManager()
+        self.method_handlers = self.build_method_handlers()
 
     def get_metrics(self):
         return {
