@@ -489,7 +489,11 @@ class TestServerHelpers:
         assert gzip.decompress(response.body) == payload
         assert response.headers["Content-Length"] == str(len(response.body))
 
-    def test_maybe_gzip_response_compresses_large_streamed_file(self, temp_dir):
+    def test_maybe_gzip_response_preserves_large_streamed_file_without_buffering(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
         payload = ("stream-data-" * 200).encode("utf-8")
@@ -498,11 +502,17 @@ class TestServerHelpers:
         response = HTTPResponse(200)
         response.set_file(payload_path, "text/plain")
 
+        def fail_read_bytes(_path):
+            raise AssertionError("streaming gzip must not buffer files")
+
+        monkeypatch.setattr(Path, "read_bytes", fail_read_bytes)
+
         server._maybe_gzip_response(response)
 
-        assert response.stream_path is None
-        assert response.headers["Content-Encoding"] == "gzip"
-        assert gzip.decompress(response.body) == payload
+        assert response.stream_path == payload_path
+        assert response.body == b""
+        assert response.headers["Content-Length"] == str(len(payload))
+        assert "Content-Encoding" not in response.headers
 
     def test_maybe_gzip_response_leaves_small_body_unchanged(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")

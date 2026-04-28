@@ -269,22 +269,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not any(content_type.startswith(ct) for ct in self._COMPRESSIBLE_TYPES):
             return
 
-        # For streamed files: read into memory, compress, convert to body
+        # Keep streamed files streamed; gzip here would require buffering the
+        # entire file before sending it.
         if response.stream_path is not None:
-            try:
-                raw = response.stream_path.read_bytes()
-            except OSError:
-                return
-            if len(raw) < 256:
-                return
-            compressed = gzip.compress(raw)
-            if len(compressed) >= len(raw):
-                return  # no benefit
-            response.body = compressed
-            response.stream_path = None
-            response.set_header("Content-Length", str(len(compressed)))
-            response.set_header("Content-Encoding", "gzip")
-            response.set_header("Vary", "Accept-Encoding")
             return
 
         # For body responses

@@ -207,6 +207,32 @@ class TestLiveRequestHandling:
                 assert status.startswith("HTTP/1.1 200")
                 assert json.loads(body)["status"] == "pong"
 
+    def test_get_streamed_text_file_ignores_gzip_without_buffering(self, temp_dir: Path) -> None:
+        payload = ("streamed live payload\n" * 200).encode("utf-8")
+        upload_dir = temp_dir / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_file = upload_dir / "payload.txt"
+        upload_file.write_bytes(payload)
+
+        with _LiveServer(temp_dir) as live:
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"GET /payload.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Accept-Encoding: gzip\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, headers, body = _recv_http_response(sock)
+
+        assert status.startswith("HTTP/1.1 200")
+        assert headers["content-type"].startswith("text/plain")
+        assert headers["content-length"] == str(len(payload))
+        assert "content-encoding" not in headers
+        assert body == payload
+
 
 class TestLiveAdvancedUploadRouting:
     def test_advanced_upload_is_available_without_mode_flags(
