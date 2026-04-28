@@ -2,12 +2,15 @@
 
 import struct
 
+import pytest
+
 from src.websocket import (
     WS_BINARY,
     WS_CLOSE,
     WS_PING,
     WS_PONG,
     WS_TEXT,
+    WebSocketProtocolError,
     build_ws_accept_key,
     build_ws_close_frame,
     build_ws_frame,
@@ -290,6 +293,18 @@ class TestWsFrameParsing:
         assert result is not None
         assert result[0] == WS_TEXT
         assert result[1] == b"response"
+
+    def test_require_mask_accepts_masked_frame(self):
+        data = self._make_masked_frame(WS_TEXT, b"client request")
+        result = parse_ws_frame(data, require_mask=True)
+        assert result is not None
+        assert result[0] == WS_TEXT
+        assert result[1] == b"client request"
+
+    def test_require_mask_rejects_unmasked_frame(self):
+        frame = build_ws_frame(b"client request", opcode=WS_TEXT)
+        with pytest.raises(WebSocketProtocolError, match="must be masked"):
+            parse_ws_frame(frame, require_mask=True)
 
     def test_multiple_frames_consumed_correctly(self):
         frame1 = self._make_masked_frame(WS_TEXT, b"first")

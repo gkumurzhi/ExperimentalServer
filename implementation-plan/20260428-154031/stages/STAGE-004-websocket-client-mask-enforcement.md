@@ -1,7 +1,7 @@
 # STAGE-004 — Enforce WebSocket Client Masking
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -47,9 +47,9 @@ Inbound client WebSocket frames without masks are rejected with protocol error b
 4. Update tests that currently encode unmasked inbound parsing as acceptable behavior.
 
 ## Acceptance criteria
-- [ ] Unmasked client frames sent to `/notes/ws` are rejected and not dispatched to NOTE handlers.
-- [ ] Server-to-client frame tests still have a valid helper path.
-- [ ] Regression tests verify close/protocol-error behavior.
+- [x] Unmasked client frames sent to `/notes/ws` are rejected and not dispatched to NOTE handlers.
+- [x] Server-to-client frame tests still have a valid helper path.
+- [x] Regression tests verify close/protocol-error behavior.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,9 @@ Inbound client WebSocket frames without masks are rejected with protocol error b
 - Rollback: Revert WebSocket parser/server/test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-28 21:08:00 MSK.
+
+- Added `parse_ws_frame(..., require_mask=True)` with `WebSocketProtocolError` for unmasked inbound client frames while preserving permissive default parsing for server-frame helpers.
+- Updated `_handle_notepad_ws()` to parse inbound frames with mask enforcement and close protocol violations with code `1002` before NOTE message dispatch.
+- Added parser and `/notes/ws` regression tests for masked acceptance, unmasked rejection, preserved server-frame parsing, and no-dispatch behavior.
+- Verification passed with `.venv/bin/pytest tests/test_websocket.py tests/test_websocket_handlers.py tests/test_security/test_websocket_frame_limit.py -q`, `python -m compileall src tests`, scoped `ruff check`, adjacent WebSocket server-loop/live/property tests, and websocket-engineer plus QA verifier subagents.

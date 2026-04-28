@@ -26,6 +26,10 @@ WS_PING = 0x09
 WS_PONG = 0x0A
 
 
+class WebSocketProtocolError(Exception):
+    """Raised when a frame violates the active WebSocket protocol role."""
+
+
 def check_websocket_upgrade(request: HTTPRequest) -> bool:
     """Return True if the request is a valid WebSocket upgrade."""
     if request.method != "GET":
@@ -71,14 +75,16 @@ def build_ws_handshake_response(ws_key: str) -> bytes:
     return "\r\n".join(lines).encode("ascii")
 
 
-def parse_ws_frame(data: bytes) -> tuple[int, bytes, int] | None:
+def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, bytes, int] | None:
     """
     Parse a single WebSocket frame from *data*.
 
     Returns ``(opcode, payload, total_bytes_consumed)`` or ``None``
     if *data* does not yet contain a complete frame.
 
-    Handles client-to-server masking (required by RFC 6455).
+    Handles client-to-server masking. Set ``require_mask`` for inbound
+    client traffic; server-to-client helper parsing remains unmasked by
+    default for tests and internal callers.
     """
     dlen = len(data)
     if dlen < 2:
@@ -89,6 +95,9 @@ def parse_ws_frame(data: bytes) -> tuple[int, bytes, int] | None:
 
     # Byte 1: MASK flag + payload length
     masked = bool(data[1] & 0x80)
+    if require_mask and not masked:
+        raise WebSocketProtocolError("client WebSocket frames must be masked")
+
     payload_len = data[1] & 0x7F
     offset = 2
 

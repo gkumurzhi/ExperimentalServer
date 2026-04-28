@@ -2,6 +2,7 @@
 
 import base64
 import json
+import struct
 import threading
 from pathlib import Path
 
@@ -9,7 +10,8 @@ import pytest
 
 from src.handlers import HandlerMixin, NotepadHandlersMixin
 from src.security.keys import HAS_ECDH
-from src.websocket import parse_ws_frame
+from src.server import ExperimentalHTTPServer
+from src.websocket import WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
 from tests.conftest import make_request
 
 
@@ -46,6 +48,24 @@ class _MockSocket:
 class _FailingSocket:
     def sendall(self, _data: bytes) -> None:
         raise OSError("send failed")
+
+
+class _WebSocketLoopSocket(_MockSocket):
+    def __init__(self, recv_items: list[bytes | BaseException]):
+        super().__init__()
+        self._recv_items = list(recv_items)
+        self.timeouts: list[float] = []
+
+    def settimeout(self, value: float) -> None:
+        self.timeouts.append(value)
+
+    def recv(self, _size: int) -> bytes:
+        if not self._recv_items:
+            return b""
+        item = self._recv_items.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
 
 
 class _InvalidResult:
@@ -103,6 +123,41 @@ def mock_socket():
 
 
 # ── Invalid input tests ───────────────────────────────────────────
+
+
+class TestWSClientMasking:
+    def test_unmasked_frame_closes_protocol_error_without_dispatch(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        handled_payloads: list[bytes] = []
+        monkeypatch.setattr(
+            server,
+            "_handle_ws_message",
+            lambda _sock, payload: handled_payloads.append(payload),
+        )
+        server.running = True
+        sock = _WebSocketLoopSocket(
+            [build_ws_frame(json.dumps({"type": "list"}).encode(), opcode=WS_TEXT)]
+        )
+        request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+        )
+
+        server._handle_notepad_ws(sock, request)
+
+        assert handled_payloads == []
+        assert b"HTTP/1.1 101 Switching Protocols" in sock.sent[0]
+        protocol_close = parse_ws_frame(sock.sent[1])
+        assert protocol_close is not None
+        assert protocol_close[0] == WS_CLOSE
+        assert struct.unpack("!H", protocol_close[1][:2])[0] == 1002
+        assert protocol_close[1][2:] == b"Protocol error"
 
 
 class TestWSInvalidInput:

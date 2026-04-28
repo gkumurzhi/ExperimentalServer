@@ -28,6 +28,7 @@ from .websocket import (
     WS_PING,
     WS_PONG,
     WS_TEXT,
+    WebSocketProtocolError,
     build_ws_close_frame,
     build_ws_frame,
     build_ws_handshake_response,
@@ -650,7 +651,13 @@ class ExperimentalHTTPServer(HandlerMixin):
                 # Process all complete frames in buffer
                 while True:
                     try:
-                        frame = parse_ws_frame(buf)
+                        frame = parse_ws_frame(buf, require_mask=True)
+                    except WebSocketProtocolError:
+                        try:
+                            sock.sendall(build_ws_close_frame(1002, "Protocol error"))
+                        except Exception:
+                            pass
+                        return
                     except ValueError:
                         try:
                             sock.sendall(build_ws_close_frame(1009, "Message too big"))
