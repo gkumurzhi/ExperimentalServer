@@ -35,3 +35,9 @@
 - Files changed: `src/data/static/ui/inspector.js`, `tests/test_ui_inspector_redaction.py`, `implementation-plan/20260428-154031/stages/STAGE-006-inspector-redaction.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-006-20260428-213004.md`
 - Verification: `.venv/bin/pytest tests/test_ui_inspector_redaction.py -q` (`2 passed`); `.venv/bin/pytest tests -q -k "browser_smoke or ui or inspector"` (`28 passed, 521 deselected`); `python -m compileall src tests`; `.venv/bin/ruff check tests/test_ui_inspector_redaction.py`; UI `node --check` commands; `.venv/bin/python tools/browser_smoke.py`; static raw/copy path review; explorer, test, and security verifier subagents passed. Global host `pytest` remained unavailable and was treated as an environment issue because project `.venv` checks passed.
 - Report: `stage-reports/STAGE-006-20260428-213004.md`
+
+## 2026-04-28 22:40:57 MSK — STAGE-007
+- Status: CLOSED
+- Files changed: `.dockerignore`, `implementation-plan/20260428-154031/stages/STAGE-007-docker-context-hygiene.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-007-20260428-223152.md`
+- Verification: `docker buildx build --help >/dev/null`; `docker version --format '{{.Server.Version}}'`; `docker build --no-cache --target runtime .`; disposable Docker context checks for dummy runtime/secret paths including `notes/`, `.env*`, nested certs, credential JSON, `secret/`, and `examples/docker/data`; `git diff --check`; Docker verifier passed; security verifier findings were fixed and rechecked.
+- Report: `stage-reports/STAGE-007-20260428-223152.md`

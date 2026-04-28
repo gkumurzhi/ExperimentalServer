@@ -1,7 +1,7 @@
 # STAGE-007 — Harden Docker Build Context Ignores
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -45,9 +45,9 @@ Docker build contexts exclude runtime data and secret-like files by default.
 3. Validate build context configuration statically without printing secret file contents.
 
 ## Acceptance criteria
-- [ ] `.dockerignore` excludes `notes/` and common secret-like file patterns.
-- [ ] Dockerfile required inputs are not accidentally ignored.
-- [ ] No runtime data contents are read or copied during verification.
+- [x] `.dockerignore` excludes `notes/` and common secret-like file patterns.
+- [x] Dockerfile required inputs are not accidentally ignored.
+- [x] No runtime data contents are read or copied during verification.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,4 @@ Docker build contexts exclude runtime data and secret-like files by default.
 - Rollback: Revert `.dockerignore` changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-28 22:40:57 MSK. `.dockerignore` now excludes runtime data (`notes/`, `uploads/`, example compose data) and secret-like files including `.env*`, nested env files, key/cert/keystore formats, SSH private keys, credential/secret JSON, and generated certificate/secret directories. Docker runtime build, disposable dummy-context checks, `diff --check`, and Docker/security verifier subagents passed after resolving the security verifier's `.env*` and singular `secret/` findings.
