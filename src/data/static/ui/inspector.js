@@ -4,8 +4,17 @@ const exchangeHexPreviewLimit = 64;
 const exchangeSecretKeys = new Set([
     'authorization',
     'cookie',
+    'clientpublickey',
+    'client_public_key',
+    'd',
+    'data',
+    'publickey',
+    'public_key',
     'set-cookie',
+    'serverpublickey',
+    'server_public_key',
     'x-session-id',
+    'x-d',
     'x-k',
     'k',
     'key',
@@ -14,6 +23,9 @@ const exchangeSecretKeys = new Set([
     'password',
     'token',
 ]);
+const exchangeSecretKeyPatterns = [
+    /^x-d(?:-.+)?$/,
+];
 const exchangeInspectorStates = new Map();
 const exchangeAreaRawText = new Map();
 
@@ -31,12 +43,20 @@ function exchangeCurrentMode() {
 }
 
 function isExchangeSecretKey(key) {
-    return exchangeSecretKeys.has(String(key || '').toLowerCase());
+    const normalized = String(key || '').trim().toLowerCase();
+    const compact = normalized.replace(/[-_\s]/g, '');
+    return exchangeSecretKeys.has(normalized) ||
+        exchangeSecretKeys.has(compact) ||
+        exchangeSecretKeyPatterns.some(pattern => pattern.test(normalized));
+}
+
+function exchangeRedactedLabel() {
+    return `[${t('exchangeRedacted')}]`;
 }
 
 function redactExchangeValue(value, key = '') {
     if (isExchangeSecretKey(key)) {
-        return `[${t('exchangeRedacted')}]`;
+        return exchangeRedactedLabel();
     }
 
     if (Array.isArray(value)) {
@@ -53,6 +73,116 @@ function redactExchangeValue(value, key = '') {
     }
 
     return value;
+}
+
+function safeDecodeExchangeComponent(value) {
+    try {
+        return decodeURIComponent(String(value || '').replace(/\+/g, ' '));
+    } catch (_error) {
+        return String(value || '');
+    }
+}
+
+function redactExchangeQueryString(query) {
+    return String(query || '').split('&').map(part => {
+        if (!part) {
+            return part;
+        }
+
+        const equalsIndex = part.indexOf('=');
+        const key = equalsIndex === -1 ? part : part.slice(0, equalsIndex);
+        if (!isExchangeSecretKey(safeDecodeExchangeComponent(key))) {
+            return part;
+        }
+
+        return equalsIndex === -1 ? key : `${key}=${exchangeRedactedLabel()}`;
+    }).join('&');
+}
+
+function redactExchangePath(path) {
+    const text = String(path || '');
+    const hashIndex = text.indexOf('#');
+    const pathAndQuery = hashIndex === -1 ? text : text.slice(0, hashIndex);
+    const hash = hashIndex === -1 ? '' : text.slice(hashIndex);
+    const queryIndex = pathAndQuery.indexOf('?');
+    if (queryIndex === -1) {
+        return text;
+    }
+
+    const basePath = pathAndQuery.slice(0, queryIndex);
+    const query = pathAndQuery.slice(queryIndex + 1);
+    return `${basePath}?${redactExchangeQueryString(query)}${hash}`;
+}
+
+function redactExchangeJsonText(text, options = {}) {
+    const parsed = parseJsonSafe(text);
+    if (parsed === null || typeof parsed !== 'object') {
+        return null;
+    }
+
+    return JSON.stringify(redactExchangeValue(parsed), null, options.pretty ? 2 : 0);
+}
+
+function redactExchangeHeaderLine(line) {
+    const match = String(line || '').match(/^([^:\r\n]+):(\s*)(.*)$/);
+    if (!match || !isExchangeSecretKey(match[1])) {
+        return line;
+    }
+
+    return `${match[1]}:${match[2]}${exchangeRedactedLabel()}`;
+}
+
+function redactExchangeRequestLine(line) {
+    const match = String(line || '').match(/^([A-Z]+)\s+(\S+)(\s+HTTP\/[0-9.]+.*)?$/);
+    if (!match) {
+        return line;
+    }
+
+    return `${match[1]} ${redactExchangePath(match[2])}${match[3] || ''}`;
+}
+
+function looksLikeExchangeQueryString(text) {
+    return /^[^=\s&]+=[^\s]*(?:&[^=\s&]+=[^\s]*)*$/.test(String(text || ''));
+}
+
+function redactExchangeLines(text) {
+    return String(text || '').split('\n').map(line => {
+        const headerSafeLine = redactExchangeHeaderLine(line);
+        const requestSafeLine = redactExchangeRequestLine(headerSafeLine);
+        return looksLikeExchangeQueryString(requestSafeLine)
+            ? redactExchangeQueryString(requestSafeLine)
+            : requestSafeLine;
+    }).join('\n');
+}
+
+function redactExchangeText(text, options = {}) {
+    const normalized = String(text || '');
+    if (!normalized) {
+        return '';
+    }
+
+    const contentType = String(options.contentType || '').toLowerCase();
+    if (contentType.includes('json') || /^[\s\r\n]*[\[{]/.test(normalized)) {
+        const redactedJson = redactExchangeJsonText(normalized, options);
+        if (redactedJson !== null) {
+            return redactedJson;
+        }
+    }
+
+    const bodySeparatorMatch = normalized.match(/\r?\n\r?\n/);
+    if (options.splitHttpBody !== false && bodySeparatorMatch && bodySeparatorMatch.index !== undefined) {
+        const separatorStart = bodySeparatorMatch.index;
+        const separator = bodySeparatorMatch[0];
+        const head = normalized.slice(0, separatorStart);
+        const body = normalized.slice(separatorStart + separator.length);
+        return [
+            redactExchangeLines(head),
+            separator,
+            redactExchangeText(body, { ...options, splitHttpBody: false }),
+        ].join('');
+    }
+
+    return redactExchangeLines(normalized);
 }
 
 function normalizeExchangeHeaders(headers = {}) {
@@ -140,7 +270,7 @@ function formatExchangeBody(body, options = {}) {
 
     if (body.kind === 'json') {
         if (options.raw && body.rawText !== undefined) {
-            return truncateExchangeText(body.rawText) || t('requestPreviewNoBody');
+            return truncateExchangeText(redactExchangeText(body.rawText, { contentType: body.contentType })) || t('requestPreviewNoBody');
         }
         return truncateExchangeText(JSON.stringify(redactExchangeValue(body.value), null, 2));
     }
@@ -165,28 +295,65 @@ function formatExchangeBody(body, options = {}) {
         if (body.label) lines.push(`${t('exchangeBodyKind')}: ${body.label}`);
         if (body.contentType) lines.push(`${t('responseSummaryFieldContentType')}: ${body.contentType}`);
         if (body.size !== undefined) lines.push(`${t('requestPreviewFieldBodySize')}: ${formatSize(body.size)}`);
-        if (body.text) lines.push(truncateExchangeText(body.text));
+        if (body.text) lines.push(truncateExchangeText(redactExchangeText(body.text, { contentType: body.contentType })));
         return lines.length ? lines.join('\n') : t('requestPreviewNoBody');
     }
 
-    let text = body.text || '';
-    if (!options.raw && body.contentType && body.contentType.includes('json')) {
-        const parsed = parseJsonSafe(text);
-        if (parsed !== null) {
-            text = JSON.stringify(redactExchangeValue(parsed), null, 2);
-        }
-    }
+    const text = redactExchangeText(body.text || '', {
+        contentType: body.contentType,
+        pretty: !options.raw,
+    });
     return truncateExchangeText(text) || t('requestPreviewNoBody');
+}
+
+function redactExchangeBodyModel(body) {
+    if (!body || typeof body !== 'object') {
+        return body;
+    }
+
+    if (body.kind === 'json') {
+        return {
+            ...body,
+            value: redactExchangeValue(body.value),
+            rawText: body.rawText === undefined
+                ? body.rawText
+                : redactExchangeText(body.rawText, { contentType: body.contentType }),
+        };
+    }
+
+    if (body.kind === 'preview' || body.kind === 'text' || !body.kind) {
+        return {
+            ...body,
+            text: redactExchangeText(body.text || '', { contentType: body.contentType }),
+        };
+    }
+
+    return { ...body };
+}
+
+function redactExchangeMessageModel(message = {}) {
+    if (!message || typeof message !== 'object') {
+        return message;
+    }
+
+    return {
+        ...message,
+        path: message.path ? redactExchangePath(message.path) : message.path,
+        startLine: message.startLine ? redactExchangeText(message.startLine) : message.startLine,
+        rawText: message.rawText ? redactExchangeText(message.rawText) : message.rawText,
+        headers: normalizeExchangeHeaders(message.headers || {}),
+        body: redactExchangeBodyModel(message.body),
+    };
 }
 
 function buildExchangeStartLine(message, side) {
     if (message.startLine) {
-        return message.startLine;
+        return redactExchangeText(message.startLine);
     }
 
     if (message.transport === 'ws') {
         const direction = side === 'request' ? t('exchangeWsSend') : t('exchangeWsReceive');
-        return `${direction} ${message.path || '/notes/ws'}`;
+        return `${direction} ${redactExchangePath(message.path || '/notes/ws')}`;
     }
 
     if (side === 'response') {
@@ -195,7 +362,7 @@ function buildExchangeStartLine(message, side) {
     }
 
     const method = message.method || 'GET';
-    const path = message.path || '/';
+    const path = redactExchangePath(message.path || '/');
     return `${method} ${path} HTTP/1.1`;
 }
 
@@ -205,7 +372,9 @@ function buildExchangeRawMessage(message = {}, side = 'request') {
     }
 
     if (message.rawText) {
-        return message.rawText;
+        return redactExchangeText(message.rawText, {
+            contentType: message.body?.contentType,
+        });
     }
 
     const lines = [buildExchangeStartLine(message, side)];
@@ -242,7 +411,7 @@ function buildExchangeSummary(message = {}, side = 'request') {
     const metrics = [
         buildExchangeMetric(t('exchangeTransport'), message.transport === 'ws' ? 'WebSocket' : 'HTTP'),
         buildExchangeMetric(t('requestPreviewFieldMethod'), message.method || message.type || ''),
-        buildExchangeMetric(t('requestPreviewFieldPath'), message.path || ''),
+        buildExchangeMetric(t('requestPreviewFieldPath'), redactExchangePath(message.path || '')),
     ];
 
     if (side === 'response') {
@@ -284,7 +453,7 @@ function renderExchangePane(area, message = {}, side = 'request') {
     area.dataset.exchangePhase = phase;
     area.dataset.exchangeTransport = message.transport || 'http';
     area.dataset.exchangeMethod = message.method || message.type || '';
-    area.dataset.exchangePath = message.path || '';
+    area.dataset.exchangePath = redactExchangePath(message.path || '');
     area.dataset.requestView = exchangeCurrentMode();
 
     if (phase === 'empty' || phase === 'sending') {
@@ -313,10 +482,17 @@ function renderAllExchangeInspectors() {
 }
 
 function setExchangeInspector(scope, state = {}) {
+    const request = redactExchangeMessageModel(
+        state.request || { phase: 'empty', emptyText: t('exchangeRequestEmpty') }
+    );
+    const response = redactExchangeMessageModel(
+        state.response || { phase: 'empty', emptyText: t('exchangeResponseEmpty') }
+    );
+
     exchangeInspectorStates.set(scope, {
-        phase: state.phase || state.response?.phase || state.request?.phase || 'ready',
-        request: state.request || { phase: 'empty', emptyText: t('exchangeRequestEmpty') },
-        response: state.response || { phase: 'empty', emptyText: t('exchangeResponseEmpty') },
+        phase: state.phase || response?.phase || request?.phase || 'ready',
+        request,
+        response,
     });
     renderExchangeInspector(scope);
 }

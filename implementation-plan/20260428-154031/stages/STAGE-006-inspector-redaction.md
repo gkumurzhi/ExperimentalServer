@@ -1,7 +1,7 @@
 # STAGE-006 — Redact Inspector Raw and Copy Output
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -50,10 +50,10 @@ Inspector display and copy paths redact advanced-upload secrets, payloads, and s
 4. Add smoke/unit coverage that raw/copy output does not contain a test password or raw base64 payload.
 
 ## Acceptance criteria
-- [ ] Advanced-upload passwords and file payloads do not appear in rendered inspector raw view.
-- [ ] Copied/recorded inspector state is redacted by the same policy.
-- [ ] Notepad session/key/data fields are redacted unless an explicit unsafe mode is added and documented.
-- [ ] Smoke or unit tests cover the redaction path.
+- [x] Advanced-upload passwords and file payloads do not appear in rendered inspector raw view.
+- [x] Copied/recorded inspector state is redacted by the same policy.
+- [x] Notepad session/key/data fields are redacted unless an explicit unsafe mode is added and documented.
+- [x] Smoke or unit tests cover the redaction path.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -71,4 +71,4 @@ Inspector display and copy paths redact advanced-upload secrets, payloads, and s
 - Rollback: Revert inspector/redaction and smoke-test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-28 21:46:30 MSK. `src/data/static/ui/inspector.js` now centralizes redaction for rendered raw output, copy source text, and stored inspector state. The policy covers advanced-upload URL/header/body payload fields (`d`, `k`, `x-d`, `x-d-*`, `x-k`) and notepad `sessionId`, key material, and `data` fields by default. Added `tests/test_ui_inspector_redaction.py` to execute the real inspector JS in a Node VM and assert advanced-upload/notepad render, copy, raw transcript, and stored-state redaction without reading runtime `notes/` or `uploads/` data. Verification passed: `.venv/bin/pytest tests -q -k "browser_smoke or ui or inspector"` (`28 passed, 521 deselected`), `.venv/bin/pytest tests/test_ui_inspector_redaction.py -q` (`2 passed`), `python -m compileall src tests`, `.venv/bin/ruff check tests/test_ui_inspector_redaction.py`, UI `node --check` commands, `.venv/bin/python tools/browser_smoke.py`, static raw/copy path review, and verifier subagents.

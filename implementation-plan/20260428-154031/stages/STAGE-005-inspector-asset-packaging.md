@@ -1,7 +1,7 @@
 # STAGE-005 — Make Inspector Asset Intentional
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -68,4 +68,9 @@ Clean checkouts and built packages either include `inspector.js` or no longer re
 - Rollback: Revert asset/script/call-site changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed on 2026-04-28 21:26:57 MSK.
+
+- Kept `src/data/static/ui/inspector.js` as an intentional bundled UI asset; it is tracked and covered by existing `pyproject.toml` package-data patterns.
+- Added routing/static tests that parse bundled `index.html` script references and verify each local script resolves through `get_package_resource()`, is covered by package-data, and is tracked by Git.
+- Added browser smoke coverage that fetches `/static/ui/inspector.js` and verifies the inspector API and initialized exchange scopes are available after SPA load.
+- Verification passed: `.venv/bin/python -m pytest tests/test_server_routing.py tests/test_server_methods.py -q` (`65 passed`), `.venv/bin/python -m compileall src tests`, `.venv/bin/ruff check tests/test_server_routing.py`, `node --check tools/browser_smoke.playwright.js`, `.venv/bin/python tools/browser_smoke.py`, temporary wheel asset inspection, and read-only verifier subagents.

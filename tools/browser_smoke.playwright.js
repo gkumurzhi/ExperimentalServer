@@ -207,6 +207,42 @@ async (page) => {
     );
   }
 
+  async function assertInspectorAssetLoaded(timeout = 10000) {
+    const asset = await page.evaluate(async () => {
+      const response = await fetch("/static/ui/inspector.js", { cache: "no-store" });
+      const body = await response.text();
+      return {
+        ok: response.ok,
+        status: response.status,
+        body,
+      };
+    });
+
+    if (!asset.ok) {
+      throw new Error(`Inspector asset request failed: ${asset.status}`);
+    }
+    if (!asset.body.includes("function setExchangeInspector")) {
+      throw new Error("Inspector asset does not contain setExchangeInspector");
+    }
+
+    await waitForPageCondition(
+      "inspector API loaded",
+      () => {
+        const scopes = ["upload", "opsec", "files", "notepad"];
+        return Boolean(
+          typeof setExchangeInspector === "function" &&
+          typeof getExchangeAreaRawText === "function" &&
+          scopes.every((scope) => {
+            const root = document.querySelector(`[data-exchange-scope="${scope}"]`);
+            return root && root.dataset.exchangePhase === "empty";
+          })
+        );
+      },
+      null,
+      timeout
+    );
+  }
+
   async function waitForTabState(tabName, options = {}, timeout = 10000) {
     const { focused = false } = options;
     await waitForPageCondition(
@@ -2254,6 +2290,7 @@ async (page) => {
 
   async function runHappyPath() {
     await assertOutputLiveRegionContracts();
+    await assertInspectorAssetLoaded();
     await waitForTabState("upload");
     const requestPanelFetchPath = await fetchViaRequestPanelAndAssert();
 

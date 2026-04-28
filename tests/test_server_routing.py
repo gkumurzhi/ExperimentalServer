@@ -1,13 +1,39 @@
 """Tests for server method routing and advanced upload routing (B44)."""
 
+import fnmatch
 import json
+import subprocess
 import threading
+from html.parser import HTMLParser
 from pathlib import Path
 
 import pytest
 
 from src.handlers import HandlerMixin
+from src.handlers.base import get_package_resource
 from src.http import HTTPRequest, HTTPResponse
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
+    import tomli as tomllib
+
+
+class ScriptSrcParser(HTMLParser):
+    """Collect script src attributes from bundled HTML."""
+
+    def __init__(self):
+        super().__init__()
+        self.script_srcs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "script":
+            return
+
+        attr_map = dict(attrs)
+        src = attr_map.get("src")
+        if src:
+            self.script_srcs.append(src)
 
 
 class StubServer(HandlerMixin):
@@ -47,6 +73,29 @@ def _make_request(
         lines.append(f"Content-Length: {len(body)}")
     raw = "\r\n".join(lines).encode() + b"\r\n\r\n" + body
     return HTTPRequest(raw)
+
+
+def _index_local_script_resource_paths() -> list[str]:
+    index_path = get_package_resource("index.html")
+    assert index_path is not None
+
+    parser = ScriptSrcParser()
+    parser.feed(index_path.read_text(encoding="utf-8"))
+    return [
+        src.lstrip("/")
+        for src in parser.script_srcs
+        if src.startswith("/") and not src.startswith("//")
+    ]
+
+
+def _src_package_data_patterns() -> list[str]:
+    pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    with pyproject_path.open("rb") as pyproject_file:
+        pyproject = tomllib.load(pyproject_file)
+
+    patterns = pyproject["tool"]["setuptools"]["package-data"]["src"]
+    assert isinstance(patterns, list)
+    return [str(pattern) for pattern in patterns]
 
 
 @pytest.fixture
@@ -132,6 +181,56 @@ class TestStaticResourceRouting:
         assert resp.status_code == 200
         assert resp.stream_path is not None
         assert resp.stream_path.name == "app.js"
+
+    def test_inspector_static_asset_serves(self, server):
+        req = _make_request("GET", "/static/ui/inspector.js")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.stream_path is not None
+        assert resp.stream_path.name == "inspector.js"
+
+    def test_index_local_script_references_resolve(self):
+        missing = [
+            resource_path
+            for resource_path in _index_local_script_resource_paths()
+            if get_package_resource(resource_path) is None
+        ]
+
+        assert missing == []
+
+    def test_index_local_script_references_match_package_data(self):
+        patterns = _src_package_data_patterns()
+        missing = [
+            f"data/{resource_path}"
+            for resource_path in _index_local_script_resource_paths()
+            if not any(
+                fnmatch.fnmatchcase(f"data/{resource_path}", pattern)
+                for pattern in patterns
+            )
+        ]
+
+        assert missing == []
+
+    def test_index_local_script_references_are_tracked(self):
+        repo_root = Path(__file__).resolve().parents[1]
+        if not (repo_root / ".git").exists():
+            pytest.skip("Git tracking check requires a repository checkout")
+
+        missing = []
+        for resource_path in _index_local_script_resource_paths():
+            source_path = Path("src/data") / resource_path
+            result = subprocess.run(
+                ["git", "ls-files", "--error-unmatch", "--", str(source_path)],
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                missing.append(str(source_path))
+
+        assert missing == []
 
     def test_static_raw_traversal_returns_not_found(self, server):
         req = _make_request("GET", "/static/../../server.py")
