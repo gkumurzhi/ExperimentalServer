@@ -47,3 +47,9 @@
 - Files changed: `.github/workflows/security.yml`, `implementation-plan/20260428-154031/stages/STAGE-008-pip-audit-workflow.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-008-20260428-225430.md`
 - Verification: `python -m pip_audit --help` in a disposable constrained venv; `python -m pip_audit --strict -r constraints/ci.txt` reached real vulnerability findings in existing pins; `python -m compileall src tests`; workflow YAML parse; scoped `git diff --check`; static workflow review; verifier subagents passed or were superseded by the final constraints-input mode.
 - Report: `stage-reports/STAGE-008-20260428-225430.md`
+
+## 2026-04-28 23:42:50 MSK — STAGE-009
+- Status: CLOSED
+- Files changed: `API.md`, `docs/api.md`, `README.md`, `implementation-plan/20260428-154031/stages/STAGE-009-api-smuggle-contract-docs.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-009-20260428-233531.md`
+- Verification: `python3 tools/sync_docs.py --check`; `git diff --check -- API.md docs/api.md README.md implementation-plan/20260428-154031/stage-reports/STAGE-009-20260428-233531.md`; `uv run pytest tests/test_server_methods.py -q -k smuggle` (`8 passed`); static contract review against `src/handlers/smuggle.py` and temp-file serving paths; API and documentation verifier subagents passed.
+- Report: `stage-reports/STAGE-009-20260428-233531.md`

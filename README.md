@@ -474,20 +474,23 @@ server.start()
 ```bash
 # Создать HTML Smuggling страницу для файла (без шифрования)
 curl -X SMUGGLE http://localhost:8080/uploads/secret.txt
-# Ответ: {"url": "/uploads/smuggle_abc123.html", "file": "secret.txt", "encrypted": false}
+# Ответ: {"url": "/uploads/smuggle_0123abcd4567ef89.html", "file": "secret.txt", "encrypted": false}
+# Заголовок: X-Smuggle-URL: /uploads/smuggle_0123abcd4567ef89.html
 
 # С шифрованием
 curl -X SMUGGLE "http://localhost:8080/uploads/secret.txt?encrypt=1"
-# Ответ: {"url": "/uploads/smuggle_def456.html", "file": "secret.txt", "encrypted": true}
+# Ответ: {"url": "/uploads/smuggle_fedcba9876543210.html", "file": "secret.txt", "encrypted": true}
+# Заголовок: X-Smuggle-URL: /uploads/smuggle_fedcba9876543210.html
 
 # Скачать HTML-страницу (файл удалится автоматически после отдачи)
-curl http://localhost:8080/uploads/smuggle_abc123.html -o smuggle.html
+curl http://localhost:8080/uploads/smuggle_0123abcd4567ef89.html -o smuggle.html
 ```
 
 ### Автоматическая очистка
 
-- Временные HTML-файлы (`smuggle_*.html`) удаляются после первого GET-запроса
+- Временные HTML-файлы (`smuggle_*.html`) удаляются после первого GET/HEAD-запроса или совпавшего conditional-запроса
 - При перезапуске сервера все оставшиеся `smuggle_*.html` в `uploads/` очищаются автоматически
+- Исходный файл для SMUGGLE ограничен меньшим из лимита SMUGGLE (по умолчанию 10 MiB) и общего лимита загрузки; превышение возвращает JSON `413` без создания временной HTML-страницы
 
 ## Утилита расшифровки
 

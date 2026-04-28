@@ -223,7 +223,9 @@ The response also includes the header `X-Ping-Response: pong`.
 
 ## SMUGGLE
 
-Generate an HTML smuggling page for a file. The HTML page contains the file data embedded as base64, downloadable without additional server requests.
+Create a temporary HTML smuggling page for a file in `uploads/`. The SMUGGLE
+request returns JSON with the temporary URL; clients then fetch that URL with
+`GET` to receive the generated HTML page.
 
 **Request:**
 ```
@@ -235,9 +237,43 @@ SMUGGLE /uploads/file.txt HTTP/1.1
 SMUGGLE /uploads/file.txt?encrypt=1 HTTP/1.1
 ```
 
-**Response:** HTML page (`text/html`) with embedded file data.
+`encrypt=1` stores an XOR-obfuscated payload in the generated HTML page and
+shows a server-generated password CAPTCHA on that page.
 
-**Status codes:** `200` OK, `404` File not found, `400` Bad request
+**Response (200):**
+```json
+{
+  "url": "/uploads/smuggle_0123abcd4567ef89.html",
+  "file": "file.txt",
+  "encrypted": false
+}
+```
+
+**Headers:** `Content-Type: application/json`, `X-Smuggle-URL`
+
+`X-Smuggle-URL` contains the same relative path as the JSON `url` field. A
+follow-up `GET` to that path returns the one-shot HTML page (`text/html`) with
+the file data embedded as base64. Temporary `smuggle_*.html` files are deleted
+after they are served by `GET`, `HEAD`, or a matching conditional request; any
+leftover temporary pages are also cleaned up when the server starts.
+
+SMUGGLE source files are capped before HTML generation. The effective cap is
+the lower of the SMUGGLE source cap (10 MiB by default) and the configured
+upload limit.
+
+**Too large response (413):**
+```json
+{
+  "error": "SMUGGLE source too large. Max size: 10.0 MB",
+  "status": 413,
+  "file_size": 10485761,
+  "file_size_human": "10.0 MB",
+  "max_size": 10485760,
+  "max_size_human": "10.0 MB"
+}
+```
+
+**Status codes:** `200` OK, `404` File not found, `413` Source too large
 
 ---
 
