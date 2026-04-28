@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.handlers.base import BaseHandler
+from src.handlers.base import BaseHandler, get_package_resource
 
 
 class ConcreteHandler(BaseHandler):
@@ -64,6 +64,35 @@ class TestPathTraversalBlocking:
         result = handler._get_file_path("/")
         assert result is not None
         assert result.name == "index.html"
+
+
+class TestPackageStaticResourceTraversal:
+    """Verify bundled static resource lookup blocks traversal."""
+
+    def test_static_resource_blocks_raw_traversal(self):
+        result = get_package_resource("static/../../server.py")
+        assert result is None
+
+    def test_static_resource_blocks_url_encoded_traversal(self):
+        result = get_package_resource("static/%2e%2e/%2e%2e/server.py")
+        assert result is None
+
+    def test_static_resource_blocks_encoded_separator_traversal(self):
+        result = get_package_resource("static%2f..%2f..%2fserver.py")
+        assert result is None
+
+    def test_static_resource_blocks_platform_separator_traversal(self):
+        result = get_package_resource("static%5c..%5c..%5cserver.py")
+        assert result is None
+
+    def test_static_resource_blocks_windows_drive_segment(self):
+        result = get_package_resource("static/C:/server.py")
+        assert result is None
+
+    def test_valid_static_resource_resolves(self):
+        result = get_package_resource("static/ui/app.js")
+        assert result is not None
+        assert result.name == "app.js"
 
 
 class TestSandboxPathTraversal:

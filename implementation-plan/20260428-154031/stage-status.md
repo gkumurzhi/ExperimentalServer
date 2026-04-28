@@ -1,0 +1,29 @@
+# Stage Status
+
+| Stage | Status | Priority | Title | Last attempt | Result | Report |
+|---|---|---|---|---|---|---|
+| STAGE-001 | CLOSED | HIGH | Constrain Static Resource Paths | 2026-04-28 16:10:40 MSK | Static resource traversal blocked; targeted tests, compile, ruff, and verifier subagents passed. | `stage-reports/STAGE-001-20260428-155734.md` |
+| STAGE-002 | OPEN | HIGH | Preserve Streaming for Gzip Responses | — | — | — |
+| STAGE-003 | OPEN | HIGH | Bound SMUGGLE Memory Use | — | — | — |
+| STAGE-004 | OPEN | HIGH | Enforce WebSocket Client Masking | — | — | — |
+| STAGE-005 | OPEN | HIGH | Make Inspector Asset Intentional | — | — | — |
+| STAGE-006 | OPEN | HIGH | Redact Inspector Raw and Copy Output | — | — | — |
+| STAGE-007 | OPEN | HIGH | Harden Docker Build Context Ignores | — | — | — |
+| STAGE-008 | OPEN | HIGH | Repair pip-audit Security Workflow | — | — | — |
+| STAGE-009 | OPEN | HIGH | Correct SMUGGLE API Contract Docs | — | — | — |
+| STAGE-010 | OPEN | HIGH | Correct API Error Contract Docs | — | — | — |
+| STAGE-011 | OPEN | HIGH | Remove Stale CLAUDE Guidance | — | — | — |
+| STAGE-012 | OPEN | MEDIUM | Reject Malformed Request Lines | — | — | — |
+| STAGE-013 | OPEN | MEDIUM | Fail Closed for Advanced Upload Crypto Errors | — | — | — |
+| STAGE-014 | OPEN | MEDIUM | Enforce Hidden Upload Policy Consistently | — | — | — |
+| STAGE-015 | OPEN | MEDIUM | Make CORS Origin and Header Contract Valid | — | — | — |
+| STAGE-016 | OPEN | MEDIUM | Validate WebSocket Frame Semantics | — | — | — |
+| STAGE-017 | OPEN | MEDIUM | Bound WebSocket Resource Use | — | — | — |
+| STAGE-018 | OPEN | MEDIUM | Clarify Metrics and Error Counting | — | — | — |
+| STAGE-019 | OPEN | MEDIUM | Reduce Upload Memory Spikes | — | — | — |
+| STAGE-020 | OPEN | MEDIUM | Align CI and Local Toolchain Pins | — | — | — |
+| STAGE-021 | OPEN | MEDIUM | Set Dependency Authority and Update Coverage | — | — | — |
+| STAGE-022 | OPEN | MEDIUM | Improve Docker Runtime Examples | — | — | — |
+| STAGE-023 | OPEN | MEDIUM | Align UI Capabilities, A11y, and Smoke Checks | — | — | — |
+| STAGE-024 | OPEN | MEDIUM | Clean Remaining Documentation Drift | — | — | — |
+| STAGE-025 | OPEN | MEDIUM | Protect Runtime Note Data from Accidental Commit | — | — | — |

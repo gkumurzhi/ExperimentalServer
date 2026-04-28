@@ -142,6 +142,32 @@ class TestMethodRouting:
         assert server.method_handlers["PUT"] == server.handle_none
 
 
+class TestStaticResourceRouting:
+    """Test bundled static asset routing."""
+
+    def test_valid_static_asset_serves(self, server):
+        req = _make_request("GET", "/static/ui/app.js")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.stream_path is not None
+        assert resp.stream_path.name == "app.js"
+
+    def test_static_raw_traversal_returns_not_found(self, server):
+        req = _make_request("GET", "/static/../../server.py")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 404
+        assert resp.stream_path is None
+
+    def test_static_encoded_traversal_returns_not_found(self, server):
+        req = _make_request("GET", "/static/%2e%2e/%2e%2e/server.py")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 404
+        assert resp.stream_path is None
+
+
 class TestAdvancedUploadRouting:
     """Test advanced upload payload detection."""
 

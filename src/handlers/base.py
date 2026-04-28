@@ -6,8 +6,9 @@ import importlib.resources
 import json
 import logging
 from collections.abc import Callable, Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, cast
+from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
 from ..http import HTTPResponse, format_file_size
@@ -22,6 +23,39 @@ if TYPE_CHECKING:
 logger = logging.getLogger("httpserver")
 
 
+def _safe_package_resource_parts(resource_path: str) -> tuple[str, ...] | None:
+    """Return safe package resource path parts, or None when traversal is attempted."""
+    decoded_path = unquote(resource_path)
+    if (
+        not decoded_path
+        or "\\" in decoded_path
+        or PurePosixPath(decoded_path).is_absolute()
+        or PureWindowsPath(decoded_path).is_absolute()
+    ):
+        return None
+
+    parts = tuple(decoded_path.split("/"))
+    if any(
+        part in {"", ".", ".."}
+        or PureWindowsPath(part).drive
+        or PureWindowsPath(part).root
+        for part in parts
+    ):
+        return None
+
+    return parts
+
+
+def _contained_resource_path(path: Path, resource_root: Path) -> Path | None:
+    """Resolve *path* only when it remains below *resource_root*."""
+    try:
+        resolved_path = path.resolve()
+        resolved_path.relative_to(resource_root.resolve())
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return resolved_path
+
+
 def get_package_resource(resource_path: str) -> Path | None:
     """
     Get the path to a package resource.
@@ -34,22 +68,38 @@ def get_package_resource(resource_path: str) -> Path | None:
     Returns:
         Path to the resource, or None if not found.
     """
+    safe_parts = _safe_package_resource_parts(resource_path)
+    if safe_parts is None:
+        logger.warning("Unsafe package resource path blocked: %s", resource_path)
+        return None
+
     # Try to find in package (installed mode)
     try:
         # Python 3.9+
         files = importlib.resources.files("src.data")
-        resource_ref = files.joinpath(resource_path)
+        resource_ref = files.joinpath(*safe_parts)
 
-        # Check existence via as_file
-        with importlib.resources.as_file(resource_ref) as path:
-            if path.exists():
-                return path
-    except (TypeError, FileNotFoundError, ModuleNotFoundError, AttributeError):
+        # Filesystem-backed packages can be contained directly. For
+        # importer-backed resources, as_file() may create temporary paths that
+        # expire before the response streams, so do not return those here.
+        if isinstance(files, Path) and isinstance(resource_ref, Path):
+            contained_path = _contained_resource_path(resource_ref, files)
+            if contained_path is not None and contained_path.exists():
+                return contained_path
+    except (
+        TypeError,
+        FileNotFoundError,
+        ModuleNotFoundError,
+        AttributeError,
+        OSError,
+        ValueError,
+    ):
         pass
 
     # Fallback: look relative to src/data (dev mode)
-    dev_path = Path(__file__).parent.parent / "data" / resource_path
-    if dev_path.exists():
+    dev_root = Path(__file__).parent.parent / "data"
+    dev_path = _contained_resource_path(dev_root.joinpath(*safe_parts), dev_root)
+    if dev_path is not None and dev_path.exists():
         return dev_path
 
     return None
