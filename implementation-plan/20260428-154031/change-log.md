@@ -53,3 +53,9 @@
 - Files changed: `API.md`, `docs/api.md`, `README.md`, `implementation-plan/20260428-154031/stages/STAGE-009-api-smuggle-contract-docs.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-009-20260428-233531.md`
 - Verification: `python3 tools/sync_docs.py --check`; `git diff --check -- API.md docs/api.md README.md implementation-plan/20260428-154031/stage-reports/STAGE-009-20260428-233531.md`; `uv run pytest tests/test_server_methods.py -q -k smuggle` (`8 passed`); static contract review against `src/handlers/smuggle.py` and temp-file serving paths; API and documentation verifier subagents passed.
 - Report: `stage-reports/STAGE-009-20260428-233531.md`
+
+## 2026-04-29 16:42:43 MSK — STAGE-010
+- Status: CLOSED
+- Files changed: `API.md`, `docs/api.md`, `implementation-plan/20260428-154031/backlog.md`, `implementation-plan/20260428-154031/stages/STAGE-010-api-error-contract-docs.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-010-20260429-162933.md`
+- Verification: `python3 tools/sync_docs.py --check`; scoped `git diff --check`; `diff -u API.md <(tail -n +3 docs/api.md)`; static source-to-doc review across handler and request-pipeline error paths; api-documenter, reviewer, and qa-expert verifier subagents passed after fixing an intermediate request-framing wording gap.
+- Report: `stage-reports/STAGE-010-20260429-162933.md`

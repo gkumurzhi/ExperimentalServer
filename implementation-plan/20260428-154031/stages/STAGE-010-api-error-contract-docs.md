@@ -1,7 +1,7 @@
 # STAGE-010 — Correct API Error Contract Docs
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -66,4 +66,4 @@ API documentation no longer promises a uniform JSON error body unless implementa
 - Rollback: Revert docs/mirror changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-29 16:42:43 MSK. `API.md` now documents endpoint-specific error body contracts instead of promising a uniform JSON error envelope. Known legacy `text/plain`, empty-body, endpoint-specific JSON, WebSocket close-frame, and lower-level no-body framing cases are documented; `docs/api.md` was regenerated from `API.md`. Added a backlog follow-up for optional future error-envelope normalization. Verification passed: `python3 tools/sync_docs.py --check`, scoped `git diff --check`, mirror equivalence check, manual source-to-doc review, and api-documenter/reviewer/qa-expert subagent reviews.

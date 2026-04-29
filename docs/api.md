@@ -6,7 +6,26 @@ All responses include standard headers: `Server`, `Date`, `Connection`, and
 `X-Content-Type-Options: nosniff` (`close` by default, `keep-alive` when the
 server keeps the socket open).
 CORS headers are only emitted when CORS is explicitly enabled.
-Error responses use JSON format: `{"error": "message", "status": NNN}`.
+Error response bodies are endpoint-specific. Most shared handler and pipeline
+errors use JSON format `{"error": "message", "status": NNN}`, but several
+legacy paths return text, an empty body, or endpoint-specific JSON as documented
+below.
+
+## Error Response Bodies
+
+| Surface | Error body contract |
+|---------|---------------------|
+| GET | `404` uses JSON `{"error": "File not found: <path>", "status": 404}`. |
+| HEAD | Same status and headers as GET, but with an empty body. |
+| POST / PUT / PATCH / NONE | Empty uploads return JSON `{"success": false, "error": "...", "hint": "..."}`. Write failures return JSON `{"success": false, "error": "..."}`. Request-level upload size failures use JSON `{"error": "...", "status": 413}`. |
+| DELETE | File/path validation errors generally use JSON `{"error": "...", "status": NNN}`. Clear-upload failures use endpoint JSON with `success`, `error`, deletion counters, `preserved`, and `errors`. |
+| FETCH | Missing files return legacy `text/plain` body `Cannot fetch: <path>` with `X-Fetch-Status: file-not-found`. |
+| INFO | Invalid paths return legacy `text/plain` body `Invalid path`. Missing paths return JSON `{"exists": false, "path": "<path>"}`. Hidden paths use the shared JSON error body. |
+| SMUGGLE | Missing files return JSON `{"error": "File not found", "path": "<path>"}`. Source-size failures use JSON `{"error": "...", "status": 413, ...size fields...}`. |
+| NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
+| WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
+| Advanced upload | Unknown methods return shared JSON `405` unless `--advanced-upload` is enabled and the request carries an advanced payload in the body, headers, chunked headers, or query string. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
+| Auth and request guards | Basic-auth failures, auth rate limits, declared `Content-Length` upload-size failures, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Lower-level framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
 ---
 
