@@ -59,3 +59,9 @@
 - Files changed: `API.md`, `docs/api.md`, `implementation-plan/20260428-154031/backlog.md`, `implementation-plan/20260428-154031/stages/STAGE-010-api-error-contract-docs.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-010-20260429-162933.md`
 - Verification: `python3 tools/sync_docs.py --check`; scoped `git diff --check`; `diff -u API.md <(tail -n +3 docs/api.md)`; static source-to-doc review across handler and request-pipeline error paths; api-documenter, reviewer, and qa-expert verifier subagents passed after fixing an intermediate request-framing wording gap.
 - Report: `stage-reports/STAGE-010-20260429-162933.md`
+
+## 2026-04-29 16:59:26 MSK — STAGE-011
+- Status: CLOSED
+- Files changed: `CLAUDE.md`, `implementation-plan/20260428-154031/stages/STAGE-011-claude-stale-guidance.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-011-20260429-164957.md`
+- Verification: `.venv/bin/pytest tests/test_cli.py -q` (`31 passed`); `PATH=.venv/bin:$PATH pytest tests/test_cli.py -q` (`31 passed`); `git diff --check CLAUDE.md`; stale-guidance grep for removed flags, OPSEC wording, sandbox wording, and unsafe `startswith` path advice; canonical-doc anchor grep; documentation-engineer and security-auditor verifier subagents passed. Host `pytest tests/test_cli.py -q` failed before running tests because global Python lacks `pytest`, treated as an environment issue because the project `.venv` checks passed.
+- Report: `stage-reports/STAGE-011-20260429-164957.md`

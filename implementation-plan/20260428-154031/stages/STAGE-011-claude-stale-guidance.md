@@ -1,7 +1,7 @@
 # STAGE-011 — Remove Stale CLAUDE Guidance
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -64,4 +64,4 @@ HIGH
 - Rollback: Revert `CLAUDE.md` changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-29 16:59:26 MSK. `CLAUDE.md` no longer documents removed `--opsec`, `--sandbox`, `OpsecHandlersMixin`, OPSEC upload/header flow, or unsafe string-prefix path containment. It now points contributors to `README.md`, `API.md`, `CONTRIBUTING.md`, and ADR-004, describes current `--advanced-upload` unknown-method handling, and directs path checks to `Path.resolve().relative_to()` via `resolve_descendant_path()` / `BaseHandler._resolve_safe_path()`. Verification passed: project-venv CLI tests (`31 passed`), scoped `git diff --check`, stale-guidance grep, canonical-doc anchor grep, and documentation/security verifier subagents.
