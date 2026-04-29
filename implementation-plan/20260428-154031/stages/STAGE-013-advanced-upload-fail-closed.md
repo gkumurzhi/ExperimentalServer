@@ -1,7 +1,7 @@
 # STAGE-013 — Fail Closed for Advanced Upload Crypto Errors
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -47,10 +47,10 @@ Advanced upload rejects authenticated decryption failures, AES without crypto su
 4. Add tests for wrong key, tampered ciphertext, no-crypto AES, and malformed URL base64.
 
 ## Acceptance criteria
-- [ ] Wrong-key/tampered AES-GCM uploads return 400 and do not write ciphertext as success.
-- [ ] `e=aes` without crypto support fails clearly.
-- [ ] URL base64 validation behavior matches header/body strictness.
-- [ ] Existing valid XOR/AES/HMAC upload tests still pass.
+- [x] Wrong-key/tampered AES-GCM uploads return 400 and do not write ciphertext as success.
+- [x] `e=aes` without crypto support fails clearly.
+- [x] URL base64 validation behavior matches header/body strictness.
+- [x] Existing valid XOR/AES/HMAC upload tests still pass.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -68,4 +68,4 @@ Advanced upload rejects authenticated decryption failures, AES without crypto su
 - Rollback: Revert advanced-upload crypto handling and tests for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-29 19:15:28 MSK. Advanced upload now uses strict URL base64 validation, explicit AES/XOR decrypt modes, and returns 400 before writes when requested decryption fails or AES support is unavailable. Added regressions for wrong-key AES, tampered AES header/URL payloads, no-crypto AES, URL base64 validation, and decrypt mode selection. Verification passed with `.venv/bin/python -m pytest tests/test_handlers/test_handler_integration.py tests/test_security/test_crypto.py -q` (109 passed), `.venv/bin/python -m compileall src tests`, scoped `ruff check`, `git diff --check`, static decrypt call-site review, and security/QA verifier subagents. Host/global `pytest` is unavailable because global Python lacks `pytest`; project `.venv` checks passed.

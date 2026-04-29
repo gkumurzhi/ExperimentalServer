@@ -44,7 +44,7 @@ class AdvancedUploadHandlersMixin(BaseHandler):
         if padding != 4:
             data += "=" * padding
         try:
-            return base64.b64decode(data)
+            return base64.b64decode(data, validate=True)
         except (binascii.Error, ValueError):
             return b""
 
@@ -222,9 +222,22 @@ class AdvancedUploadHandlersMixin(BaseHandler):
                 return response
 
         if encryption and decrypt_key:
-            decrypted = decrypt(file_data, decrypt_key)
-            if decrypted is not None:
-                file_data = decrypted
+            encryption_mode = encryption.lower()
+            try:
+                if encryption_mode == "aes":
+                    decrypted = decrypt(file_data, decrypt_key, algorithm="aes")
+                elif encryption_mode == "xor":
+                    decrypted = decrypt(file_data, decrypt_key, algorithm="xor")
+                else:
+                    decrypted = decrypt(file_data, decrypt_key)
+            except RuntimeError:
+                logger.warning("Advanced upload AES decryption requested without crypto support")
+                return self._bad_request("AES decryption unavailable")
+
+            if decrypted is None:
+                logger.warning("Advanced upload decryption failed")
+                return self._bad_request("Advanced upload decryption failed")
+            file_data = decrypted
 
         if not filename:
             data_hash = hashlib.sha256(file_data).hexdigest()[:12]

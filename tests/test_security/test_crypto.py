@@ -277,6 +277,23 @@ class TestUnifiedEncryptDecrypt:
         decrypted = decrypt(xor_encrypted, password)
         assert decrypted == data
 
+    def test_decrypt_forces_xor_when_requested(self):
+        """Explicit XOR mode does not try AES based on the first byte."""
+        data = b"jxor ciphertext starts with aes marker"
+        password = "key"
+        xor_encrypted = xor_encrypt(data, password)
+        assert xor_encrypted[0] == 0x01
+        decrypted = decrypt(xor_encrypted, password, algorithm="xor")
+        assert decrypted == data
+
+    def test_decrypt_requested_aes_requires_crypto_support(self, monkeypatch):
+        """Explicit AES mode fails before falling back to XOR if crypto is unavailable."""
+        import src.security.crypto as crypto
+
+        monkeypatch.setattr(crypto, "HAS_CRYPTOGRAPHY", False)
+        with pytest.raises(RuntimeError):
+            decrypt(bytes([1]) + b"x" * 44, "pw", algorithm="aes")
+
     def test_roundtrip_large_payload(self):
         """Test encrypt/decrypt with a larger payload."""
         data = b"A" * 1_000_000  # 1 MB

@@ -448,6 +448,13 @@ class TestHandleOpsecUpload:
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
+    def test_opsec_invalid_url_base64_returns_400_without_writing(self, temp_dir, upload_dir):
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        req = make_request("XUPLOAD", "/?d=not!!!base64")
+        resp = srv.handle_advanced_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
     def test_opsec_invalid_kb64_returns_400_without_writing(self, temp_dir, upload_dir):
         import base64
 
@@ -1024,8 +1031,8 @@ class TestOpsecAESDecryption:
         not _has_cryptography(),
         reason="cryptography package not installed",
     )
-    def test_opsec_aes_wrong_key_saves_encrypted(self, temp_dir, upload_dir):
-        """AES with wrong key → decrypt() returns None → file saved encrypted."""
+    def test_opsec_aes_wrong_key_returns_400_without_writing(self, temp_dir, upload_dir):
+        """AES with wrong key fails closed without writing ciphertext."""
         import base64
 
         from src.security.crypto import aes_encrypt
@@ -1044,10 +1051,83 @@ class TestOpsecAESDecryption:
             },
         )
         resp = srv.handle_advanced_upload(req)
-        assert resp.status_code == 200
-        # With wrong key, decrypt returns None so original encrypted data is saved
-        saved = list(upload_dir.iterdir())
-        assert any(f.read_bytes() == encrypted for f in saved)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_aes_tampered_headers_return_400_without_writing(self, temp_dir, upload_dir):
+        """Tampered AES-GCM header payload fails closed without writing ciphertext."""
+        import base64
+
+        from src.security.crypto import aes_encrypt
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        encrypted = bytearray(aes_encrypt(b"tamper me", "correct_key"))
+        encrypted[-1] ^= 0x01
+        b64 = base64.b64encode(bytes(encrypted)).decode()
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "aes",
+                "X-K": "correct_key",
+            },
+        )
+        resp = srv.handle_advanced_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    @pytest.mark.skipif(
+        not _has_cryptography(),
+        reason="cryptography package not installed",
+    )
+    def test_opsec_aes_tampered_url_returns_400_without_writing(self, temp_dir, upload_dir):
+        """Tampered AES-GCM URL payload fails closed without writing ciphertext."""
+        import base64
+
+        from src.security.crypto import aes_encrypt
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        encrypted = bytearray(aes_encrypt(b"url tamper me", "correct_key"))
+        encrypted[-1] ^= 0x01
+        b64 = base64.urlsafe_b64encode(bytes(encrypted)).decode().rstrip("=")
+        req = make_request("XUPLOAD", f"/?d={b64}&e=aes&k=correct_key")
+        resp = srv.handle_advanced_upload(req)
+        assert resp.status_code == 400
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_aes_without_crypto_returns_400_without_writing(
+        self,
+        temp_dir,
+        upload_dir,
+        monkeypatch,
+    ):
+        """Requested AES fails clearly when cryptography support is unavailable."""
+        import base64
+
+        import src.security.crypto as crypto
+
+        monkeypatch.setattr(crypto, "HAS_CRYPTOGRAPHY", False)
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        aes_like_payload = bytes([1]) + b"x" * 44
+        b64 = base64.b64encode(aes_like_payload).decode()
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "X-D": b64,
+                "X-E": "aes",
+                "X-K": "correct_key",
+            },
+        )
+        resp = srv.handle_advanced_upload(req)
+        assert resp.status_code == 400
+        assert json.loads(resp.body)["error"] == "AES decryption unavailable"
+        assert list(upload_dir.iterdir()) == []
 
     @pytest.mark.skipif(
         not _has_cryptography(),

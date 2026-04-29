@@ -15,6 +15,7 @@ import hmac
 import logging
 import os
 from pathlib import Path
+from typing import Literal
 
 logger = logging.getLogger("httpserver")
 
@@ -130,20 +131,35 @@ def encrypt(data: bytes, password: str) -> bytes:
     return xor_bytes(data, password)
 
 
-def decrypt(data: bytes, password: str) -> bytes | None:
+EncryptionAlgorithm = Literal["auto", "aes", "xor"]
+
+
+def decrypt(
+    data: bytes,
+    password: str,
+    *,
+    algorithm: EncryptionAlgorithm = "auto",
+) -> bytes | None:
     """
     Decrypt data, auto-detecting the format.
 
-    If the data starts with the AES version marker, uses AES-256-GCM.
-    Otherwise falls back to XOR decryption.
+    In ``auto`` mode, if the data starts with the AES version marker and
+    cryptography is installed, uses AES-256-GCM. Otherwise falls back to XOR
+    decryption. Explicit ``aes`` and ``xor`` modes are available for request
+    handlers that already know the client-selected algorithm.
 
     Args:
         data: Encrypted data.
         password: Password.
+        algorithm: ``auto`` to detect, or an explicit supported algorithm.
 
     Returns:
         Decrypted data, or None if AES decryption fails.
     """
+    if algorithm == "aes":
+        return aes_decrypt(data, password)
+    if algorithm == "xor":
+        return xor_bytes(data, password)
     if len(data) > 0 and data[0] == _AES_VERSION and HAS_CRYPTOGRAPHY:
         return aes_decrypt(data, password)
     # XOR fallback (symmetric, always succeeds)
