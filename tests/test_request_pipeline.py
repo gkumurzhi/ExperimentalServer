@@ -127,6 +127,50 @@ class _PipelineServerStub:
 
 
 class TestRequestPipeline:
+    def test_malformed_request_returns_400_before_side_effects(self) -> None:
+        server = _PipelineServerStub()
+        pipeline = RequestPipeline(server)
+        sock = _SocketStub()
+
+        result = pipeline.process(
+            b"SYNCDATA\r\nX-D: cGF5bG9hZA==\r\n\r\n",
+            sock,
+            ("127.0.0.1", 12345),
+            1,
+        )
+
+        assert result is False
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 400" in sock.sent[0]
+        assert server.resolve_calls == []
+        assert server.auth_calls == []
+        assert server.size_calls == []
+        assert server.dispatch_calls == []
+        assert server.post_process_calls == []
+        assert server.send_calls == []
+        assert server.record_calls == [(400, len(sock.sent[0]), False)]
+
+    def test_invalid_request_target_returns_400_before_side_effects(self) -> None:
+        server = _PipelineServerStub()
+        pipeline = RequestPipeline(server)
+        sock = _SocketStub()
+
+        result = pipeline.process(
+            b"XUPLOAD /\t HTTP/1.1\r\nX-D: cGF5bG9hZA==\r\n\r\n",
+            sock,
+            ("127.0.0.1", 12345),
+            1,
+        )
+
+        assert result is False
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 400" in sock.sent[0]
+        assert server.resolve_calls == []
+        assert server.auth_calls == []
+        assert server.size_calls == []
+        assert server.dispatch_calls == []
+        assert server.record_calls == [(400, len(sock.sent[0]), False)]
+
     def test_auth_error_short_circuits_and_uses_keep_alive_headers(self) -> None:
         server = _PipelineServerStub()
         server.use_keep_alive = True

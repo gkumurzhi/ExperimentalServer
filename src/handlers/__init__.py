@@ -54,6 +54,9 @@ class HandlerMixin(
 
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
         """Look up and invoke the handler for ``request.method``."""
+        if not request.is_valid:
+            return self._bad_request("Bad Request")
+
         handler = self.method_handlers.get(request.method)
         if handler:
             return handler(request)

@@ -1,7 +1,7 @@
 # STAGE-012 — Reject Malformed Request Lines
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -46,9 +46,9 @@ Malformed HTTP request lines return `400 Bad Request` before auth, dispatch, or 
 4. Verify valid unusual/custom methods still route according to advanced-upload rules.
 
 ## Acceptance criteria
-- [ ] Malformed request lines cannot create files through advanced upload.
-- [ ] Invalid parse failures return 400 consistently.
-- [ ] Valid standard and documented custom methods still work.
+- [x] Malformed request lines cannot create files through advanced upload.
+- [x] Invalid parse failures return 400 consistently.
+- [x] Valid standard and documented custom methods still work.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -66,4 +66,7 @@ Malformed HTTP request lines return `400 Bad Request` before auth, dispatch, or 
 - Rollback: Revert parser/pipeline/test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed: 2026-04-29 17:35:16 MSK
+- Report: `stage-reports/STAGE-012-20260429-171354.md`
+- Summary: `HTTPRequest` now exposes parser validity and rejects malformed request lines, invalid HTTP versions, invalid method tokens, and literal control/whitespace in request targets. `RequestPipeline` returns `400 Bad Request` immediately for invalid parses before keep-alive, auth, dispatch, or upload side effects, with a defense-in-depth guard before advanced-upload fallback in handler dispatch.
+- Verification: `.venv/bin/python -m pytest tests/test_http tests/test_handlers/test_handler_integration.py tests/test_request_pipeline.py -q` (`147 passed`); `.venv/bin/python -m pytest tests/test_property/test_request_parser.py -q` (`2 passed`); `python -m compileall src tests`; scoped `ruff check`; `git diff --check`; explorer, QA, security, and repeat correctness verifier subagents passed after fixing an intermediate request-target whitespace bypass.

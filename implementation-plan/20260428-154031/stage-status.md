@@ -13,7 +13,7 @@
 | STAGE-009 | CLOSED | HIGH | Correct SMUGGLE API Contract Docs | 2026-04-28 23:42:50 MSK | SMUGGLE API docs now describe JSON response, `X-Smuggle-URL`, follow-up HTML fetch, cleanup, and source cap; docs sync, targeted tests, and verifier subagents passed. | `stage-reports/STAGE-009-20260428-233531.md` |
 | STAGE-010 | CLOSED | HIGH | Correct API Error Contract Docs | 2026-04-29 16:42:43 MSK | API error docs now describe endpoint-specific JSON, text/plain, empty-body, WebSocket close-frame, and no-body framing cases; docs sync, static review, and verifier subagents passed. | `stage-reports/STAGE-010-20260429-162933.md` |
 | STAGE-011 | CLOSED | HIGH | Remove Stale CLAUDE Guidance | 2026-04-29 16:59:26 MSK | CLAUDE guidance now removes stale OPSEC/sandbox/path-prefix advice and points to current advanced-upload, canonical docs, and ADR-004; targeted tests and verifier subagents passed. | `stage-reports/STAGE-011-20260429-164957.md` |
-| STAGE-012 | OPEN | MEDIUM | Reject Malformed Request Lines | — | — | — |
+| STAGE-012 | CLOSED | MEDIUM | Reject Malformed Request Lines | 2026-04-29 17:35:16 MSK | Malformed request lines now return 400 before auth/dispatch/upload; targeted tests, compile, ruff, diff check, and verifier subagents passed. | `stage-reports/STAGE-012-20260429-171354.md` |
 | STAGE-013 | OPEN | MEDIUM | Fail Closed for Advanced Upload Crypto Errors | — | — | — |
 | STAGE-014 | OPEN | MEDIUM | Enforce Hidden Upload Policy Consistently | — | — | — |
 | STAGE-015 | OPEN | MEDIUM | Make CORS Origin and Header Contract Valid | — | — | — |

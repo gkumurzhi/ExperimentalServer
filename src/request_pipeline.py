@@ -95,6 +95,17 @@ class RequestPipeline:
 
         try:
             request = HTTPRequest(data)
+            if not request.is_valid:
+                logger.warning(
+                    "[%s] Malformed request from %s: %s",
+                    request_id,
+                    client_address[0],
+                    request.parse_error,
+                )
+                response = self._server._build_error_response(400, "Bad Request")
+                self._send_direct_response(response, client_socket, build_args)
+                return False
+
             use_keep_alive, remaining = self._server._resolve_keep_alive(request, request_num)
             build_args["keep_alive"] = use_keep_alive
             if use_keep_alive:

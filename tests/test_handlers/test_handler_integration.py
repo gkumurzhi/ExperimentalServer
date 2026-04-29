@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin
+from src.http import HTTPRequest
 from tests.conftest import make_request
 
 
@@ -351,6 +352,58 @@ class TestHandleOptions:
 
 
 class TestHandleOpsecUpload:
+    def test_malformed_request_cannot_use_advanced_upload_fallback(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        payload = base64.b64encode(b"blocked malformed upload").decode()
+        req = HTTPRequest(
+            (
+                "XUPLOAD\r\n"
+                f"X-D: {payload}\r\n"
+                "X-N: malformed.txt\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+
+        resp = srv._dispatch_handler(req)
+
+        assert resp.status_code == 400
+        assert not (upload_dir / "malformed.txt").exists()
+        assert list(upload_dir.iterdir()) == []
+
+    def test_invalid_request_target_cannot_use_advanced_upload_fallback(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        payload = base64.b64encode(b"blocked target upload").decode()
+        req = HTTPRequest(
+            (
+                "XUPLOAD /\t HTTP/1.1\r\n"
+                f"X-D: {payload}\r\n"
+                "X-N: target.txt\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+
+        resp = srv._dispatch_handler(req)
+
+        assert resp.status_code == 400
+        assert not (upload_dir / "target.txt").exists()
+        assert list(upload_dir.iterdir()) == []
+
+    def test_valid_unknown_method_still_uses_advanced_upload_fallback(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        payload = base64.b64encode(b"valid fallback upload").decode()
+        req = make_request("XUPLOAD", "/", headers={"X-D": payload, "X-N": "fallback.txt"})
+
+        resp = srv._dispatch_handler(req)
+
+        assert resp.status_code == 200
+        assert (upload_dir / "fallback.txt").read_bytes() == b"valid fallback upload"
+
     def test_opsec_json_upload(self, temp_dir, upload_dir):
         import base64
 

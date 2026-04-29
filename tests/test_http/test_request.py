@@ -79,6 +79,43 @@ class TestHTTPRequest:
 
         assert request.query_params == {}
 
+    def test_missing_http_version_marks_request_invalid(self):
+        """Malformed request lines are not treated as dispatchable requests."""
+        raw = b"GET /plain\r\nHost: localhost\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.is_valid is False
+        assert request.parse_error == "Malformed request line"
+        assert request.method == ""
+        assert request.path == ""
+
+    def test_extra_request_line_spaces_mark_request_invalid(self):
+        """Request-line spacing must not shift method/path/version fields."""
+        raw = b"GET  /plain HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.is_valid is False
+        assert request.parse_error == "Malformed request line"
+        assert request.method == ""
+        assert request.path == ""
+
+    def test_invalid_http_version_marks_request_invalid(self):
+        """Invalid HTTP versions are rejected by parser validity state."""
+        raw = b"GET /plain NOTHTTP\r\nHost: localhost\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.is_valid is False
+        assert request.parse_error == "Invalid HTTP version"
+
+    def test_request_target_whitespace_marks_request_invalid(self):
+        """Literal whitespace in request-target must not be normalized into a path."""
+        raw = b"GET /\t HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        request = HTTPRequest(raw)
+
+        assert request.is_valid is False
+        assert request.parse_error == "Invalid request target"
+        assert request.path == ""
+
     def test_repr(self):
         """Test string representation."""
         raw = b"GET /test HTTP/1.1\r\n\r\n"
