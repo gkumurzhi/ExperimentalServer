@@ -1,7 +1,7 @@
 # STAGE-014 — Enforce Hidden Upload Policy Consistently
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -46,9 +46,9 @@ Hidden-file access policy under `uploads/` is documented in code and enforced un
 4. Ensure visible files remain unaffected.
 
 ## Acceptance criteria
-- [ ] Hidden upload files are not readable through FETCH or SMUGGLE if GET/INFO deny them.
-- [ ] DELETE behavior follows the documented policy.
-- [ ] Tests cover the method matrix for hidden and visible files.
+- [x] Hidden upload files are not readable through FETCH or SMUGGLE if GET/INFO deny them.
+- [x] DELETE behavior follows the documented policy.
+- [x] Tests cover the method matrix for hidden and visible files.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -66,4 +66,4 @@ Hidden-file access policy under `uploads/` is documented in code and enforced un
 - Rollback: Revert hidden-policy handler/test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-29 19:58:30 MSK. Hidden upload paths now return not found before FETCH, SMUGGLE, and single-file DELETE can resolve/read/delete them; INFO directory listings also hide service-owned entries from `HIDDEN_FILES`. Added hidden/visible method matrix coverage for GET, INFO, FETCH, SMUGGLE, and DELETE. Verification passed: targeted hidden-policy tests, compileall, scoped ruff, diff check, broader handler/server tests, and verifier subagents.

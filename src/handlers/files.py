@@ -185,6 +185,9 @@ class FileHandlersMixin(BaseHandler):
 
     def handle_delete(self, request: HTTPRequest) -> HTTPResponse:
         """Handle DELETE request — delete file from uploads/."""
+        if self._is_hidden_file(request.path):
+            return self._not_found(request.path)
+
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists():
@@ -334,6 +337,12 @@ class FileHandlersMixin(BaseHandler):
 
     def handle_fetch(self, request: HTTPRequest) -> HTTPResponse:
         """Custom FETCH method — file download."""
+        if self._is_hidden_file(request.path):
+            response = HTTPResponse(404)
+            response.set_header("X-Fetch-Status", "file-not-found")
+            response.set_body(f"Cannot fetch: {request.path}", "text/plain")
+            return response
+
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists() or file_path.is_dir():

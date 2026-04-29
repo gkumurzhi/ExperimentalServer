@@ -6,7 +6,7 @@ Server configuration.
 __version__ = "2.0.0"
 
 
-# Hidden files, inaccessible via GET
+# Hidden/service-owned paths are inaccessible via external file methods.
 HIDDEN_FILES: frozenset[str] = frozenset(
     {
         ".opsec_config.json",

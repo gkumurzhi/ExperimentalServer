@@ -254,6 +254,23 @@ class TestHandleInfo:
         assert "a.txt" in names
         assert "b.txt" in names
 
+    def test_info_directory_listing_hides_hidden_and_service_owned_entries(
+        self,
+        server,
+        upload_dir,
+    ):
+        (upload_dir / ".secret").write_text("secret")
+        (upload_dir / "__pycache__").mkdir()
+        (upload_dir / "visible.txt").write_text("visible")
+
+        req = make_request("INFO", "/uploads")
+        resp = server.handle_info(req)
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        names = [c["name"] for c in data["contents"]]
+        assert names == ["visible.txt"]
+
     def test_info_sandbox_restricts_to_uploads(self, sandbox_server, upload_dir):
         (upload_dir / "s.txt").write_text("sandbox")
         req = make_request("INFO", "/uploads/s.txt")
@@ -285,6 +302,65 @@ class TestHandleInfo:
         assert len(data["contents"]) == 2
         assert data["offset"] == 2
         assert data["limit"] == 2
+
+
+class TestHiddenUploadPolicy:
+    @pytest.mark.parametrize(
+        ("method", "handler_name"),
+        [
+            ("GET", "handle_get"),
+            ("INFO", "handle_info"),
+            ("FETCH", "handle_fetch"),
+            ("SMUGGLE", "handle_smuggle"),
+            ("DELETE", "handle_delete"),
+        ],
+    )
+    def test_hidden_upload_file_is_not_exposed_by_file_methods(
+        self,
+        server,
+        upload_dir,
+        method,
+        handler_name,
+    ):
+        hidden = upload_dir / ".secret"
+        hidden.write_text("SECRET=x")
+
+        req = make_request(method, "/uploads/.secret")
+        resp = getattr(server, handler_name)(req)
+
+        assert resp.status_code == 404
+        assert hidden.exists()
+        assert server._temp_smuggle_files == set()
+        assert list(upload_dir.glob("smuggle_*.html")) == []
+
+    @pytest.mark.parametrize(
+        ("method", "handler_name"),
+        [
+            ("GET", "handle_get"),
+            ("INFO", "handle_info"),
+            ("FETCH", "handle_fetch"),
+            ("SMUGGLE", "handle_smuggle"),
+            ("DELETE", "handle_delete"),
+        ],
+    )
+    def test_visible_upload_file_methods_still_work(
+        self,
+        server,
+        upload_dir,
+        method,
+        handler_name,
+    ):
+        visible = upload_dir / "visible.txt"
+        visible.write_text("visible")
+
+        req = make_request(method, "/uploads/visible.txt")
+        resp = getattr(server, handler_name)(req)
+
+        assert resp.status_code == 200
+        if method == "DELETE":
+            assert not visible.exists()
+        else:
+            assert visible.exists()
 
 
 # ── PING tests ─────────────────────────────────────────────────────

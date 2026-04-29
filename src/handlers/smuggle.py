@@ -32,6 +32,13 @@ class SmuggleHandlersMixin(BaseHandler):
         """
         encrypt = request.query_params.get("encrypt") == "1"
 
+        if self._is_hidden_file(request.path):
+            response = HTTPResponse(404)
+            response.set_body(
+                json.dumps({"error": "File not found", "path": request.path}), "application/json"
+            )
+            return response
+
         file_path = self._get_file_path(request.path, for_sandbox=True)
 
         if file_path is None or not file_path.exists() or file_path.is_dir():

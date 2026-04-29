@@ -8,7 +8,7 @@ import mimetypes
 from datetime import datetime, timezone
 from typing import Any
 
-from ..config import __version__
+from ..config import HIDDEN_FILES, __version__
 from ..http import HTTPRequest, HTTPResponse
 from .base import BaseHandler
 
@@ -70,7 +70,7 @@ class InfoHandlersMixin(BaseHandler):
             all_items = [
                 {"name": f.name, "is_dir": f.is_dir()}
                 for f in sorted(file_path.iterdir())
-                if not f.name.startswith(".")
+                if not f.name.startswith(".") and f.name not in HIDDEN_FILES
             ]
 
             # Pagination: ?offset=N&limit=M (defaults: offset=0, limit=100)
