@@ -1,7 +1,7 @@
 # STAGE-023 — Align UI Capabilities, A11y, and Smoke Checks
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -47,10 +47,10 @@ The UI reflects server advanced-upload capability, announces key notepad states 
 4. Add smoke checks for loaded static UI scripts and redaction/capability states; replace fixed sleeps with concrete readiness conditions.
 
 ## Acceptance criteria
-- [ ] Advanced upload UI is unavailable or explanatory when server support is off.
-- [ ] Notepad status changes are exposed to assistive technology.
-- [ ] Smoke helper fails when the expected checked/visible state is wrong.
-- [ ] Smoke checks include referenced static UI assets.
+- [x] Advanced upload UI is unavailable or explanatory when server support is off.
+- [x] Notepad status changes are exposed to assistive technology.
+- [x] Smoke helper fails when the expected checked/visible state is wrong.
+- [x] Smoke checks include referenced static UI assets.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -69,4 +69,4 @@ The UI reflects server advanced-upload capability, announces key notepad states 
 - Rollback: Revert UI/smoke changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 17:52:32 MSK. UI now derives advanced-upload availability from `PING.advanced_upload`, keeps the advanced tab operable with an explanatory unavailable state while disabling advanced-upload controls/dropzone when unsupported, and suppresses disabled drag/drop fallback behavior. Notepad save and connection statuses now expose live-region semantics with changing connection text. Browser smoke now asserts static UI assets, capability true/false states, disabled advanced-upload drag/drop behavior, notepad live status text, and request-preview checked/visible expectations.

@@ -32,6 +32,7 @@ const notepadDeleteSelectedBtnEl = document.getElementById('notepadDeleteSelecte
 const notepadClearBtnEl = document.getElementById('notepadClearBtn');
 const notepadRefreshBtnEl = document.getElementById('notepadRefreshBtn');
 const notepadConnStatus = document.getElementById('notepadConnStatus');
+const notepadConnStatusText = document.getElementById('notepadConnStatusText');
 const notepadNoteListEl = document.getElementById('notepadNoteList');
 const notepadTransportInputs = Array.from(document.querySelectorAll('input[name="notepadTransport"]'));
 const notepadSelectedIds = new Set();
@@ -328,6 +329,9 @@ function notepadSetConnStatus(cls, title) {
     notepadConnStatus.dataset.transport = notepadGetTransport();
     notepadConnStatus.title = title;
     notepadConnStatus.setAttribute('aria-label', title);
+    if (notepadConnStatusText) {
+        notepadConnStatusText.textContent = title;
+    }
 }
 
 function notepadGetConnStatusText(connState) {

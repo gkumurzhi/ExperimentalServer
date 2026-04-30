@@ -285,6 +285,7 @@
                                 </div>
                             </div>
 
+                            <div id="opsecCapabilityNotice" class="inline-alert inline-alert--warning" role="status" aria-live="polite" aria-atomic="true" hidden></div>
                             <div id="opsecTransportWarning" class="inline-alert inline-alert--warning" role="status" aria-live="polite" aria-atomic="true" hidden></div>
 
                             <div class="upload-section dropzone dropzone--opsec" id="opsecDropZone" tabindex="0" role="button" aria-controls="opsecFileInput" aria-describedby="opsecSelectionState" aria-label="Выбрать файл для продвинутой загрузки" data-i18n-aria-label="opsecDropZoneLabel">
@@ -430,7 +431,10 @@
                             <div class="transport-toggle">
                                 <label><input type="radio" name="notepadTransport" value="http" checked> <span data-i18n="notepadTransportHttp">HTTP</span></label>
                                 <label><input type="radio" name="notepadTransport" value="ws"> <span data-i18n="notepadTransportWs">WS</span></label>
-                                <span class="notepad-connection-status" id="notepadConnStatus" title="">&#9679;</span>
+                                <span class="notepad-connection-status" id="notepadConnStatus" title="" role="status" aria-live="polite" aria-atomic="true">
+                                    <span aria-hidden="true">&#9679;</span>
+                                    <span class="sr-only" id="notepadConnStatusText"></span>
+                                </span>
                             </div>
                         </div>
 
@@ -451,7 +455,7 @@
                             <div class="notepad-editor">
                                 <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Текст... (шифруется)" disabled></textarea>
                                 <div class="notepad-status-bar">
-                                    <span class="save-indicator" id="notepadSaveIndicator" data-i18n="notepadConnecting">Подключение...</span>
+                                    <span class="save-indicator" id="notepadSaveIndicator" data-i18n="notepadConnecting" role="status" aria-live="polite" aria-atomic="true">Подключение...</span>
                                     <span id="notepadCharCount">0 chars</span>
                                 </div>
                             </div>

@@ -247,6 +247,9 @@ const translations = {
         opsecHeaderSizeWarning: "Файл может быть слишком большой для заголовков (~32 КБ макс). Рекомендуется Body.",
         opsecTransportAutoSwitch: "Транспорт переключён на {0} (файл слишком большой для {1})",
         opsecTransportUsed: "Транспорт",
+        opsecCapabilityChecking: "Проверка поддержки продвинутой загрузки...",
+        opsecUnavailableServer: "Продвинутая загрузка недоступна: сервер запущен без --advanced-upload.",
+        opsecCapabilityCheckFailed: "Не удалось проверить поддержку продвинутой загрузки.",
         viewInFiles: "Перейти к скачиванию →",
         tabNotepad: "Блокнот",
         notepadTitle: "Защищённый блокнот",
@@ -539,6 +542,9 @@ const translations = {
         opsecHeaderSizeWarning: "File may be too large for headers (~32 KB max). Body recommended.",
         opsecTransportAutoSwitch: "Transport switched to {0} (file too large for {1})",
         opsecTransportUsed: "Transport",
+        opsecCapabilityChecking: "Checking advanced upload support...",
+        opsecUnavailableServer: "Advanced upload unavailable: server was started without --advanced-upload.",
+        opsecCapabilityCheckFailed: "Could not verify advanced upload support.",
         viewInFiles: "Go to Download →",
         tabNotepad: "Notepad",
         notepadTitle: "Secure Notepad",
@@ -671,6 +677,10 @@ function applyTranslations() {
         refreshOpsecTransportWarningLocale();
     }
 
+    if (typeof refreshOpsecCapability === 'function') {
+        refreshOpsecCapability();
+    }
+
     if (typeof renderRequestPreview === 'function') {
         renderRequestPreview();
     }
@@ -740,6 +750,38 @@ let filesToUpload = [];
 
 // Server access scope flag
 let isUploadsOnlyMode = true;
+let advancedUploadCapability = {
+    available: false,
+    checked: false,
+    checkFailed: false,
+};
+
+function getAdvancedUploadCapability() {
+    return {
+        available: advancedUploadCapability.available,
+        checked: advancedUploadCapability.checked,
+        checkFailed: advancedUploadCapability.checkFailed,
+    };
+}
+
+function setAdvancedUploadCapability(available, options = {}) {
+    advancedUploadCapability = {
+        available: Boolean(available),
+        checked: options.checked !== false,
+        checkFailed: Boolean(options.checkFailed),
+    };
+
+    if (document.body) {
+        const state = advancedUploadCapability.available
+            ? 'enabled'
+            : (advancedUploadCapability.checkFailed ? 'error' : (advancedUploadCapability.checked ? 'disabled' : 'checking'));
+        document.body.dataset.advancedUploadCapability = state;
+    }
+
+    if (typeof refreshOpsecCapability === 'function') {
+        refreshOpsecCapability();
+    }
+}
 
 function announceLiveRegion(regionId, message) {
     const region = document.getElementById(regionId);
@@ -784,7 +826,9 @@ async function checkServerMode() {
             }
             document.getElementById('browsePathInput').value = '/';
         }
+        setAdvancedUploadCapability(info.advanced_upload === true, { checked: true });
     } catch (e) {
+        setAdvancedUploadCapability(false, { checked: true, checkFailed: true });
         console.log('Could not check server mode:', e);
     }
 }

@@ -7,12 +7,94 @@ const opsecEncryptCheckbox = document.getElementById('opsecEncrypt');
 const opsecPasswordInput = document.getElementById('opsecPassword');
 const opsecRandomMethodBtn = document.getElementById('opsecRandomMethodBtn');
 const opsecSelectionState = document.getElementById('opsecSelectionState');
+const opsecCapabilityNotice = document.getElementById('opsecCapabilityNotice');
 const opsecTransportWarning = document.getElementById('opsecTransportWarning');
+const opsecMethodInput = document.getElementById('opsecMethodInput');
+const opsecIncludeNameCheckbox = document.getElementById('opsecIncludeName');
+const opsecSendKeyCheckbox = document.getElementById('opsecSendKey');
+const opsecKeyBase64Checkbox = document.getElementById('opsecKeyBase64');
+const opsecTransportInputs = Array.from(document.querySelectorAll('input[name="opsecTransport"]'));
+
+function getOpsecCapability() {
+    if (typeof getAdvancedUploadCapability === 'function') {
+        return getAdvancedUploadCapability();
+    }
+    return { available: false, checked: false, checkFailed: false };
+}
+
+function getOpsecCapabilityMessageKey(capability) {
+    if (!capability.checked) {
+        return 'opsecCapabilityChecking';
+    }
+    return capability.checkFailed ? 'opsecCapabilityCheckFailed' : 'opsecUnavailableServer';
+}
+
+function refreshOpsecCapability() {
+    const capability = getOpsecCapability();
+    const enabled = capability.available === true;
+    const messageKey = getOpsecCapabilityMessageKey(capability);
+    const message = t(messageKey);
+    const tab = document.getElementById('tab-opsec');
+    const panel = document.getElementById('opsec-tab');
+
+    if (document.body) {
+        document.body.dataset.advancedUploadCapability = enabled
+            ? 'enabled'
+            : (capability.checkFailed ? 'error' : (capability.checked ? 'disabled' : 'checking'));
+    }
+
+    if (tab) {
+        tab.classList.toggle('is-capability-disabled', !enabled);
+        if (enabled) {
+            tab.removeAttribute('title');
+        } else {
+            tab.title = message;
+        }
+    }
+
+    if (panel) {
+        panel.dataset.advancedUploadCapability = enabled ? 'enabled' : 'disabled';
+    }
+
+    if (opsecCapabilityNotice) {
+        opsecCapabilityNotice.hidden = enabled;
+        opsecCapabilityNotice.textContent = enabled ? '' : message;
+    }
+
+    if (opsecMethodInput) opsecMethodInput.disabled = !enabled;
+    if (opsecRandomMethodBtn) opsecRandomMethodBtn.disabled = !enabled;
+    if (opsecFileInput) opsecFileInput.disabled = !enabled;
+    if (opsecIncludeNameCheckbox) opsecIncludeNameCheckbox.disabled = !enabled;
+    if (opsecEncryptCheckbox) opsecEncryptCheckbox.disabled = !enabled;
+    if (opsecSendKeyCheckbox) opsecSendKeyCheckbox.disabled = !enabled;
+    if (opsecPasswordInput) opsecPasswordInput.disabled = !enabled || !opsecEncryptCheckbox.checked;
+    if (opsecKeyBase64Checkbox) opsecKeyBase64Checkbox.disabled = !enabled || !opsecSendKeyCheckbox.checked;
+    opsecTransportInputs.forEach(input => {
+        input.disabled = !enabled;
+    });
+
+    if (opsecDropZone) {
+        opsecDropZone.classList.toggle('is-disabled', !enabled);
+        opsecDropZone.setAttribute('aria-disabled', String(!enabled));
+        opsecDropZone.setAttribute('tabindex', enabled ? '0' : '-1');
+    }
+
+    if (opsecUploadBtn) {
+        opsecUploadBtn.disabled = !enabled || !opsecFile;
+    }
+
+    if (!enabled) {
+        hideOpsecTransportWarning();
+    }
+}
 
 function bindDropZoneKeyboardTrigger(container, input) {
     container.addEventListener('keydown', (event) => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
+            if (input.disabled || container.getAttribute('aria-disabled') === 'true') {
+                return;
+            }
             input.click();
         }
     });
@@ -39,8 +121,8 @@ function refreshOpsecSelectionLocale() {
 
 function setOpsecFile(file) {
     opsecFile = file || null;
-    opsecUploadBtn.disabled = !opsecFile;
     refreshOpsecSelectionLocale();
+    refreshOpsecCapability();
 
     if (opsecFile) {
         announceLiveRegion('opsecResponseAreaLive', `${t('opsecFileSelected')}: ${opsecFile.name}`);
@@ -71,17 +153,15 @@ if (opsecUploadBtn) {
 
 // Toggle password field when encryption checkbox changes
 opsecEncryptCheckbox.addEventListener('change', () => {
-    opsecPasswordInput.disabled = !opsecEncryptCheckbox.checked;
-    if (opsecEncryptCheckbox.checked) {
+    refreshOpsecCapability();
+    if (getOpsecCapability().available && opsecEncryptCheckbox.checked) {
         opsecPasswordInput.focus();
     }
 });
 
 // Toggle base64 key checkbox when send key checkbox changes
-const opsecSendKeyCheckbox = document.getElementById('opsecSendKey');
-const opsecKeyBase64Checkbox = document.getElementById('opsecKeyBase64');
 opsecSendKeyCheckbox.addEventListener('change', () => {
-    opsecKeyBase64Checkbox.disabled = !opsecSendKeyCheckbox.checked;
+    refreshOpsecCapability();
     if (!opsecSendKeyCheckbox.checked) {
         opsecKeyBase64Checkbox.checked = false;
     }
@@ -161,6 +241,11 @@ function showOpsecTransportWarning(fromKey, toKey) {
 }
 
 function checkOpsecTransportWarning() {
+    if (!getOpsecCapability().available) {
+        hideOpsecTransportWarning();
+        return;
+    }
+
     const transport = document.querySelector('input[name="opsecTransport"]:checked')?.value || 'body';
     if (!opsecFile || transport === 'body') {
         hideOpsecTransportWarning();
@@ -202,6 +287,12 @@ bindDropZoneKeyboardTrigger(opsecDropZone, opsecFileInput);
 
 opsecDropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
+    if (!getOpsecCapability().available) {
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'none';
+        }
+        return;
+    }
     opsecDropZone.classList.add('dragover');
 });
 
@@ -212,16 +303,27 @@ opsecDropZone.addEventListener('dragleave', () => {
 opsecDropZone.addEventListener('drop', (e) => {
     e.preventDefault();
     opsecDropZone.classList.remove('dragover');
+    if (!getOpsecCapability().available) {
+        if (e.dataTransfer) {
+            e.dataTransfer.dropEffect = 'none';
+        }
+        return;
+    }
     if (e.dataTransfer.files.length > 0) {
         setOpsecFile(e.dataTransfer.files[0]);
     }
 });
 
 async function opsecUpload() {
+    if (!getOpsecCapability().available) {
+        announceLiveRegion('opsecResponseAreaLive', t(getOpsecCapabilityMessageKey(getOpsecCapability())));
+        refreshOpsecCapability();
+        return;
+    }
     if (!opsecFile) return;
 
-    const method = document.getElementById('opsecMethodInput').value || 'CHECKDATA';
-    const includeName = document.getElementById('opsecIncludeName').checked;
+    const method = opsecMethodInput.value || 'CHECKDATA';
+    const includeName = opsecIncludeNameCheckbox.checked;
     const useEncryption = opsecEncryptCheckbox.checked;
     const password = opsecPasswordInput.value;
     const transport = document.querySelector('input[name="opsecTransport"]:checked')?.value || 'body';
@@ -486,7 +588,8 @@ ${t('opsecEncryption')}: ${useEncryption ? (sendKeyToServer ? t('opsecXorDecrypt
         });
     }
 
-    opsecUploadBtn.disabled = false;
+    refreshOpsecCapability();
 }
 
 refreshOpsecSelectionLocale();
+refreshOpsecCapability();

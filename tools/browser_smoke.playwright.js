@@ -140,11 +140,15 @@ async (page) => {
       `waitForConnectionStatus(${expectedState},${expectedTransport})`,
       ([state, transport]) => {
         const element = document.getElementById("notepadConnStatus");
+        const text = document.getElementById("notepadConnStatusText");
         return Boolean(
           element &&
+          text &&
           element.dataset &&
           element.dataset.state === state &&
-          element.dataset.transport === transport
+          element.dataset.transport === transport &&
+          text.textContent.trim().length > 0 &&
+          element.getAttribute("aria-label") === text.textContent.trim()
         );
       },
       [expectedState, expectedTransport],
@@ -200,28 +204,50 @@ async (page) => {
           opsecWarning.getAttribute("aria-atomic") === "true"
         );
 
-        return panelsOk && liveOk && opsecWarningOk;
+        const notepadSaveIndicator = document.getElementById("notepadSaveIndicator");
+        const notepadConnStatus = document.getElementById("notepadConnStatus");
+        const notepadConnStatusText = document.getElementById("notepadConnStatusText");
+        const notepadStatusOk = [notepadSaveIndicator, notepadConnStatus].every((region) =>
+          Boolean(
+            region &&
+            region.getAttribute("role") === "status" &&
+            region.getAttribute("aria-live") === "polite" &&
+            region.getAttribute("aria-atomic") === "true"
+          )
+        ) && Boolean(notepadConnStatusText);
+
+        return panelsOk && liveOk && opsecWarningOk && notepadStatusOk;
       },
       null,
       timeout
     );
   }
 
-  async function assertInspectorAssetLoaded(timeout = 10000) {
-    const asset = await page.evaluate(async () => {
-      const response = await fetch("/static/ui/inspector.js", { cache: "no-store" });
-      const body = await response.text();
-      return {
-        ok: response.ok,
-        status: response.status,
-        body,
-      };
+  async function assertStaticUiAssetsLoaded(timeout = 10000) {
+    const assets = await page.evaluate(async () => {
+      const urls = Array.from(document.querySelectorAll('script[src], link[rel="stylesheet"][href]'))
+        .map((element) => element.getAttribute("src") || element.getAttribute("href"))
+        .filter((url) => url && url.startsWith("/static/"));
+
+      return Promise.all(urls.map(async (url) => {
+        const response = await fetch(url, { cache: "no-store" });
+        const body = await response.text();
+        return {
+          url,
+          ok: response.ok,
+          status: response.status,
+          bodyLength: body.length,
+          containsInspectorApi: url === "/static/ui/inspector.js" && body.includes("function setExchangeInspector"),
+        };
+      }));
     });
 
-    if (!asset.ok) {
-      throw new Error(`Inspector asset request failed: ${asset.status}`);
+    const failed = assets.filter((asset) => !asset.ok || asset.bodyLength === 0);
+    if (failed.length > 0) {
+      throw new Error(`Static UI asset request failed: ${JSON.stringify(failed)}`);
     }
-    if (!asset.body.includes("function setExchangeInspector")) {
+    const inspectorAsset = assets.find((asset) => asset.url === "/static/ui/inspector.js");
+    if (!inspectorAsset || !inspectorAsset.containsInspectorApi) {
       throw new Error("Inspector asset does not contain setExchangeInspector");
     }
 
@@ -239,6 +265,93 @@ async (page) => {
         );
       },
       null,
+      timeout
+    );
+  }
+
+  async function waitForAdvancedUploadCapability(expectedAvailable, timeout = 10000) {
+    await waitForPageCondition(
+      `waitForAdvancedUploadCapability(${expectedAvailable})`,
+      ([available]) => {
+        const tab = document.getElementById("tab-opsec");
+        const panel = document.getElementById("opsec-tab");
+        const fileInput = document.getElementById("opsecFileInput");
+        const uploadBtn = document.getElementById("opsecUploadBtn");
+        const notice = document.getElementById("opsecCapabilityNotice");
+        const dropZone = document.getElementById("opsecDropZone");
+        const controls = [
+          document.getElementById("opsecMethodInput"),
+          document.getElementById("opsecRandomMethodBtn"),
+          document.getElementById("opsecIncludeName"),
+          document.getElementById("opsecEncrypt"),
+          document.getElementById("opsecSendKey"),
+          ...Array.from(document.querySelectorAll('input[name="opsecTransport"]')),
+        ];
+        const expectedState = available ? "enabled" : "disabled";
+        const noticeText = (notice && notice.textContent || "").trim();
+        const disabledControlsOk = available
+          ? controls.every((control) => control && control.disabled === false)
+          : controls.every((control) => control && control.disabled === true);
+        const dropZoneOk = Boolean(
+          dropZone &&
+          dropZone.getAttribute("aria-disabled") === String(!available) &&
+          dropZone.tabIndex === (available ? 0 : -1)
+        );
+        let disabledDragoverOk = true;
+        let disabledDropOk = true;
+        if (!available && dropZone) {
+          const dragoverEvent = new Event("dragover", { bubbles: true, cancelable: true });
+          const dragoverDataTransfer = { dropEffect: "copy" };
+          Object.defineProperty(dragoverEvent, "dataTransfer", { value: dragoverDataTransfer });
+          dropZone.dispatchEvent(dragoverEvent);
+          disabledDragoverOk =
+            dragoverEvent.defaultPrevented &&
+            dragoverDataTransfer.dropEffect === "none" &&
+            !dropZone.classList.contains("dragover");
+
+          const selectionState = document.getElementById("opsecSelectionState");
+          const liveRegion = document.getElementById("opsecResponseAreaLive");
+          const dropEvent = new Event("drop", { bubbles: true, cancelable: true });
+          const dropDataTransfer = {
+            dropEffect: "copy",
+            files: [new File(["blocked"], "disabled-opsec-drop.txt", { type: "text/plain" })],
+          };
+          Object.defineProperty(dropEvent, "dataTransfer", { value: dropDataTransfer });
+          dropZone.dispatchEvent(dropEvent);
+          disabledDropOk =
+            dropEvent.defaultPrevented &&
+            dropDataTransfer.dropEffect === "none" &&
+            uploadBtn &&
+            uploadBtn.disabled &&
+            selectionState &&
+            selectionState.hidden &&
+            !selectionState.textContent.includes("disabled-opsec-drop.txt") &&
+            liveRegion &&
+            !liveRegion.textContent.includes("disabled-opsec-drop.txt");
+        }
+
+        return Boolean(
+          document.body.dataset.advancedUploadCapability === expectedState &&
+          tab &&
+          tab.getAttribute("aria-disabled") !== "true" &&
+          !("disabled" in tab && tab.disabled === true) &&
+          tab.classList.contains("is-capability-disabled") === !available &&
+          panel &&
+          panel.dataset.advancedUploadCapability === (available ? "enabled" : "disabled") &&
+          fileInput &&
+          fileInput.disabled === !available &&
+          uploadBtn &&
+          uploadBtn.disabled === true &&
+          notice &&
+          notice.hidden === available &&
+          (available || noticeText.includes("--advanced-upload")) &&
+          disabledControlsOk &&
+          dropZoneOk &&
+          disabledDragoverOk &&
+          disabledDropOk
+        );
+      },
+      [expectedAvailable],
       timeout
     );
   }
@@ -406,16 +519,18 @@ async (page) => {
   async function assertRequestPreviewToggleState(expectedChecked, expectedVisible, timeout = 10000) {
     await waitForPageCondition(
       `assertRequestPreviewToggleState(${expectedChecked},${expectedVisible})`,
-      () => {
+      ([targetChecked, targetVisible]) => {
         const toggle = document.getElementById("requestPreviewToggle");
         const section = document.getElementById("requestPreviewSection");
+        const checkedOk = toggle ? toggle.checked === targetChecked : targetChecked === true;
+        const visibleOk = section && section.hidden === !targetVisible;
         return Boolean(
           section &&
-          section.hidden === false &&
-          (!toggle || toggle.checked === true)
+          checkedOk &&
+          visibleOk
         );
       },
-      null,
+      [expectedChecked, expectedVisible],
       timeout
     );
   }
@@ -1141,7 +1256,7 @@ async (page) => {
       issueText: "Проблема",
       label: "Легенда статусов методов",
     });
-    await assertRequestPreviewToggleState(false, false);
+    await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
     await waitForPageCondition(
@@ -2290,7 +2405,8 @@ async (page) => {
 
   async function runHappyPath() {
     await assertOutputLiveRegionContracts();
-    await assertInspectorAssetLoaded();
+    await assertStaticUiAssetsLoaded();
+    await waitForAdvancedUploadCapability(true);
     await waitForTabState("upload");
     const requestPanelFetchPath = await fetchViaRequestPanelAndAssert();
 
@@ -2516,12 +2632,13 @@ async (page) => {
     }
 
     async function getUnavailableSnapshot() {
-      return {
-        saveIndicator: (await page.locator("#notepadSaveIndicator").textContent() || "").trim(),
-        connTitle: await page.locator("#notepadConnStatus").getAttribute("title") || "",
-        connClass: await page.locator("#notepadConnStatus").evaluate((node) => node.className),
-        connState: await page.locator("#notepadConnStatus").getAttribute("data-state") || "",
-        connTransport: await page.locator("#notepadConnStatus").getAttribute("data-transport") || "",
+        return {
+          saveIndicator: (await page.locator("#notepadSaveIndicator").textContent() || "").trim(),
+          connTitle: await page.locator("#notepadConnStatus").getAttribute("title") || "",
+          connText: (await page.locator("#notepadConnStatusText").textContent() || "").trim(),
+          connClass: await page.locator("#notepadConnStatus").evaluate((node) => node.className),
+          connState: await page.locator("#notepadConnStatus").getAttribute("data-state") || "",
+          connTransport: await page.locator("#notepadConnStatus").getAttribute("data-transport") || "",
         noteListText: (await page.locator("#notepadNoteList").textContent() || "").trim(),
         titleDisabled: await page.locator("#notepadTitleInput").isDisabled(),
         textareaDisabled: await page.locator("#notepadTextarea").isDisabled(),
@@ -2546,6 +2663,9 @@ async (page) => {
       if (snapshot.connTitle !== expectedUnavailable) {
         throw new Error(`[${localeLabel}] Unexpected unavailable connection tooltip: ${snapshot.connTitle}`);
       }
+      if (snapshot.connText !== expectedUnavailable) {
+        throw new Error(`[${localeLabel}] Unexpected unavailable connection live text: ${snapshot.connText}`);
+      }
       if (snapshot.noteListText !== expectedUnavailable) {
         throw new Error(`[${localeLabel}] Unexpected unavailable note list text: ${snapshot.noteListText}`);
       }
@@ -2560,6 +2680,9 @@ async (page) => {
       "Notepad unavailable: exphttp[crypto] required on server.";
 
     await switchLanguage("ru");
+    await page.locator("#tab-opsec").click();
+    await waitForTabState("opsec", { focused: true });
+    await waitForAdvancedUploadCapability(false);
     await page.locator("#tab-notepad").click();
     await waitForUnavailableMessage(expectedUnavailableRu);
     const ruSnapshot = await getUnavailableSnapshot();
@@ -2578,7 +2701,7 @@ async (page) => {
 
   await waitForSpaReady();
   await installClipboardMock();
-  await page.waitForTimeout(100);
+  await waitForAdvancedUploadCapability(true);
   const happyPath = await runHappyPath();
 
   if (!unavailableUrl) {
@@ -2587,7 +2710,7 @@ async (page) => {
 
   await page.goto(unavailableUrl, { waitUntil: "domcontentloaded" });
   await waitForSpaReady();
-  await page.waitForTimeout(100);
+  await waitForAdvancedUploadCapability(false);
   const unavailablePath = await runUnavailablePath();
 
   return {
