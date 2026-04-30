@@ -17,7 +17,7 @@ below.
 |---------|---------------------|
 | GET | `404` uses JSON `{"error": "File not found: <path>", "status": 404}`. |
 | HEAD | Same status and headers as GET, but with an empty body. |
-| POST / PUT / PATCH / NONE | Empty uploads return JSON `{"success": false, "error": "...", "hint": "..."}`. Write failures return JSON `{"success": false, "error": "..."}`. Request-level upload size failures use JSON `{"error": "...", "status": 413}`. |
+| POST / PUT / PATCH / NONE | Empty uploads return JSON `{"success": false, "error": "...", "hint": "..."}`. Write failures return JSON `{"success": false, "error": "..."}`. Upload-size failures that reach the handler/pipeline use JSON `{"error": "...", "status": 413}`; receive-layer oversized request guards can close before dispatch. |
 | DELETE | File/path validation errors generally use JSON `{"error": "...", "status": NNN}`. Clear-upload failures use endpoint JSON with `success`, `error`, deletion counters, `preserved`, and `errors`. |
 | FETCH | Missing files return legacy `text/plain` body `Cannot fetch: <path>` with `X-Fetch-Status: file-not-found`. |
 | INFO | Invalid paths return legacy `text/plain` body `Invalid path`. Missing paths return JSON `{"exists": false, "path": "<path>"}`. Hidden paths use the shared JSON error body. |
@@ -25,7 +25,7 @@ below.
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
 | WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
 | Advanced upload | Unknown methods return shared JSON `405` unless `--advanced-upload` is enabled and the request carries an advanced payload in the body, headers, chunked headers, or query string. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
-| Auth and request guards | Basic-auth failures, auth rate limits, declared `Content-Length` upload-size failures, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Lower-level framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
+| Auth and request guards | Basic-auth failures, auth rate limits, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
 ---
 
@@ -561,6 +561,15 @@ headers, or query parameters. Common fields are:
 - `h` / `hmac`: integrity tag
 
 Header transport also supports chunked payload headers `X-D-0`, `X-D-1`, ... for long values.
+
+Advanced upload applies explicit memory caps before decoding or writing:
+
+- Decoded advanced-upload payloads are limited to 16 MB by default and never exceed `--max-size`.
+- JSON body `d` / `data` base64 strings are limited to the encoded size required for that decoded cap.
+- Header transport `X-D` and combined `X-D-0`, `X-D-1`, ... data are limited to 64 KB of encoded data by default.
+- URL query transport `?d=` is limited to 16 KB of encoded data by default.
+
+Over-limit advanced-upload requests return `413` JSON errors and do not write files. Larger uploads should use standard `POST`, `PUT`, `PATCH`, or `NONE` body uploads, which are governed by `--max-size`.
 
 **JSON body example:**
 

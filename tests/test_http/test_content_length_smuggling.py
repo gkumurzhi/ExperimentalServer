@@ -12,8 +12,27 @@ import socket
 import threading
 import time
 
+from src.http.io import receive_request
 from src.server import ExperimentalHTTPServer
 from tests.conftest import find_free_port
+
+
+class SingleRecvSocket:
+    """Socket test double that fails if receive_request asks for a body."""
+
+    def __init__(self, first_chunk: bytes):
+        self.first_chunk = first_chunk
+        self.recv_calls = 0
+        self.timeouts: list[float | None] = []
+
+    def settimeout(self, timeout: float | None) -> None:
+        self.timeouts.append(timeout)
+
+    def recv(self, _size: int) -> bytes:
+        self.recv_calls += 1
+        if self.recv_calls == 1:
+            return self.first_chunk
+        raise AssertionError("receive_request read body after oversized Content-Length")
 
 
 def _start_server(port: int) -> ExperimentalHTTPServer:
@@ -57,6 +76,21 @@ def _send_raw(port: int, raw: bytes, timeout: float = 2.0) -> bytes:
 
 class TestContentLengthSmuggling:
     """Verify Content-Length smuggling vectors are blocked."""
+
+    def test_oversized_declared_body_rejected_before_body_recv(self):
+        """Declared oversized body should be dropped after headers, before body allocation."""
+        raw = (
+            b"POST / HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            b"Content-Length: 1048577\r\n"
+            b"\r\n"
+        )
+        sock = SingleRecvSocket(raw)
+
+        response = receive_request(sock, max_upload_size=1024 * 1024)
+
+        assert response == b""
+        assert sock.recv_calls == 1
 
     def test_duplicate_different_content_lengths_rejected(self):
         """Two different Content-Length values should be rejected (empty response)."""

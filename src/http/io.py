@@ -113,6 +113,13 @@ def receive_request(
                     if parsed is None:
                         return b""
                     content_length = parsed
+                    if content_length > max_upload_size:
+                        logger.warning(
+                            "Declared Content-Length too large (%d bytes > %d bytes), dropping",
+                            content_length,
+                            max_upload_size,
+                        )
+                        return b""
                     headers_received = True
                     body_received = total_size - header_end_pos - 4
                     if body_received >= content_length:

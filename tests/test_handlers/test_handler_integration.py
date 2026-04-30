@@ -552,6 +552,85 @@ class TestHandleOpsecUpload:
         assert resp.status_code == 400
         assert list(upload_dir.iterdir()) == []
 
+    def test_opsec_header_payload_limit_returns_413_without_writing(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"header over limit"
+        b64 = base64.b64encode(raw).decode()
+        srv.advanced_upload_header_data_limit = len(b64) - 1
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", "/", headers={"X-D": b64}))
+
+        assert resp.status_code == 413
+        body = json.loads(resp.body)
+        assert body["status"] == 413
+        assert "Advanced upload header payload too large" in body["error"]
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_chunked_header_payload_limit_returns_413_without_joining_all(
+        self,
+        temp_dir,
+        upload_dir,
+    ):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"chunked header over limit"
+        b64 = base64.b64encode(raw).decode()
+        srv.advanced_upload_header_data_limit = len(b64) - 1
+        headers = {"X-D-0": b64[:8], "X-D-1": b64[8:]}
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", "/", headers=headers))
+
+        assert resp.status_code == 413
+        assert "Advanced upload header payload too large" in json.loads(resp.body)["error"]
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_url_payload_limit_returns_413_without_writing(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"url over limit"
+        b64 = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        srv.advanced_upload_url_data_limit = len(b64) - 1
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", f"/?d={b64}"))
+
+        assert resp.status_code == 413
+        assert "Advanced upload URL payload too large" in json.loads(resp.body)["error"]
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_decoded_payload_limit_returns_413_without_writing(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"12345"
+        srv.advanced_upload_decoded_size_limit = len(raw) - 1
+        payload = json.dumps({"d": base64.b64encode(raw).decode()}).encode()
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", "/", body=payload))
+
+        assert resp.status_code == 413
+        assert "Advanced upload decoded payload too large" in json.loads(resp.body)["error"]
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_payload_at_explicit_limits_still_uploads(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"fits explicit caps"
+        b64 = base64.b64encode(raw).decode()
+        srv.advanced_upload_decoded_size_limit = len(raw)
+        srv.advanced_upload_header_data_limit = len(b64)
+
+        resp = srv.handle_advanced_upload(
+            make_request("XUPLOAD", "/", headers={"X-D": b64, "X-N": "fits.bin"})
+        )
+
+        assert resp.status_code == 200
+        assert (upload_dir / "fits.bin").read_bytes() == raw
+
     def test_opsec_headers_transport(self, temp_dir, upload_dir):
         """X-D header with no body → 200, file saved correctly."""
         import base64

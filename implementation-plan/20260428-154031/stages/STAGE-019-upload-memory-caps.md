@@ -1,7 +1,7 @@
 # STAGE-019 — Reduce Upload Memory Spikes
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -47,9 +47,9 @@ Request upload paths reject oversized bodies earlier and cap memory-heavy base64
 4. Add tests for early rejection and transport-specific caps.
 
 ## Acceptance criteria
-- [ ] Oversized declared bodies are rejected before full allocation where headers are parseable.
-- [ ] Header/url/base64 advanced upload paths have explicit documented limits.
-- [ ] Valid near-normal-size uploads continue to work.
+- [x] Oversized declared bodies are rejected before full allocation where headers are parseable.
+- [x] Header/url/base64 advanced upload paths have explicit documented limits.
+- [x] Valid near-normal-size uploads continue to work.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,10 @@ Request upload paths reject oversized bodies earlier and cap memory-heavy base64
 - Rollback: Revert upload cap/receive-loop/test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+2026-04-30 16:11:23 MSK — CLOSED.
+
+- `src/http/io.py` now rejects parseable declared `Content-Length` values over the configured upload cap before reading the request body.
+- `src/handlers/advanced_upload.py` now caps decoded advanced-upload payloads, body/base64 encoded size, header/chunked-header encoded size, and URL encoded size; over-limit advanced-upload paths return JSON `413` without writing files.
+- `API.md` and generated `docs/api.md` document the new advanced-upload caps and the receive-layer connection-close behavior for early oversized request guards.
+- Verification passed: targeted upload/framing tests (`102 passed`), receive-loop tests (`17 passed`), full suite (`635 passed`), compile, scoped ruff, scoped mypy, docs sync, diff check, and performance/security verifier subagents.
+- Residual risk: header/query/body caps are enforced after raw request receipt/parsing; a separate request-line/header-size parser cap remains outside this stage's scope.

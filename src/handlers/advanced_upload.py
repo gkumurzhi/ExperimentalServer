@@ -18,6 +18,10 @@ logger = logging.getLogger("httpserver")
 
 Transport = Literal["body", "headers", "url"]
 
+ADVANCED_UPLOAD_DECODED_SIZE_LIMIT = 16 * 1024 * 1024
+ADVANCED_UPLOAD_HEADER_DATA_LIMIT = 64 * 1024
+ADVANCED_UPLOAD_URL_DATA_LIMIT = 16 * 1024
+
 
 class AdvancedUploadPayload(TypedDict, total=False):
     d: str
@@ -33,8 +37,88 @@ class AdvancedUploadPayload(TypedDict, total=False):
     _raw_body: bytes
 
 
+def _base64_encoded_limit(decoded_limit: int) -> int:
+    """Return the largest padded base64 length for ``decoded_limit`` bytes."""
+    return ((decoded_limit + 2) // 3) * 4
+
+
+def _non_negative_int(value: object, default: int) -> int:
+    """Coerce configurable limits while keeping invalid values fail-safe."""
+    if isinstance(value, int):
+        coerced = value
+    elif isinstance(value, str):
+        try:
+            coerced = int(value)
+        except ValueError:
+            return default
+    else:
+        return default
+    return coerced if coerced >= 0 else default
+
+
 class AdvancedUploadHandlersMixin(BaseHandler):
     """Mixin with advanced upload handlers."""
+
+    def _advanced_upload_decoded_size_limit(self) -> int:
+        configured_limit = _non_negative_int(
+            getattr(
+                self,
+                "advanced_upload_decoded_size_limit",
+                ADVANCED_UPLOAD_DECODED_SIZE_LIMIT,
+            ),
+            ADVANCED_UPLOAD_DECODED_SIZE_LIMIT,
+        )
+        upload_limit = _non_negative_int(
+            getattr(self, "max_upload_size", configured_limit),
+            configured_limit,
+        )
+        return min(configured_limit, upload_limit)
+
+    def _advanced_upload_encoded_size_limit(self, transport: str) -> int:
+        decoded_limit = self._advanced_upload_decoded_size_limit()
+        base64_limit = _base64_encoded_limit(decoded_limit)
+        if transport == "headers":
+            configured_limit = _non_negative_int(
+                getattr(
+                    self,
+                    "advanced_upload_header_data_limit",
+                    ADVANCED_UPLOAD_HEADER_DATA_LIMIT,
+                ),
+                ADVANCED_UPLOAD_HEADER_DATA_LIMIT,
+            )
+            return min(configured_limit, base64_limit)
+        if transport == "url":
+            configured_limit = _non_negative_int(
+                getattr(
+                    self,
+                    "advanced_upload_url_data_limit",
+                    ADVANCED_UPLOAD_URL_DATA_LIMIT,
+                ),
+                ADVANCED_UPLOAD_URL_DATA_LIMIT,
+            )
+            return min(configured_limit, base64_limit)
+        return base64_limit
+
+    def _advanced_upload_too_large(self, subject: str, limit: int) -> HTTPResponse:
+        return self._error_response(
+            413,
+            f"{subject} too large. Max size: {self.format_size(limit)}",
+        )
+
+    def _validate_advanced_upload_encoded_size(
+        self,
+        transport: str,
+        data_field: str,
+    ) -> HTTPResponse | None:
+        limit = self._advanced_upload_encoded_size_limit(transport)
+        if len(data_field.encode("utf-8")) <= limit:
+            return None
+
+        subject = {
+            "headers": "Advanced upload header payload",
+            "url": "Advanced upload URL payload",
+        }.get(transport, "Advanced upload base64 payload")
+        return self._advanced_upload_too_large(subject, limit)
 
     @staticmethod
     def _urlsafe_b64decode(data: str) -> bytes:
@@ -102,8 +186,12 @@ class AdvancedUploadHandlersMixin(BaseHandler):
 
         # 2. Try HTTP headers (x-d, x-e, x-k, x-n, x-h, x-kb64)
         if request.headers.get("x-d"):
+            data_field = request.headers["x-d"]
+            limit_error = self._validate_advanced_upload_encoded_size("headers", data_field)
+            if limit_error is not None:
+                return None, limit_error
             header_payload: AdvancedUploadPayload = {
-                "d": request.headers["x-d"],
+                "d": data_field,
                 "kb64": request.headers.get("x-kb64", "").lower() in ("1", "true"),
                 "_transport": "headers",
             }
@@ -123,10 +211,19 @@ class AdvancedUploadHandlersMixin(BaseHandler):
 
         # 2b. Try chunked headers (x-d-0, x-d-1, ..., x-d-N)
         if request.headers.get("x-d-0"):
-            chunks = []
+            chunks: list[str] = []
+            encoded_limit = self._advanced_upload_encoded_size_limit("headers")
+            encoded_size = 0
             i = 0
             while request.headers.get(f"x-d-{i}") is not None:
-                chunks.append(request.headers[f"x-d-{i}"])
+                chunk = request.headers[f"x-d-{i}"]
+                encoded_size += len(chunk.encode("utf-8"))
+                if encoded_size > encoded_limit:
+                    return None, self._advanced_upload_too_large(
+                        "Advanced upload header payload",
+                        encoded_limit,
+                    )
+                chunks.append(chunk)
                 i += 1
             chunked_payload = AdvancedUploadPayload(
                 d="".join(chunks),
@@ -149,8 +246,12 @@ class AdvancedUploadHandlersMixin(BaseHandler):
 
         # 3. Try URL query params (?d=...&e=...&k=...)
         if request.query_params.get("d"):
+            data_field = request.query_params["d"]
+            limit_error = self._validate_advanced_upload_encoded_size("url", data_field)
+            if limit_error is not None:
+                return None, limit_error
             query_payload = AdvancedUploadPayload(
-                d=request.query_params["d"],
+                d=data_field,
                 kb64=request.query_params.get("kb64", "").lower() in ("1", "true"),
                 _transport="url",
             )
@@ -190,6 +291,10 @@ class AdvancedUploadHandlersMixin(BaseHandler):
 
         data_field = payload.get("d") or payload.get("data")
         if data_field:
+            limit_error = self._validate_advanced_upload_encoded_size(transport, data_field)
+            if limit_error is not None:
+                return limit_error
+
             key_is_base64 = payload.get("kb64", False)
 
             if decrypt_key and key_is_base64:
@@ -213,6 +318,13 @@ class AdvancedUploadHandlersMixin(BaseHandler):
             response = HTTPResponse(400)
             response.set_body("", "text/plain")
             return response
+
+        decoded_limit = self._advanced_upload_decoded_size_limit()
+        if len(file_data) > decoded_limit:
+            return self._advanced_upload_too_large(
+                "Advanced upload decoded payload",
+                decoded_limit,
+            )
 
         if hmac_value and decrypt_key:
             if not verify_hmac(file_data, decrypt_key, hmac_value):
@@ -238,6 +350,11 @@ class AdvancedUploadHandlersMixin(BaseHandler):
                 logger.warning("Advanced upload decryption failed")
                 return self._bad_request("Advanced upload decryption failed")
             file_data = decrypted
+            if len(file_data) > decoded_limit:
+                return self._advanced_upload_too_large(
+                    "Advanced upload decoded payload",
+                    decoded_limit,
+                )
 
         if not filename:
             data_hash = hashlib.sha256(file_data).hexdigest()[:12]
