@@ -27,6 +27,14 @@ constraints file. This also pins the `pre-commit` executable installed by the
 PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 ```
 
+`constraints/ci.txt` is the only committed dependency authority for CI,
+Docker, security, docs, and reproducible local installs. Local `uv.lock` files
+are intentionally ignored; if you use uv locally, regenerate its lock from the
+current `pyproject.toml` and constraints file instead of committing it.
+
+Supported Python versions are 3.10 through 3.13. Package metadata caps the
+range below 3.14 until CI starts testing that interpreter.
+
 In Windows PowerShell, set the constraint as an environment variable:
 
 ```powershell
@@ -81,6 +89,10 @@ first to avoid round-trips.
 When you need to reproduce CI package resolution exactly, prefix the install
 step with `PIP_CONSTRAINT=constraints/ci.txt`.
 
+Browser smoke is release-gating in CI. Its `@playwright/cli` package is pinned
+in `.github/workflows/ci.yml` and `tools/browser_smoke.py`; update those pins
+together when refreshing the smoke toolchain.
+
 ```bash
 pre-commit run --all-files
 ruff check src tests
@@ -124,7 +136,7 @@ restates this):
 
 ## Code conventions
 
-- **Python 3.10+** syntax — use `X | None`, not `Optional[X]`.
+- **Python 3.10-compatible syntax** — use `X | None`, not `Optional[X]`.
 - **Type hints on everything** that is not a test fixture. `mypy --strict`
   is enforced on `src/`.
 - **Paths:** always `pathlib.Path`; compare with `Path.resolve().relative_to()`

@@ -1,7 +1,7 @@
 # ExperimentalHTTPServer
 
-An experimental HTTP server in pure Python 3.10+ for research, CTF practice,
-and controlled red/blue team exercises.
+An experimental HTTP server in pure Python for Python 3.10-3.13, built for
+research, CTF practice, and controlled red/blue team exercises.
 
 !!! warning "Experimental by design"
     This project is not hardened for untrusted internet exposure. See

@@ -31,7 +31,7 @@ Keep `cryptography>=44.0` in the `[crypto]` optional extras group of
 
 ### Positive
 
-- `pip install exphttp` still works on any Python 3.10+; the minimal path
+- `pip install exphttp` still works on supported Python 3.10-3.13; the minimal path
   serves files and supports advanced uploads with XOR handling.
 - Enthusiasts who need AEAD/ECDH install with `pip install exphttp[crypto]`.
 - CI matrix tests both with and without the extra, catching drift between

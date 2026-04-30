@@ -724,6 +724,15 @@ security workflow и Docker wheel build, используйте общий const
 PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 ```
 
+`constraints/ci.txt` — единственный коммитимый источник закрепленных версий
+для CI, Docker, security workflow, документации и воспроизводимой локальной
+установки. Локальный `uv.lock` намеренно игнорируется: если используете uv,
+пересобирайте lock из текущих `pyproject.toml` и constraints, но не
+коммитьте его.
+
+Поддерживаемая матрица Python остается 3.10-3.13. Метаданные пакета
+ограничены диапазоном `<3.14`, пока CI не начнет проверять Python 3.14.
+
 В Windows PowerShell задайте constraint как переменную окружения:
 
 ```powershell
@@ -768,6 +777,10 @@ pytest tests/test_http/test_request.py
 # Минимальный browser smoke (нужен Node.js/npm с npx)
 python tools/browser_smoke.py
 ```
+
+Browser smoke является release-gating проверкой в CI. Пакет
+`@playwright/cli` закреплен в `.github/workflows/ci.yml` и
+`tools/browser_smoke.py`; обновляйте эти pins вместе.
 
 ### Проверка кода
 

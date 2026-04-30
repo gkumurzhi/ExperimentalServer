@@ -1,7 +1,7 @@
 # STAGE-021 — Set Dependency Authority and Update Coverage
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -50,10 +50,10 @@ The project has one documented dependency authority and automation coverage for 
 5. Pin browser smoke Playwright resolution through a lockfile or explicit `npx playwright@<version>`.
 
 ## Acceptance criteria
-- [ ] There is one clear dependency authority for CI/Docker/local guidance.
-- [ ] Dependabot covers the active dependency surfaces selected by the policy.
-- [ ] Python support metadata and CI matrix no longer disagree silently.
-- [ ] Browser smoke package resolution is pinned or documented as non-release-gating.
+- [x] There is one clear dependency authority for CI/Docker/local guidance.
+- [x] Dependabot covers the active dependency surfaces selected by the policy.
+- [x] Python support metadata and CI matrix no longer disagree silently.
+- [x] Browser smoke package resolution is pinned or documented as non-release-gating.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -71,4 +71,4 @@ The project has one documented dependency authority and automation coverage for 
 - Rollback: Revert dependency policy/workflow/dependabot changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 17:02:04 MSK. The project now uses `constraints/ci.txt` as the only committed dependency authority for CI, Docker, security, docs, and reproducible local installs; tracked `uv.lock` was removed and future local locks are ignored. Dependabot covers pip, GitHub Actions, Docker, and pre-commit, with Docker base-image pins visible in direct `FROM` lines. Python support metadata is capped to the tested 3.10-3.13 range, and release-gating browser smoke uses the same pinned `@playwright/cli@0.1.9` package in CI and the smoke helper. Constrained install, compile, lint/format, mypy in a constrained disposable venv, docs sync, YAML/TOML checks, Docker build/run, Playwright dry run, diff hygiene, and verifier subagents passed.

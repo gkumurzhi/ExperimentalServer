@@ -17,6 +17,8 @@ from pathlib import Path
 
 from src.server import ExperimentalHTTPServer
 
+PLAYWRIGHT_CLI_PACKAGE = "@playwright/cli@0.1.9"
+
 
 def _find_free_port() -> int:
     """Reserve an ephemeral port and return it."""
@@ -79,7 +81,7 @@ def _playwright_command() -> list[str]:
         return ["bash", str(bundled_pwcli)]
 
     if shutil.which("npx"):
-        return ["npx", "--yes", "--package", "@playwright/cli", "playwright-cli"]
+        return ["npx", "--yes", "--package", PLAYWRIGHT_CLI_PACKAGE, "playwright-cli"]
 
     raise RuntimeError("Playwright CLI not found; install Node.js/npm or set PWCLI")
 

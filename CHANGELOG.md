@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - **Infrastructure:** GitHub Actions CI (Python 3.10–3.13 matrix) with ruff/mypy/pytest and a 65 % coverage gate
 - **Infrastructure:** `security.yml` workflow running `pip-audit` and `bandit` weekly and on every PR
-- **Infrastructure:** `dependabot.yml` for weekly pip and github-actions updates
+- **Infrastructure:** `dependabot.yml` for weekly pip, GitHub Actions, Docker, and pre-commit updates
 - **Infrastructure:** `.pre-commit-config.yaml` mirroring CI checks locally
 - **Docs:** `tools/sync_docs.py` generates the MkDocs mirrors for `API.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, and `SECURITY.md`, with CI drift checks
 - **Docs:** standalone `LICENSE` (MIT) file in repo root

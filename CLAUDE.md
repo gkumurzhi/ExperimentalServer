@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ExperimentalHTTPServer is a feature-rich HTTP server written in pure Python 3.10+ with zero external dependencies for core functionality. It supports custom HTTP methods, TLS/HTTPS, Basic Authentication, uploads-only file access, advanced uploads, Secure Notepad, and HTML Smuggling.
+ExperimentalHTTPServer is a feature-rich HTTP server written in pure Python for supported Python 3.10-3.13 with zero external dependencies for core functionality. It supports custom HTTP methods, TLS/HTTPS, Basic Authentication, uploads-only file access, advanced uploads, Secure Notepad, and HTML Smuggling.
 
 Canonical project documentation lives in:
 
@@ -99,7 +99,7 @@ BaseHandler (handlers/base.py - common utilities)
 
 ## Code Conventions
 
-- Full type annotations using Python 3.10+ syntax (`X | None` not `Optional[X]`)
+- Full type annotations using Python 3.10-compatible syntax (`X | None` not `Optional[X]`)
 - `pathlib.Path` for all file operations with `.resolve()` for absolute paths
 - Path traversal defense: use `Path.resolve().relative_to()` containment via `resolve_descendant_path()` / `BaseHandler._resolve_safe_path()`; see ADR-004
 - Logger name: `"httpserver"` with format `%(asctime)s [%(levelname)s] %(message)s`
