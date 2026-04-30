@@ -15,11 +15,14 @@ WORKDIR /build
 COPY pyproject.toml ./
 COPY README.md ./
 COPY constraints ./constraints
-COPY src ./src
 
 # Build the wheel against the pinned toolchain instead of floating build deps.
 RUN PIP_CONSTRAINT=/build/constraints/ci.txt \
-    pip install --upgrade pip build setuptools wheel && \
+    pip install --upgrade pip build setuptools wheel
+
+COPY src ./src
+
+RUN PIP_CONSTRAINT=/build/constraints/ci.txt \
     python -m build --wheel --no-isolation --outdir /build/dist
 
 # -------- runtime stage --------

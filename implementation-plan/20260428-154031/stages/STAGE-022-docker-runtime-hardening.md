@@ -1,7 +1,7 @@
 # STAGE-022 — Improve Docker Runtime Examples
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -46,10 +46,10 @@ Docker examples clearly handle TLS/auth healthchecks, non-root data ownership, d
 5. Reorder Dockerfile build layers if it does not change build behavior.
 
 ## Acceptance criteria
-- [ ] TLS/auth Docker examples no longer imply the default HTTP healthcheck will work unchanged.
-- [ ] `/data` write permissions are clear for non-root runtime.
-- [ ] Compose config validates without obsolete version warning.
-- [ ] Hardening controls do not prevent required writes.
+- [x] TLS/auth Docker examples no longer imply the default HTTP healthcheck will work unchanged.
+- [x] `/data` write permissions are clear for non-root runtime.
+- [x] Compose config validates without obsolete version warning.
+- [x] Hardening controls do not prevent required writes.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,12 @@ Docker examples clearly handle TLS/auth healthchecks, non-root data ownership, d
 - Rollback: Revert Dockerfile/Compose/doc changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 17:15:03 MSK. `examples/docker/docker-compose.yml`
+now removes obsolete `version`, uses a named `/data` volume by default,
+documents UID/GID `10001` bind-mount requirements, adds compatible
+hardening (`init`, `read_only`, `/tmp` tmpfs, `cap_drop: ALL`,
+`no-new-privileges`), and shows an explicit TLS/auth healthcheck disable
+example. `Dockerfile` build layers were reordered so dependency/tooling
+installation is cache-friendly before copying `src/`; runtime behavior is
+unchanged. Digest refresh remains covered by the existing Dockerfile refresh
+comment and weekly Docker Dependabot configuration from STAGE-021.

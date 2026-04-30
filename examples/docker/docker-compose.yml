@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   exphttp:
     build:
@@ -8,11 +6,40 @@ services:
     image: exphttp:local
     container_name: exphttp
     restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      # Self-signed TLS certificates and other temporary files need writable /tmp.
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data
+      - exphttp-data:/data
+    # The named volume preserves the image-owned /data permissions for UID/GID
+    # 10001. If you need a host bind mount instead, create it first and make it
+    # writable by 10001:10001, then replace the volume line with:
+    #   - ./data:/data
     # The default image command already serves /data over plain HTTP on :8080.
     # If you override `command` to enable TLS or auth, also override or disable
     # the image healthcheck so it probes the matching protocol/credentials.
-    # command: ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data", "--tls", "--auth", "random"]
+    # Use explicit credentials from a secret source for containers; `--auth random`
+    # is intended for interactive terminals.
+    # command:
+    #   - --host
+    #   - 0.0.0.0
+    #   - --port
+    #   - "8080"
+    #   - --dir
+    #   - /data
+    #   - --tls
+    #   - --auth
+    #   - admin:replace-with-a-strong-secret
+    # healthcheck:
+    #   disable: true
+
+volumes:
+  exphttp-data:
