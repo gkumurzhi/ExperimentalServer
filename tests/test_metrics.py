@@ -18,6 +18,7 @@ class TestMetricsCollector:
         assert snap["total_errors"] == 0
         assert snap["bytes_sent"] == 0
         assert snap["status_counts"] == {}
+        assert snap["websocket"] == {"active": 0, "rejected_admissions": 0}
         assert snap["uptime_seconds"] == 0
 
     def test_mark_started_enables_uptime(self) -> None:
@@ -87,3 +88,13 @@ class TestMetricsCollector:
         snap = m.snapshot()
         counts: dict[int, int] = snap["status_counts"]  # type: ignore[assignment]
         assert counts == {status: 1}
+
+    def test_websocket_counters_are_thread_safe(self) -> None:
+        m = MetricsCollector()
+        m.record_websocket_opened()
+        m.record_websocket_opened()
+        m.record_websocket_rejected()
+        m.record_websocket_closed()
+
+        snap = m.snapshot()
+        assert snap["websocket"] == {"active": 1, "rejected_admissions": 1}

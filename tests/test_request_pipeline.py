@@ -54,6 +54,7 @@ class _PipelineServerStub:
         self.send_response_bytes = 0
         self.websocket_attempt = False
         self.websocket_origin_allowed = True
+        self.websocket_slot_available = True
         self.raise_on_dispatch = False
         self.resolve_calls: list[tuple[str, int]] = []
         self.cors_resolve_calls: list[str | None] = []
@@ -64,6 +65,8 @@ class _PipelineServerStub:
         self.send_calls: list[dict[str, object]] = []
         self.record_calls: list[tuple[int, int, bool]] = []
         self.handled_websocket_paths: list[str] = []
+        self.websocket_acquire_calls = 0
+        self.websocket_release_calls = 0
 
     def _resolve_keep_alive(self, request: HTTPRequest, request_num: int) -> tuple[bool, int]:
         self.resolve_calls.append((request.path, request_num))
@@ -94,6 +97,13 @@ class _PipelineServerStub:
 
     def _handle_notepad_ws(self, sock: _SocketStub, request: HTTPRequest) -> None:
         self.handled_websocket_paths.append(request.path)
+
+    def _try_acquire_websocket_slot(self) -> bool:
+        self.websocket_acquire_calls += 1
+        return self.websocket_slot_available
+
+    def _release_websocket_slot(self) -> None:
+        self.websocket_release_calls += 1
 
     def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None:
         self.size_calls.append(request.path)
@@ -393,7 +403,43 @@ class TestRequestPipeline:
         assert result is False
         assert sock.sent == []
         assert server.handled_websocket_paths == ["/notes/ws"]
+        assert server.websocket_acquire_calls == 1
+        assert server.websocket_release_calls == 1
         assert server.record_calls == []
+
+    def test_websocket_upgrade_rejects_when_admission_budget_is_full(self) -> None:
+        server = _PipelineServerStub()
+        server.websocket_attempt = True
+        server.websocket_slot_available = False
+        pipeline = RequestPipeline(server)
+        sock = _SocketStub()
+
+        result = pipeline.process(
+            _make_raw_request(
+                "GET",
+                "/notes/ws",
+                {
+                    "Host": "example.test",
+                    "Origin": "http://example.test",
+                    "Upgrade": "websocket",
+                    "Connection": "Upgrade",
+                    "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                    "Sec-WebSocket-Version": "13",
+                },
+            ),
+            sock,
+            ("127.0.0.1", 12345),
+            1,
+        )
+
+        assert result is False
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 503" in sock.sent[0]
+        assert b"WebSocket connection limit reached" in sock.sent[0]
+        assert server.handled_websocket_paths == []
+        assert server.websocket_acquire_calls == 1
+        assert server.websocket_release_calls == 0
+        assert server.record_calls == [(503, len(sock.sent[0]), False)]
 
     def test_internal_error_records_metric_and_sends_500(self) -> None:
         server = _PipelineServerStub()

@@ -48,6 +48,10 @@ class RequestPipelineServer(Protocol):
 
     def _handle_notepad_ws(self, sock: socket.socket, request: HTTPRequest) -> None: ...
 
+    def _try_acquire_websocket_slot(self) -> bool: ...
+
+    def _release_websocket_slot(self) -> None: ...
+
     def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None: ...
 
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse: ...
@@ -201,7 +205,18 @@ class RequestPipeline:
             self._send_direct_response(response, client_socket, build_args)
             return False
 
-        self._server._handle_notepad_ws(client_socket, request)
+        if not self._server._try_acquire_websocket_slot():
+            response = self._server._build_error_response(
+                503,
+                "WebSocket connection limit reached",
+            )
+            self._send_direct_response(response, client_socket, build_args)
+            return False
+
+        try:
+            self._server._handle_notepad_ws(client_socket, request)
+        finally:
+            self._server._release_websocket_slot()
         return False
 
 

@@ -581,6 +581,37 @@ class TestServerHelpers:
 
         assert not (temp_dir / ".opsec_config.json").exists()
 
+    def test_single_worker_default_websocket_budget_preserves_worker_pool(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+
+        assert server.max_websocket_connections == 0
+        assert server._try_acquire_websocket_slot() is False
+        assert server.get_metrics()["websocket"] == {
+            "active": 0,
+            "rejected_admissions": 1,
+        }
+
+    def test_explicit_single_websocket_budget_can_admit_connection(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            max_workers=1,
+            max_websocket_connections=1,
+        )
+
+        assert server._try_acquire_websocket_slot() is True
+        assert server.get_metrics()["websocket"] == {
+            "active": 1,
+            "rejected_admissions": 0,
+        }
+        server._release_websocket_slot()
+        assert server.get_metrics()["websocket"] == {
+            "active": 0,
+            "rejected_admissions": 0,
+        }
+
     def test_should_keep_alive_respects_http_version(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)

@@ -275,6 +275,13 @@ class TestWsFrameParsing:
         assert result is not None
         assert result[1] == payload
 
+    def test_bytearray_frame_input_returns_bytes_payload(self):
+        data = bytearray(self._make_masked_frame(WS_TEXT, b"mutable input"))
+        result = parse_ws_frame(data)
+        assert result is not None
+        assert result[1] == b"mutable input"
+        assert isinstance(result[1], bytes)
+
     def test_126_byte_payload_length(self):
         payload = b"x" * 200
         data = self._make_masked_frame(WS_TEXT, payload)

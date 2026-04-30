@@ -10,6 +10,7 @@ import socket
 import ssl
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -88,6 +89,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         cors_origin: str | None = None,
         # Advanced upload
         advanced_upload: bool = False,
+        # WebSocket resource limits
+        max_websocket_connections: int | None = None,
+        websocket_frame_idle_timeout: float = 5.0,
     ):
         self.host = host
         self.port = port
@@ -95,6 +99,15 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.socket: socket.socket | None = None
         self.max_upload_size = max_upload_size
         self.max_workers = max_workers
+        if max_websocket_connections is None:
+            max_websocket_connections = max(0, max_workers // 2)
+        if max_websocket_connections < 0:
+            raise ValueError("max_websocket_connections must be at least 0")
+        if websocket_frame_idle_timeout <= 0:
+            raise ValueError("websocket_frame_idle_timeout must be greater than 0")
+        self.max_websocket_connections = max_websocket_connections
+        self.websocket_frame_idle_timeout = websocket_frame_idle_timeout
+        self._websocket_slots = threading.BoundedSemaphore(max_websocket_connections)
         self.running = False
         self.debug = debug
         self.open_browser = open_browser
@@ -246,6 +259,23 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Return current server metrics snapshot."""
         return self._metrics.snapshot()
 
+    def _try_acquire_websocket_slot(self) -> bool:
+        """Return True if a WebSocket connection can enter the active set."""
+        if not self._websocket_slots.acquire(blocking=False):
+            self._metrics.record_websocket_rejected()
+            logger.warning(
+                "WS admission rejected: active budget exhausted (max=%d)",
+                self.max_websocket_connections,
+            )
+            return False
+        self._metrics.record_websocket_opened()
+        return True
+
+    def _release_websocket_slot(self) -> None:
+        """Release a previously acquired WebSocket connection slot."""
+        self._websocket_slots.release()
+        self._metrics.record_websocket_closed()
+
     # Content types eligible for gzip compression
     _COMPRESSIBLE_TYPES = (
         "text/",
@@ -370,6 +400,7 @@ class ExperimentalHTTPServer(HandlerMixin):
     # Keep-alive settings
     KEEP_ALIVE_TIMEOUT: int = 15  # seconds idle between requests
     KEEP_ALIVE_MAX: int = 100  # max requests per connection
+    WEBSOCKET_IDLE_TIMEOUT: float = 60.0  # seconds idle before a keepalive ping
 
     def _should_keep_alive(self, request: HTTPRequest) -> bool:
         """Determine whether to keep the connection alive after this request."""
@@ -635,8 +666,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         except Exception:
             return
 
-        buf = b""
+        buf = bytearray()
         close_sent = False
+        incomplete_since: float | None = None
+        current_timeout: float | None = None
 
         def send_close(code: int = 1000, reason: str = "") -> None:
             nonlocal close_sent
@@ -648,16 +681,33 @@ class ExperimentalHTTPServer(HandlerMixin):
             except Exception:
                 pass
 
+        def set_recv_timeout(timeout: float) -> None:
+            nonlocal current_timeout
+            if current_timeout != timeout:
+                sock.settimeout(timeout)
+                current_timeout = timeout
+
         try:
-            sock.settimeout(60.0)
+            set_recv_timeout(self.WEBSOCKET_IDLE_TIMEOUT)
             while self.running:
                 try:
                     chunk = sock.recv(65536)
                     if not chunk:
                         break
-                    buf += chunk
+                    buf.extend(chunk)
                 except TimeoutError:
-                    # Send ping to keep alive
+                    if (
+                        buf
+                        and incomplete_since is not None
+                        and time.monotonic() - incomplete_since
+                        >= self.websocket_frame_idle_timeout
+                    ):
+                        logger.warning("WS incomplete frame timed out")
+                        send_close(1002, "Incomplete frame timeout")
+                        return
+                    if buf:
+                        continue
+                    # Send ping to keep alive when the connection is otherwise idle.
                     try:
                         sock.sendall(build_ws_frame(b"", opcode=WS_PING))
                     except Exception:
@@ -675,9 +725,18 @@ class ExperimentalHTTPServer(HandlerMixin):
                         send_close(1009, "Message too big")
                         return
                     if frame is None:
+                        if buf and incomplete_since is None:
+                            incomplete_since = time.monotonic()
+                            set_recv_timeout(self.websocket_frame_idle_timeout)
                         break
                     opcode, payload, consumed = frame
-                    buf = buf[consumed:]
+                    del buf[:consumed]
+                    incomplete_since = time.monotonic() if buf else None
+                    set_recv_timeout(
+                        self.websocket_frame_idle_timeout
+                        if incomplete_since is not None
+                        else self.WEBSOCKET_IDLE_TIMEOUT
+                    )
 
                     if opcode == WS_CLOSE:
                         send_close()

@@ -17,6 +17,8 @@ class MetricsCollector:
         self._error_count: int = 0
         self._bytes_sent: int = 0
         self._status_counts: dict[int, int] = {}
+        self._websocket_active: int = 0
+        self._websocket_rejected_admissions: int = 0
 
     def mark_started(self) -> None:
         """Mark the moment the server began accepting connections."""
@@ -31,6 +33,21 @@ class MetricsCollector:
             if error:
                 self._error_count += 1
 
+    def record_websocket_opened(self) -> None:
+        """Record a WebSocket connection admitted by the server."""
+        with self._lock:
+            self._websocket_active += 1
+
+    def record_websocket_closed(self) -> None:
+        """Record a WebSocket connection leaving the active set."""
+        with self._lock:
+            self._websocket_active = max(0, self._websocket_active - 1)
+
+    def record_websocket_rejected(self) -> None:
+        """Record a WebSocket admission rejected by the resource budget."""
+        with self._lock:
+            self._websocket_rejected_admissions += 1
+
     def snapshot(self) -> dict[str, object]:
         """Return a read-only view of current metrics."""
         with self._lock:
@@ -41,4 +58,8 @@ class MetricsCollector:
                 "total_errors": self._error_count,
                 "bytes_sent": self._bytes_sent,
                 "status_counts": dict(self._status_counts),
+                "websocket": {
+                    "active": self._websocket_active,
+                    "rejected_admissions": self._websocket_rejected_admissions,
+                },
             }

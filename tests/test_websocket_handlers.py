@@ -11,7 +11,7 @@ import pytest
 from src.handlers import HandlerMixin, NotepadHandlersMixin
 from src.security.keys import HAS_ECDH
 from src.server import ExperimentalHTTPServer
-from src.websocket import WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
+from src.websocket import _MAX_FRAME_SIZE, WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
 from tests.conftest import make_request
 
 
@@ -159,6 +159,51 @@ class TestWSClientMasking:
         assert protocol_close[0] == WS_CLOSE
         assert struct.unpack("!H", protocol_close[1][:2])[0] == 1002
         assert protocol_close[1][2:] == b"Protocol error"
+
+    def test_incomplete_frame_idle_timeout_closes_without_dispatch(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            websocket_frame_idle_timeout=0.01,
+        )
+        handled_payloads: list[bytes] = []
+        monkeypatch.setattr(
+            server,
+            "_handle_ws_message",
+            lambda _sock, payload: handled_payloads.append(payload),
+        )
+        monotonic_values = iter([0.0, 0.02])
+        monkeypatch.setattr("src.server.time.monotonic", lambda: next(monotonic_values))
+        server.running = True
+
+        partial_frame = (
+            b"\x81\xff"
+            + struct.pack("!Q", _MAX_FRAME_SIZE)
+            + b"\x37\x38\x39\x30"
+            + b"partial"
+        )
+        sock = _WebSocketLoopSocket([partial_frame, TimeoutError()])
+        request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+        )
+
+        server._handle_notepad_ws(sock, request)
+
+        assert handled_payloads == []
+        assert b"HTTP/1.1 101 Switching Protocols" in sock.sent[0]
+        assert sock.timeouts == [60.0, 0.01]
+        close_frame = parse_ws_frame(sock.sent[-1])
+        assert close_frame is not None
+        assert close_frame[0] == WS_CLOSE
+        assert struct.unpack("!H", close_frame[1][:2])[0] == 1002
+        assert close_frame[1][2:] == b"Incomplete frame timeout"
 
 
 class TestWSInvalidInput:

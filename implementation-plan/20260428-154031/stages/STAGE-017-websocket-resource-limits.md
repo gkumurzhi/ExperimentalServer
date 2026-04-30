@@ -1,7 +1,7 @@
 # STAGE-017 — Bound WebSocket Resource Use
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -68,4 +68,4 @@ WebSocket connections have explicit resource limits for concurrency, partial-fra
 - Rollback: Revert WS resource-limit changes and tests for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 13:25:36 MSK. Added a derived WebSocket admission budget, exception-safe slot release, bounded incomplete-frame timeout handling, bytearray buffering, and WebSocket active/rejected metrics. Verified with mandatory targeted tests, affected tests, compileall, ruff, mypy, full test suite, and automatic verification subagents.

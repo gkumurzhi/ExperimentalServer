@@ -308,22 +308,74 @@ class TestLiveAdvancedUploadRouting:
 
 
 class TestLiveWebSocketNotes:
+    @staticmethod
+    def _send_ws_handshake(sock: socket.socket, port: int) -> None:
+        sock.sendall(
+            (
+                f"GET /notes/ws HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                f"Origin: http://127.0.0.1:{port}\r\n"
+                "\r\n"
+            ).encode("ascii")
+        )
+
+    def test_notes_websocket_admission_budget_rejects_excess_connection(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(
+            temp_dir,
+            max_workers=2,
+            max_websocket_connections=1,
+            websocket_frame_idle_timeout=5.0,
+        ) as live:
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as first:
+                first.settimeout(2.0)
+                self._send_ws_handshake(first, live.port)
+                handshake = _recv_until(first, b"\r\n\r\n")
+                assert b"HTTP/1.1 101 Switching Protocols" in handshake
+
+                with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as second:
+                    second.settimeout(2.0)
+                    self._send_ws_handshake(second, live.port)
+                    status, _headers, body = _recv_http_response(second)
+                    assert status.startswith("HTTP/1.1 503")
+                    assert json.loads(body) == {
+                        "error": "WebSocket connection limit reached",
+                        "status": 503,
+                    }
+
+                metrics = live.server.get_metrics()
+                assert metrics["websocket"] == {"active": 1, "rejected_admissions": 1}
+
+                with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as http_sock:
+                    http_sock.settimeout(2.0)
+                    http_sock.sendall(
+                        (
+                            f"PING / HTTP/1.1\r\n"
+                            f"Host: 127.0.0.1:{live.port}\r\n"
+                            "Connection: close\r\n"
+                            "\r\n"
+                        ).encode("ascii")
+                    )
+                    ping_status, _ping_headers, ping_body = _recv_http_response(http_sock)
+                    assert ping_status.startswith("HTTP/1.1 200")
+                    assert json.loads(ping_body)["status"] == "pong"
+
+                first.sendall(_make_masked_frame(WS_CLOSE, struct.pack("!H", 1000)))
+                close_frame = parse_ws_frame(first.recv(4096))
+                assert close_frame is not None
+                assert close_frame[0] == WS_CLOSE
+
     def test_notes_websocket_supports_save_list_and_load_round_trip(self, temp_dir: Path) -> None:
         with _LiveServer(temp_dir) as live:
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
-                sock.sendall(
-                    (
-                        f"GET /notes/ws HTTP/1.1\r\n"
-                        f"Host: 127.0.0.1:{live.port}\r\n"
-                        "Upgrade: websocket\r\n"
-                        "Connection: Upgrade\r\n"
-                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
-                        "Sec-WebSocket-Version: 13\r\n"
-                        f"Origin: http://127.0.0.1:{live.port}\r\n"
-                        "\r\n"
-                    ).encode("ascii")
-                )
+                self._send_ws_handshake(sock, live.port)
                 handshake = _recv_until(sock, b"\r\n\r\n")
                 assert b"HTTP/1.1 101 Switching Protocols" in handshake
 

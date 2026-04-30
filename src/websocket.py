@@ -127,7 +127,11 @@ def _validate_close_payload(payload: bytes) -> None:
         ) from exc
 
 
-def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, bytes, int] | None:
+def parse_ws_frame(
+    data: bytes | bytearray,
+    *,
+    require_mask: bool = False,
+) -> tuple[int, bytes, int] | None:
     """
     Parse a single WebSocket frame from *data*.
 
@@ -187,7 +191,7 @@ def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, byt
     if masked:
         if dlen < offset + 4:
             return None
-        mask_key = data[offset : offset + 4]
+        mask_key = bytes(data[offset : offset + 4])
         offset += 4
 
     if dlen < offset + payload_len:
@@ -202,7 +206,7 @@ def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, byt
             payload_bytes[i] = raw_payload[i] ^ mask_key[i % 4]
         payload = bytes(payload_bytes)
     else:
-        payload = raw_payload
+        payload = bytes(raw_payload)
 
     if opcode == WS_CLOSE:
         _validate_close_payload(payload)
