@@ -44,15 +44,15 @@ const translations = {
         responsePanelLabel: "Ответ",
         responsePanelTitle: "Ответ",
         responsePanelHint: "Статус, заголовки и полезные данные появляются здесь без переключения вкладок.",
-        capabilityUploadDesc: "Очередь файлов, выбор метода и быстрый обмен.",
-        capabilityFilesDesc: "Найти файл, скачать, удалить или подготовить smuggle-страницу.",
+        capabilityUploadDesc: "Отправка локальных файлов на сервер.",
+        capabilityFilesDesc: "Просмотр, скачивание и удаление файлов с сервера.",
         capabilityOpsecDesc: "Продвинутая загрузка через тело, заголовки или URL.",
         capabilityNotepadDesc: "Сквозные заметки через HTTP и WebSocket.",
         advancedLabel: "Расширенные инструменты",
-        advancedToolsTitle: "Загрузка, продвинутая загрузка, скачивание и заметки",
+        advancedToolsTitle: "Загрузка на сервер, скачивание с сервера и заметки",
         advancedToolsHint: "Основной сценарий сверху, продвинутые инструменты ниже.",
-        uploadHelper: "Быстро загрузите файлы, выберите метод и сразу проверьте результат.",
-        filesHelper: "Скачивание из текущей директории, быстрые действия и детали ответа под списком.",
+        uploadHelper: "Отправьте локальные файлы на сервер, выберите метод и сразу проверьте ответ.",
+        filesHelper: "Просмотрите файлы на сервере, скачайте нужные и проверьте детали ответа под списком.",
         opsecHelper: "Отдельный сценарий для продвинутой загрузки и выбора транспорта.",
         sandboxMode: "Доступ ограничен папкой uploads/",
         sandboxModeCompact: "uploads/",
@@ -70,14 +70,14 @@ const translations = {
         methodNote: "Проверка ECDH-ключа блокнота",
         methodSmuggle: "Генерация HTML smuggling-страницы",
         tabRequests: "Запросы",
-        tabUpload: "Загрузка",
-        tabFiles: "Скачивание",
-        tabOpsec: "Загрузка (продвинутая)",
+        tabUpload: "Загрузка на сервер",
+        tabFiles: "Скачивание с сервера",
+        tabOpsec: "Продвинутая загрузка на сервер",
         sendRequests: "Отправка запросов",
         labelFilePath: "Путь к файлу",
         labelDirPath: "Путь к директории",
         pathPlaceholder: "/index.html или /uploads/",
-        uploadFiles: "Загрузка файлов",
+        uploadFiles: "Загрузка файлов на сервер",
         methodLabel: "Метод:",
         requestPreviewToggleLabel: "Показывать отправляемое",
         requestPreviewModeLabel: "Режим показа запроса и ответа",
@@ -164,7 +164,7 @@ const translations = {
         selectedLabel: "Выбрано",
         selectedFilesCount: "Файлов выбрано",
         uploadAllBtn: "Загрузить",
-        serverFiles: "Файлы для скачивания",
+        serverFiles: "Файлы на сервере",
         dirPathPlaceholder: "Путь к директории",
         browseBtn: "Обзор",
         statusPending: "Ожидание",
@@ -194,7 +194,7 @@ const translations = {
         download: "Скачать",
         loadingInfo: "Загрузка информации о",
         open: "Открыть",
-        opsecTitle: "Загрузка (продвинутая)",
+        opsecTitle: "Продвинутая загрузка на сервер",
         opsecDesc: "Загрузка файлов через тело JSON, заголовки или URL-параметры.",
         opsecMethodPlaceholder: "Метод (CHECKDATA)",
         opsecUploadText: "Имя скрыто",
@@ -250,7 +250,7 @@ const translations = {
         opsecCapabilityChecking: "Проверка поддержки продвинутой загрузки...",
         opsecUnavailableServer: "Продвинутая загрузка недоступна: сервер сообщил, что функция выключена.",
         opsecCapabilityCheckFailed: "Не удалось проверить поддержку продвинутой загрузки.",
-        viewInFiles: "Перейти к скачиванию →",
+        viewInFiles: "Показать файлы на сервере →",
         tabNotepad: "Блокнот",
         notepadTitle: "Защищённый блокнот",
         notepadDesc: "Сквозное шифрование заметок. Ключи согласуются автоматически через ECDH — пароль не нужен.",
@@ -339,15 +339,15 @@ const translations = {
         responsePanelLabel: "Response",
         responsePanelTitle: "Response",
         responsePanelHint: "Status, headers, and payload appear here without switching tabs.",
-        capabilityUploadDesc: "Queue files, pick a method, and share fast.",
-        capabilityFilesDesc: "Find, download, delete, or smuggle any served file.",
+        capabilityUploadDesc: "Send local files to the server.",
+        capabilityFilesDesc: "Browse, download, and delete files from the server.",
         capabilityOpsecDesc: "Advanced uploads through body, headers, or URL params.",
         capabilityNotepadDesc: "End-to-end notes over HTTP and WebSocket.",
         advancedLabel: "More actions",
-        advancedToolsTitle: "Upload, advanced upload, download, and notes",
+        advancedToolsTitle: "Upload to server, download from server, and notes",
         advancedToolsHint: "Keep the core workflow upfront; advanced tools live below.",
-        uploadHelper: "Queue files, choose a method, and inspect the result right away.",
-        filesHelper: "Download from the current directory, run quick actions, and inspect response details below the list.",
+        uploadHelper: "Send local files to the server, choose a method, and inspect the response right away.",
+        filesHelper: "Browse server files, download what you need, and inspect response details below the list.",
         opsecHelper: "Dedicated flow for advanced uploads and transport tuning.",
         sandboxMode: "Access limited to the uploads/ folder",
         sandboxModeCompact: "uploads/",
@@ -365,14 +365,14 @@ const translations = {
         methodNote: "Inspect notepad ECDH key",
         methodSmuggle: "Generate an HTML smuggling page",
         tabRequests: "Requests",
-        tabUpload: "Uploads",
-        tabFiles: "Download",
-        tabOpsec: "Advanced upload",
+        tabUpload: "Upload to server",
+        tabFiles: "Download from server",
+        tabOpsec: "Advanced upload to server",
         sendRequests: "Send Requests",
         labelFilePath: "File path",
         labelDirPath: "Directory path",
         pathPlaceholder: "/index.html or /uploads/",
-        uploadFiles: "Uploads",
+        uploadFiles: "Upload files to server",
         methodLabel: "Method:",
         requestPreviewToggleLabel: "Show outgoing request",
         requestPreviewModeLabel: "Request and response view mode",
@@ -459,7 +459,7 @@ const translations = {
         selectedLabel: "Selected",
         selectedFilesCount: "Files selected",
         uploadAllBtn: "Upload",
-        serverFiles: "Downloadable files",
+        serverFiles: "Files on server",
         dirPathPlaceholder: "Directory path",
         browseBtn: "Browse",
         statusPending: "Pending",
@@ -489,7 +489,7 @@ const translations = {
         download: "Download",
         loadingInfo: "Loading info for",
         open: "Open",
-        opsecTitle: "Advanced upload",
+        opsecTitle: "Advanced upload to server",
         opsecDesc: "Upload files through a JSON body, headers, or URL parameters.",
         opsecMethodPlaceholder: "Method (CHECKDATA)",
         opsecUploadText: "Name hidden",
@@ -545,7 +545,7 @@ const translations = {
         opsecCapabilityChecking: "Checking advanced upload support...",
         opsecUnavailableServer: "Advanced upload unavailable: server reported the feature is disabled.",
         opsecCapabilityCheckFailed: "Could not verify advanced upload support.",
-        viewInFiles: "Go to Download →",
+        viewInFiles: "Show files on server →",
         tabNotepad: "Notepad",
         notepadTitle: "Secure Notepad",
         notepadDesc: "End-to-end encrypted notes. Encryption keys are negotiated automatically via ECDH — no password needed.",
@@ -939,13 +939,20 @@ function bindCoreControls() {
 
 bindCoreControls();
 
-// Restore tab from URL hash on load
-window.addEventListener('DOMContentLoaded', () => {
+function activateTabFromHash() {
     const hash = location.hash.replace('#', '');
     if (hash && document.getElementById(hash + '-tab')) {
         const tabBtn = document.getElementById('tab-' + hash);
         if (tabBtn) switchTab(hash, tabBtn);
     }
+}
+
+// Keep the active tab in sync with direct URL hashes and manual hash edits.
+window.addEventListener('DOMContentLoaded', () => {
+    activateTabFromHash();
+});
+window.addEventListener('hashchange', () => {
+    activateTabFromHash();
 });
 
 // Arrow key navigation for tabs (WAI-ARIA tab pattern)

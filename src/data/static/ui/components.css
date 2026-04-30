@@ -241,6 +241,7 @@ button:disabled {
     justify-content: center;
     min-height: 44px;
     padding: 0 var(--space-4);
+    line-height: 1.2;
     text-align: center;
 }
 
@@ -671,7 +672,7 @@ input[type="radio"] {
     }
 
     .tool-tabs .tab {
-        min-height: 44px;
+        min-height: 60px;
         padding: 0 12px;
         background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
         color: var(--text-secondary);
