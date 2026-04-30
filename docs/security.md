@@ -63,14 +63,13 @@ High-level assumptions:
 
 ## Advanced Upload Caveats
 
-Advanced upload is an opt-in transport convenience with optional payload
+Advanced upload is a built-in transport convenience with optional payload
 obfuscation, not a replacement for TLS or authentication:
 
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
-- Only servers started with `--advanced-upload` treat unknown non-standard
-  methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=` payload data as upload
-  requests.
+- Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`
+  payload data are treated as upload requests.
 - Payload placement in headers or URL parameters may be logged by upstream
   proxies; use JSON body transport for sensitive data and pair it with TLS.
 

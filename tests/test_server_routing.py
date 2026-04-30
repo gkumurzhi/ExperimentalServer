@@ -49,7 +49,7 @@ class StubServer(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
-        self.advanced_upload_enabled = False
+        self.advanced_upload_enabled = True
         self.method_handlers = self.build_method_handlers()
 
     def get_metrics(self):

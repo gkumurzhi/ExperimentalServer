@@ -330,10 +330,7 @@ class FileHandlersMixin(BaseHandler):
         logger.debug(f"OPTIONS preflight: {requested_method}")
         response.set_header(
             "Access-Control-Allow-Methods",
-            resolve_preflight_allow_methods(
-                requested_method,
-                advanced_upload_enabled=bool(getattr(self, "advanced_upload_enabled", False)),
-            ),
+            resolve_preflight_allow_methods(requested_method),
         )
 
         requested_headers = request.headers.get("access-control-request-headers", "")

@@ -24,7 +24,7 @@ below.
 | SMUGGLE | Missing files return JSON `{"error": "File not found", "path": "<path>"}`. Source-size failures use JSON `{"error": "...", "status": 413, ...size fields...}`. |
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
 | WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`, `503`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
-| Advanced upload | Unknown methods return shared JSON `405` unless `--advanced-upload` is enabled and the request carries an advanced payload in the body, headers, chunked headers, or query string. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
+| Advanced upload | Unknown methods carrying an advanced payload in the body, headers, chunked headers, or query string are routed to advanced upload by default. Unknown methods without an advanced payload return shared JSON `405`. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
 | Auth and request guards | Basic-auth failures, auth rate limits, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
 ---
@@ -234,7 +234,7 @@ PING / HTTP/1.1
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
   "access_scope": "uploads",
-  "advanced_upload": false,
+  "advanced_upload": true,
   "metrics": {
     "uptime_seconds": 3600.5,
     "total_requests": 150,
@@ -574,9 +574,9 @@ CORS preflight handler. Returns allowed methods when CORS is enabled.
 **Response (204):** No body. If CORS is disabled, no
 `Access-Control-Allow-*` headers are emitted. If CORS is enabled,
 `Access-Control-Allow-Methods` lists built-in methods. A requested unknown
-method is added only when `--advanced-upload` is enabled and the method is a
-valid HTTP token. Requested headers are reflected only when they are in the
-server allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
+method is added when it is a valid HTTP token, enabling advanced-upload
+preflights. Requested headers are reflected only when they are in the server
+allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
 `X-File-Name`, `X-Session-Id`, `X-Exphttp-No-Gzip`, `X-D`, `X-E`, `X-K`,
 `X-Kb64`, `X-N`, `X-H`, and numeric `X-D-N` chunk headers).
 
@@ -584,9 +584,9 @@ server allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
 
 ## Advanced Upload
 
-Advanced upload is disabled by default. Start the server with
-`--advanced-upload` to treat unknown, non-standard HTTP methods carrying
-advanced upload data as upload requests. Writes are still limited to `uploads/`.
+Advanced upload is enabled by default. Unknown, non-standard HTTP methods
+carrying advanced upload data are treated as upload requests. Writes are still
+limited to `uploads/`.
 
 The advanced upload endpoint accepts encoded payloads via JSON body, HTTP
 headers, or query parameters. Common fields are:

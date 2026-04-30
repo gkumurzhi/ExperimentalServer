@@ -61,7 +61,7 @@ class HandlerMixin(
         if handler:
             return handler(request)
 
-        if self.advanced_upload_enabled and self._has_advanced_upload_payload(request):
+        if self._has_advanced_upload_payload(request):
             return self.handle_advanced_upload(request)
 
         return self._method_not_allowed(request.method)

@@ -115,15 +115,11 @@ def is_http_token(value: str) -> bool:
     return bool(_HTTP_TOKEN_RE.fullmatch(value))
 
 
-def resolve_preflight_allow_methods(
-    requested_method: str,
-    *,
-    advanced_upload_enabled: bool,
-) -> str:
-    """Return allowed methods, conditionally including an advanced upload token."""
+def resolve_preflight_allow_methods(requested_method: str) -> str:
+    """Return allowed methods, including a requested advanced upload token."""
     methods = list(CORS_ALLOW_METHODS)
     method = requested_method.strip().upper()
-    if method and method not in methods and advanced_upload_enabled and is_http_token(method):
+    if method and method not in methods and is_http_token(method):
         methods.append(method)
     return ", ".join(methods)
 

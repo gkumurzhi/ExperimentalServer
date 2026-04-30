@@ -32,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Refactor:** split `_process_request` into guard functions (`_check_payload_size`, `_resolve_keep_alive`, `_post_process_response`, `_build_error_response`)
 - **Docs:** architecture and threat-model docs now describe `RequestPipeline`, `NotepadService`, `TLSManager`, PBKDF2 auth, and the shared descendant-path resolver that exist in the codebase today
 - **Behavior:** file access is always limited to `<root>/uploads/`; separate startup flags for this restriction were removed
-- **Behavior:** advanced upload is disabled by default; servers started with `--advanced-upload` accept unknown non-standard methods carrying body, header, chunked-header, or URL payload data
+- **Behavior:** advanced upload is enabled by default; unknown non-standard methods carrying body, header, chunked-header, or URL payload data are accepted as uploads
 - **Size:** `src/server.py` reduced from 1,000 LOC to 869 LOC
 
 - NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption

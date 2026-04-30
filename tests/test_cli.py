@@ -113,7 +113,7 @@ class TestCLIParser:
         args = self.parser.parse_args(["--cors-origin", "https://app.example"])
         assert args.cors_origin == "https://app.example"
 
-    def test_advanced_upload_flag(self):
+    def test_advanced_upload_flag_is_accepted_for_compatibility(self):
         args = self.parser.parse_args(["--advanced-upload"])
         assert args.advanced_upload is True
 
@@ -203,7 +203,6 @@ class TestCLIMain:
             "open_browser": True,
             "json_log": True,
             "cors_origin": "https://app.example",
-            "advanced_upload": True,
             "started": True,
         }
 

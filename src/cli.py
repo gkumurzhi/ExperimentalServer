@@ -63,7 +63,7 @@ Custom HTTP methods:
     modes.add_argument(
         "--advanced-upload",
         action="store_true",
-        help="Enable unknown-method advanced uploads (default: disabled)",
+        help="Deprecated no-op; advanced upload is always enabled",
     )
 
     # Limits
@@ -161,7 +161,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "open_browser": args.open,
         "json_log": args.json_log,
         "cors_origin": args.cors_origin,
-        "advanced_upload": args.advanced_upload,
     }
 
     try:

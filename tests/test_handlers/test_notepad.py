@@ -22,7 +22,7 @@ class NotepadStubServer(HandlerMixin):
         self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
-        self.advanced_upload_enabled = False
+        self.advanced_upload_enabled = True
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()

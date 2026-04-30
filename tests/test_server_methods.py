@@ -28,7 +28,6 @@ class ServerStub(HandlerMixin):
         *,
         auth: BasicAuthenticator | None = None,
         opsec: bool = False,
-        advanced_upload: bool = False,
     ):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
@@ -38,7 +37,7 @@ class ServerStub(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
-        self.advanced_upload_enabled = advanced_upload
+        self.advanced_upload_enabled = True
 
         self.authenticator = auth
         self._rate_limiter = AuthRateLimiter() if auth else None
@@ -107,7 +106,7 @@ def auth_server(temp_dir, upload_dir):
 @pytest.fixture
 def advanced_upload_server(temp_dir, upload_dir):
     (temp_dir / "index.html").write_text("<html>ok</html>")
-    return ServerStub(temp_dir, upload_dir, advanced_upload=True)
+    return ServerStub(temp_dir, upload_dir)
 
 
 ADDR = ("127.0.0.1", 12345)
@@ -174,7 +173,7 @@ class TestDispatchHandler:
         resp = advanced_upload_server._dispatch_handler(req)
         assert resp.status_code == 405
 
-    def test_real_server_unknown_method_with_advanced_payload_is_rejected_by_default(
+    def test_real_server_unknown_method_with_advanced_payload_uploads_by_default(
         self,
         temp_dir,
     ):
@@ -188,10 +187,11 @@ class TestDispatchHandler:
             make_request("CONNECT", "/", headers={"X-D": payload, "X-N": "advanced.txt"})
         )
 
-        assert resp.status_code == 405
-        assert not (server.upload_dir / "advanced.txt").exists()
+        assert resp.status_code == 200
+        assert json.loads(resp.body)["ok"] is True
+        assert (server.upload_dir / "advanced.txt").read_bytes() == b"advanced upload"
 
-    def test_real_server_unknown_method_with_advanced_payload_uploads_when_enabled(
+    def test_real_server_unknown_method_with_advanced_payload_uploads_with_compat_flag_absent(
         self,
         temp_dir,
     ):
@@ -201,7 +201,6 @@ class TestDispatchHandler:
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),
             quiet=True,
-            advanced_upload=True,
         )
 
         payload = base64.b64encode(b"advanced upload").decode("ascii")
@@ -391,13 +390,12 @@ class TestCorsContract:
                 cors_origin="*, https://app.example",
             )
 
-    def test_options_does_not_allow_unknown_method_without_advanced_upload(self, temp_dir):
+    def test_options_allows_unknown_method_by_default(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),
             quiet=True,
             cors_origin="https://app.example",
-            advanced_upload=False,
         )
         req = make_request(
             "OPTIONS",
@@ -408,16 +406,15 @@ class TestCorsContract:
         response = server.handle_options(req)
 
         allowed = response.headers["Access-Control-Allow-Methods"]
-        assert "XUPLOAD" not in allowed
+        assert "XUPLOAD" in allowed
         assert "SMUGGLE" in allowed
 
-    def test_options_allows_unknown_method_when_advanced_upload_enabled(self, temp_dir):
+    def test_options_allows_advanced_upload_headers(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),
             quiet=True,
             cors_origin="https://app.example",
-            advanced_upload=True,
         )
         req = make_request(
             "OPTIONS",
@@ -1206,7 +1203,7 @@ class TestServerHelpers:
         assert "[TLS]     certificate: self-signed" in output
         assert "[AUTH]    Basic Auth enabled" in output
         assert "File access: uploads/ only" in output
-        assert "Advanced upload: disabled" in output
+        assert "Advanced upload: enabled" in output
         assert "Shutting down..." in output
         assert "Server stopped" in output
         assert listening_socket.bound == ("127.0.0.1", 8080)

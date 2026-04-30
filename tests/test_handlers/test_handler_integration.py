@@ -35,7 +35,7 @@ class StubServer(HandlerMixin):
         self.cors_origin = kwargs.get("cors_origin")
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
-        self.advanced_upload_enabled = kwargs.get("advanced_upload", False)
+        self.advanced_upload_enabled = True
         self.method_handlers = self.build_method_handlers()
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
@@ -384,7 +384,7 @@ class TestHandlePing:
         resp = srv.handle_ping(req)
         data = json.loads(resp.body)
         assert data["access_scope"] == "uploads"
-        assert data["advanced_upload"] is False
+        assert data["advanced_upload"] is True
 
 
 # ── OPTIONS tests ──────────────────────────────────────────────────
@@ -433,7 +433,7 @@ class TestHandleOpsecUpload:
     def test_malformed_request_cannot_use_advanced_upload_fallback(self, temp_dir, upload_dir):
         import base64
 
-        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        srv = StubServer(temp_dir, upload_dir)
         payload = base64.b64encode(b"blocked malformed upload").decode()
         req = HTTPRequest(
             (f"XUPLOAD\r\nX-D: {payload}\r\nX-N: malformed.txt\r\n\r\n").encode("ascii")
@@ -448,7 +448,7 @@ class TestHandleOpsecUpload:
     def test_invalid_request_target_cannot_use_advanced_upload_fallback(self, temp_dir, upload_dir):
         import base64
 
-        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        srv = StubServer(temp_dir, upload_dir)
         payload = base64.b64encode(b"blocked target upload").decode()
         req = HTTPRequest(
             (f"XUPLOAD /\t HTTP/1.1\r\nX-D: {payload}\r\nX-N: target.txt\r\n\r\n").encode("ascii")
@@ -463,7 +463,7 @@ class TestHandleOpsecUpload:
     def test_valid_unknown_method_still_uses_advanced_upload_fallback(self, temp_dir, upload_dir):
         import base64
 
-        srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
+        srv = StubServer(temp_dir, upload_dir)
         payload = base64.b64encode(b"valid fallback upload").decode()
         req = make_request("XUPLOAD", "/", headers={"X-D": payload, "X-N": "fallback.txt"})
 

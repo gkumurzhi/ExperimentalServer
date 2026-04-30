@@ -87,8 +87,6 @@ class ExperimentalHTTPServer(HandlerMixin):
         json_log: bool = False,
         # CORS
         cors_origin: str | None = None,
-        # Advanced upload
-        advanced_upload: bool = False,
         # WebSocket resource limits
         max_websocket_connections: int | None = None,
         websocket_frame_idle_timeout: float = 5.0,
@@ -114,7 +112,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.json_log = json_log
         self.cors_origin = cors_origin or None
         self.cors_origins = parse_cors_origins(self.cors_origin)
-        self.advanced_upload_enabled = advanced_upload
+        self.advanced_upload_enabled = True
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
         # views used by status printing and request handling).
