@@ -699,8 +699,7 @@ class ExperimentalHTTPServer(HandlerMixin):
                     if (
                         buf
                         and incomplete_since is not None
-                        and time.monotonic() - incomplete_since
-                        >= self.websocket_frame_idle_timeout
+                        and time.monotonic() - incomplete_since >= self.websocket_frame_idle_timeout
                     ):
                         logger.warning("WS incomplete frame timed out")
                         send_close(1002, "Incomplete frame timeout")

@@ -21,7 +21,7 @@
 | STAGE-017 | CLOSED | MEDIUM | Bound WebSocket Resource Use | 2026-04-30 13:25:36 MSK | WebSocket admission, incomplete-frame lifetime, buffering, and WS metrics are bounded; targeted tests, compile, ruff, mypy, full suite, and verifier subagents passed. | `stage-reports/STAGE-017-20260430-125548.md` |
 | STAGE-018 | CLOSED | MEDIUM | Clarify Metrics and Error Counting | 2026-04-30 15:48:17 MSK | Metrics now count handler/direct 5xx as server errors, expose explicit client/server error counters, and document `/metrics` semantics; targeted tests, compile, ruff, docs sync, full suite, and verifier subagents passed. | `stage-reports/STAGE-018-20260430-153607.md` |
 | STAGE-019 | CLOSED | MEDIUM | Reduce Upload Memory Spikes | 2026-04-30 16:11:23 MSK | Oversized declared bodies now drop after parseable headers before body reads; advanced-upload body/header/url caps are documented and tested; targeted, compile, lint/type, full suite, and verifier subagents passed. | `stage-reports/STAGE-019-20260430-155229.md` |
-| STAGE-020 | OPEN | MEDIUM | Align CI and Local Toolchain Pins | — | — | — |
+| STAGE-020 | CLOSED | MEDIUM | Align CI and Local Toolchain Pins | 2026-04-30 16:29:07 MSK | Pre-commit Ruff/mypy hooks now match constrained pins; pre-commit and transitives are constrained; local verification docs/templates reflect the constrained path; pre-commit, lint/type, compile, docs, diff, full suite, and verifier subagents passed. | `stage-reports/STAGE-020-20260430-161809.md` |
 | STAGE-021 | OPEN | MEDIUM | Set Dependency Authority and Update Coverage | — | — | — |
 | STAGE-022 | OPEN | MEDIUM | Improve Docker Runtime Examples | — | — | — |
 | STAGE-023 | OPEN | MEDIUM | Align UI Capabilities, A11y, and Smoke Checks | — | — | — |

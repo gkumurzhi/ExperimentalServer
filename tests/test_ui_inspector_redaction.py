@@ -183,9 +183,7 @@ def inspector_probe() -> dict[str, str]:
     )
     if result.returncode != 0:
         pytest.fail(
-            "inspector JS probe failed\n"
-            f"STDOUT:\n{result.stdout}\n"
-            f"STDERR:\n{result.stderr}"
+            f"inspector JS probe failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
 
     return json.loads(result.stdout)

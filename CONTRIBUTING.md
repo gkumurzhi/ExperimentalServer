@@ -18,10 +18,19 @@ On Windows PowerShell, activate the environment with
 `.venv\Scripts\Activate.ps1` and use the same `pip install` command.
 
 To reproduce the pinned CI/docs/security toolchain locally, use the shared
-constraints file:
+constraints file. This also pins the `pre-commit` executable installed by the
+`dev` extra:
 
 ```bash
 PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+```
+
+In Windows PowerShell, set the constraint as an environment variable:
+
+```powershell
+$env:PIP_CONSTRAINT = "constraints/ci.txt"
+pip install -e ".[crypto,dev,lint,test]"
+Remove-Item Env:PIP_CONSTRAINT
 ```
 
 ## Branching
@@ -71,6 +80,7 @@ When you need to reproduce CI package resolution exactly, prefix the install
 step with `PIP_CONSTRAINT=constraints/ci.txt`.
 
 ```bash
+pre-commit run --all-files
 ruff check src tests
 ruff format --check src tests
 mypy src

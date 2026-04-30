@@ -79,12 +79,7 @@ class TestContentLengthSmuggling:
 
     def test_oversized_declared_body_rejected_before_body_recv(self):
         """Declared oversized body should be dropped after headers, before body allocation."""
-        raw = (
-            b"POST / HTTP/1.1\r\n"
-            b"Host: localhost\r\n"
-            b"Content-Length: 1048577\r\n"
-            b"\r\n"
-        )
+        raw = b"POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 1048577\r\n\r\n"
         sock = SingleRecvSocket(raw)
 
         response = receive_request(sock, max_upload_size=1024 * 1024)

@@ -436,12 +436,7 @@ class TestHandleOpsecUpload:
         srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
         payload = base64.b64encode(b"blocked malformed upload").decode()
         req = HTTPRequest(
-            (
-                "XUPLOAD\r\n"
-                f"X-D: {payload}\r\n"
-                "X-N: malformed.txt\r\n"
-                "\r\n"
-            ).encode("ascii")
+            (f"XUPLOAD\r\nX-D: {payload}\r\nX-N: malformed.txt\r\n\r\n").encode("ascii")
         )
 
         resp = srv._dispatch_handler(req)
@@ -456,12 +451,7 @@ class TestHandleOpsecUpload:
         srv = StubServer(temp_dir, upload_dir, advanced_upload=True)
         payload = base64.b64encode(b"blocked target upload").decode()
         req = HTTPRequest(
-            (
-                "XUPLOAD /\t HTTP/1.1\r\n"
-                f"X-D: {payload}\r\n"
-                "X-N: target.txt\r\n"
-                "\r\n"
-            ).encode("ascii")
+            (f"XUPLOAD /\t HTTP/1.1\r\nX-D: {payload}\r\nX-N: target.txt\r\n\r\n").encode("ascii")
         )
 
         resp = srv._dispatch_handler(req)

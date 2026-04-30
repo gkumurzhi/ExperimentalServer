@@ -1,7 +1,7 @@
 # STAGE-020 — Align CI and Local Toolchain Pins
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -48,9 +48,9 @@ Local pre-commit and CI lint/type tooling use compatible pinned versions, and CI
 4. Run pre-commit or equivalent CI commands if tools are available.
 
 ## Acceptance criteria
-- [ ] Ruff/mypy versions used locally do not materially lag CI constraints.
-- [ ] `pre-commit` dependency status is explicit and pinned or excluded from CI install.
-- [ ] CI docs/commands reflect the intended local verification path.
+- [x] Ruff/mypy versions used locally do not materially lag CI constraints.
+- [x] `pre-commit` dependency status is explicit and pinned or excluded from CI install.
+- [x] CI docs/commands reflect the intended local verification path.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -68,4 +68,10 @@ Local pre-commit and CI lint/type tooling use compatible pinned versions, and CI
 - Rollback: Revert tool pin/extras/workflow changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+2026-04-30 16:29:07 MSK — CLOSED.
+
+- `.pre-commit-config.yaml` now pins Ruff and mypy hooks to the constrained toolchain versions: `ruff-pre-commit` `v0.15.5` and `mirrors-mypy` `v1.20.1`.
+- `constraints/ci.txt` now pins `pre-commit==4.6.0` and its required runtime dependencies because CI continues to install the `dev` extra under `PIP_CONSTRAINT=constraints/ci.txt`.
+- `pyproject.toml`, `README.md`, `CONTRIBUTING.md`, generated `docs/contributing.md`, and `.github/PULL_REQUEST_TEMPLATE.md` now describe the constrained local verification path, including a PowerShell form.
+- Ruff formatter configuration now uses LF line endings, and the aligned formatter normalized existing CRLF Python files plus small formatting differences required by the newer pinned formatter.
+- Verification passed: constrained install, `pre-commit run --all-files`, direct Ruff lint/format, mypy, compileall, docs sync, `git diff --check`, full pytest (`635 passed`), and dependency/devops/reviewer subagents.

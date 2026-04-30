@@ -120,8 +120,7 @@ class SmuggleHandlersMixin(BaseHandler):
             json.dumps(
                 {
                     "error": (
-                        "SMUGGLE source too large. "
-                        f"Max size: {self.format_size(source_size_limit)}"
+                        f"SMUGGLE source too large. Max size: {self.format_size(source_size_limit)}"
                     ),
                     "status": 413,
                     "file_size": source_size,

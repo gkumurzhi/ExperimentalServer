@@ -207,8 +207,7 @@ class TestStaticResourceRouting:
             f"data/{resource_path}"
             for resource_path in _index_local_script_resource_paths()
             if not any(
-                fnmatch.fnmatchcase(f"data/{resource_path}", pattern)
-                for pattern in patterns
+                fnmatch.fnmatchcase(f"data/{resource_path}", pattern) for pattern in patterns
             )
         ]
 

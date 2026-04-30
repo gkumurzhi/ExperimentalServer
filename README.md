@@ -707,7 +707,7 @@ pip install -e ".[dev]"
 pip install -e ".[lint]"
 
 # Локально как в CI (pytest + hypothesis + benchmark + mypy + ruff + crypto)
-pip install -e ".[crypto,dev,lint,test]"
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 
 # Документация сайта
 pip install -e ".[docs]"
@@ -717,10 +717,26 @@ pip install -e ".[all]"
 ```
 
 Для воспроизводимой установки теми же версиями инструментов, что и в CI,
-security workflow и Docker wheel build, используйте общий constraints-файл:
+security workflow и Docker wheel build, используйте общий constraints-файл.
+Он также фиксирует `pre-commit`, который входит в `dev` extra:
 
 ```bash
 PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+```
+
+В Windows PowerShell задайте constraint как переменную окружения:
+
+```powershell
+$env:PIP_CONSTRAINT = "constraints/ci.txt"
+pip install -e ".[crypto,dev,lint,test]"
+Remove-Item Env:PIP_CONSTRAINT
+```
+
+Если используете локальные hooks, они закрепляют те же версии `ruff` и
+`mypy`, что и CI:
+
+```bash
+pre-commit run --all-files
 ```
 
 `Dockerfile` теперь также фиксирует базовый образ `python:3.12-slim` по digest.

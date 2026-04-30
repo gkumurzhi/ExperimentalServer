@@ -123,12 +123,7 @@ def resolve_preflight_allow_methods(
     """Return allowed methods, conditionally including an advanced upload token."""
     methods = list(CORS_ALLOW_METHODS)
     method = requested_method.strip().upper()
-    if (
-        method
-        and method not in methods
-        and advanced_upload_enabled
-        and is_http_token(method)
-    ):
+    if method and method not in methods and advanced_upload_enabled and is_http_token(method):
         methods.append(method)
     return ", ".join(methods)
 

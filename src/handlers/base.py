@@ -36,9 +36,7 @@ def _safe_package_resource_parts(resource_path: str) -> tuple[str, ...] | None:
 
     parts = tuple(decoded_path.split("/"))
     if any(
-        part in {"", ".", ".."}
-        or PureWindowsPath(part).drive
-        or PureWindowsPath(part).root
+        part in {"", ".", ".."} or PureWindowsPath(part).drive or PureWindowsPath(part).root
         for part in parts
     ):
         return None

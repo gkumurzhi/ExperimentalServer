@@ -184,10 +184,7 @@ class TestWSClientMasking:
         server.running = True
 
         partial_frame = (
-            b"\x81\xff"
-            + struct.pack("!Q", _MAX_FRAME_SIZE)
-            + b"\x37\x38\x39\x30"
-            + b"partial"
+            b"\x81\xff" + struct.pack("!Q", _MAX_FRAME_SIZE) + b"\x37\x38\x39\x30" + b"partial"
         )
         sock = _WebSocketLoopSocket([partial_frame, TimeoutError()])
         request = make_request(
