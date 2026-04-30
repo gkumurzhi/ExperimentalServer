@@ -23,6 +23,6 @@ repos:
     hooks:
       - id: mypy
         additional_dependencies:
-          - cryptography==46.0.5
+          - cryptography==47.0.0
         files: ^src/
         args: [--strict]
