@@ -38,6 +38,10 @@ uv.lock
 uploads/*
 !uploads/.gitkeep
 
+# Notes (encrypted runtime data)
+notes/*
+!notes/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

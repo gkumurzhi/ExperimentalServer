@@ -1,7 +1,7 @@
 # STAGE-025 — Protect Runtime Note Data from Accidental Commit
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -45,9 +45,9 @@ Runtime note data receives the same accidental-commit protection as uploads.
 3. Validate `git status --short notes/` no longer lists user data once ignore policy applies.
 
 ## Acceptance criteria
-- [ ] `notes/` runtime contents are ignored by Git by default.
-- [ ] No existing note data is read, deleted, or modified.
-- [ ] The ignore pattern does not hide source fixtures unintentionally.
+- [x] `notes/` runtime contents are ignored by Git by default.
+- [x] No existing note data is read, deleted, or modified.
+- [x] The ignore pattern does not hide source fixtures unintentionally.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,4 @@ Runtime note data receives the same accidental-commit protection as uploads.
 - Rollback: Revert `.gitignore` changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed on 2026-04-30 18:17:22 MSK. Added a committed `.gitignore` rule for top-level `notes/*` with a `!notes/.gitkeep` exception, matching the existing runtime-data policy for `uploads/`. Verification used dummy paths only; no existing `notes/**` contents were read, deleted, or modified. The live clone's local `.git/info/exclude` contains an over-broad `notes/` rule, so the committed `.gitignore` behavior was also verified in an isolated temporary repo.

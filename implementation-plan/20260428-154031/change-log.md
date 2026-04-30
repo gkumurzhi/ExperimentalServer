@@ -143,3 +143,9 @@
 - Files changed: `.github/workflows/ci.yml`, `API.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `README.md`, `SECURITY.md`, `docs/ADR/ADR-002-advanced-upload-xor-hmac.md`, `docs/api.md`, `docs/changelog.md`, `docs/contributing.md`, `docs/security.md`, `docs/threat-model.md`, `examples/advanced_upload_nginx.md`, `implementation-plan/20260428-154031/stages/STAGE-024-documentation-drift-medium.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-024-20260430-175543.md`
 - Verification: `python3 tools/sync_docs.py --check`; scoped `git diff --check`; CI stale-doc grep; source-to-doc static review across documented behavior; api-documenter, security-auditor, and documentation-engineer verifier subagents passed after fixing a WebSocket threat-model wording overstatement.
 - Report: `stage-reports/STAGE-024-20260430-175543.md`
+
+## 2026-04-30 18:17:22 MSK — STAGE-025
+- Status: CLOSED
+- Files changed: `.gitignore`, `implementation-plan/20260428-154031/stages/STAGE-025-runtime-data-ignore-policy.md`, `implementation-plan/20260428-154031/stage-status.md`, `implementation-plan/20260428-154031/change-log.md`, `implementation-plan/20260428-154031/stage-reports/STAGE-025-20260430-181722.md`
+- Verification: dummy-path `git check-ignore` in this clone plus an isolated temporary repo to verify committed `.gitignore` behavior; `python -m compileall src tests`; scoped `git diff --check`; runtime note status check; architect and security verifier subagents passed.
+- Report: `stage-reports/STAGE-025-20260430-181722.md`
