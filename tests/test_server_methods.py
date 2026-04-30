@@ -50,6 +50,8 @@ class ServerStub(HandlerMixin):
             "uptime_seconds": 0,
             "total_requests": 0,
             "total_errors": 0,
+            "client_errors": 0,
+            "server_errors": 0,
             "bytes_sent": 0,
             "status_counts": {},
         }

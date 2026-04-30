@@ -16,6 +16,8 @@ class TestMetricsCollector:
 
         assert snap["total_requests"] == 0
         assert snap["total_errors"] == 0
+        assert snap["client_errors"] == 0
+        assert snap["server_errors"] == 0
         assert snap["bytes_sent"] == 0
         assert snap["status_counts"] == {}
         assert snap["websocket"] == {"active": 0, "rejected_admissions": 0}
@@ -34,13 +36,16 @@ class TestMetricsCollector:
         m = MetricsCollector()
         m.record(200, 100)
         m.record(200, 50)
-        m.record(404, 30, error=True)
+        m.record(404, 30)
+        m.record(500, 0)
 
         snap = m.snapshot()
-        assert snap["total_requests"] == 3
+        assert snap["total_requests"] == 4
         assert snap["total_errors"] == 1
+        assert snap["client_errors"] == 1
+        assert snap["server_errors"] == 1
         assert snap["bytes_sent"] == 180
-        assert snap["status_counts"] == {200: 2, 404: 1}
+        assert snap["status_counts"] == {200: 2, 404: 1, 500: 1}
 
     def test_snapshot_returns_defensive_copy(self) -> None:
         m = MetricsCollector()
@@ -54,14 +59,27 @@ class TestMetricsCollector:
         snap2 = m.snapshot()
         assert snap2["status_counts"] == {200: 1}
 
-    def test_error_flag_only_counts_on_true(self) -> None:
+    def test_error_counters_are_status_based(self) -> None:
         m = MetricsCollector()
+        m.record(404, 10)
         m.record(500, 0)
-        m.record(500, 0, error=True)
+        m.record(503, 0, error=True)
+
+        snap = m.snapshot()
+        assert snap["client_errors"] == 1
+        assert snap["server_errors"] == 2
+        assert snap["total_errors"] == snap["server_errors"]
+        assert snap["status_counts"] == {404: 1, 500: 1, 503: 1}
+
+    def test_error_flag_counts_exceptional_server_failures(self) -> None:
+        m = MetricsCollector()
+        m.record(200, 0, error=True)
 
         snap = m.snapshot()
         assert snap["total_errors"] == 1
-        assert snap["status_counts"][500] == 2
+        assert snap["client_errors"] == 0
+        assert snap["server_errors"] == 1
+        assert snap["status_counts"] == {200: 1}
 
     def test_concurrent_record_is_thread_safe(self) -> None:
         m = MetricsCollector()

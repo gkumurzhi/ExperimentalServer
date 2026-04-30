@@ -47,6 +47,8 @@ class StubServer(HandlerMixin):
             "uptime_seconds": 42.0,
             "total_requests": 10,
             "total_errors": 1,
+            "client_errors": 0,
+            "server_errors": 1,
             "bytes_sent": 5000,
             "status_counts": {200: 9, 500: 1},
         }
@@ -1037,6 +1039,8 @@ class TestMetrics:
         assert "uptime_seconds" in data
         assert "total_requests" in data
         assert "total_errors" in data
+        assert "client_errors" in data
+        assert "server_errors" in data
         assert "bytes_sent" in data
         assert "status_counts" in data
 

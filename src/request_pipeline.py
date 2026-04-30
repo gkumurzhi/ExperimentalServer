@@ -134,7 +134,11 @@ class RequestPipeline:
             self._server._post_process_response(request, response, request_id)
 
             bytes_sent = self._server._send_response(response, client_socket, build_args)
-            self._server._record_metric(response.status_code, bytes_sent)
+            self._server._record_metric(
+                response.status_code,
+                bytes_sent,
+                error=response.status_code >= 500,
+            )
 
             if response.stream_path is not None:
                 use_keep_alive = False
@@ -175,7 +179,11 @@ class RequestPipeline:
         """Send a direct response outside the normal response pipeline and record metrics."""
         payload = response.build(**build_args)
         client_socket.sendall(payload)
-        self._server._record_metric(response.status_code, len(payload))
+        self._server._record_metric(
+            response.status_code,
+            len(payload),
+            error=response.status_code >= 500,
+        )
 
     def _process_websocket_upgrade(
         self,

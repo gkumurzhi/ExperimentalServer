@@ -1,7 +1,7 @@
 # STAGE-018 — Clarify Metrics and Error Counting
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -48,9 +48,9 @@ Metrics semantics are explicit and reflect client-visible failures and basic per
 4. Update tests and docs for the selected metrics contract.
 
 ## Acceptance criteria
-- [ ] Handler-returned 5xx responses are not invisible in metrics.
-- [ ] Metrics docs/examples match implementation.
-- [ ] Tests cover handler error, direct error, and normal response recording.
+- [x] Handler-returned 5xx responses are not invisible in metrics.
+- [x] Metrics docs/examples match implementation.
+- [x] Tests cover handler error, direct error, and normal response recording.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -68,4 +68,11 @@ Metrics semantics are explicit and reflect client-visible failures and basic per
 - Rollback: Revert metrics/pipeline/test/doc changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 15:48:17 MSK. Metrics now expose `client_errors` and
+`server_errors`, with `total_errors` retained as a compatibility alias for
+`server_errors`. Handler-returned and direct 5xx responses are recorded as
+server errors, direct 4xx responses are recorded as client errors, and docs
+describe `/metrics`, PING metrics, status buckets, and WebSocket resource
+counters. Verification passed with targeted metrics/error tests, compile,
+ruff, docs sync, full test suite, static metric call-site review, and
+python/performance verifier subagents.

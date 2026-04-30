@@ -19,7 +19,7 @@
 | STAGE-015 | CLOSED | MEDIUM | Make CORS Origin and Header Contract Valid | 2026-04-29 20:54:06 MSK | CORS now emits browser-valid origins, aligned allow/expose headers, and gated unknown-method preflights; targeted tests, compile, ruff, diff check, and verifier subagents passed. | `stage-reports/STAGE-015-20260429-203343.md` |
 | STAGE-016 | CLOSED | MEDIUM | Validate WebSocket Frame Semantics | 2026-04-30 12:48:36 MSK | WebSocket upgrades now require Host; malformed FIN/RSV/opcode/control/close semantics fail before NOTE dispatch and first protocol close codes are preserved; targeted tests, compile, ruff, full suite, and verifier subagents passed. | `stage-reports/STAGE-016-20260430-122243.md` |
 | STAGE-017 | CLOSED | MEDIUM | Bound WebSocket Resource Use | 2026-04-30 13:25:36 MSK | WebSocket admission, incomplete-frame lifetime, buffering, and WS metrics are bounded; targeted tests, compile, ruff, mypy, full suite, and verifier subagents passed. | `stage-reports/STAGE-017-20260430-125548.md` |
-| STAGE-018 | OPEN | MEDIUM | Clarify Metrics and Error Counting | — | — | — |
+| STAGE-018 | CLOSED | MEDIUM | Clarify Metrics and Error Counting | 2026-04-30 15:48:17 MSK | Metrics now count handler/direct 5xx as server errors, expose explicit client/server error counters, and document `/metrics` semantics; targeted tests, compile, ruff, docs sync, full suite, and verifier subagents passed. | `stage-reports/STAGE-018-20260430-153607.md` |
 | STAGE-019 | OPEN | MEDIUM | Reduce Upload Memory Spikes | — | — | — |
 | STAGE-020 | OPEN | MEDIUM | Align CI and Local Toolchain Pins | — | — | — |
 | STAGE-021 | OPEN | MEDIUM | Set Dependency Authority and Update Coverage | — | — | — |

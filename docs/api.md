@@ -227,16 +227,32 @@ PING / HTTP/1.1
     "uptime_seconds": 3600.5,
     "total_requests": 150,
     "total_errors": 2,
+    "client_errors": 4,
+    "server_errors": 2,
     "bytes_sent": 524288,
     "status_counts": {
-      "200": 148,
-      "404": 2
+      "200": 144,
+      "404": 4,
+      "500": 2
+    },
+    "websocket": {
+      "active": 0,
+      "rejected_admissions": 1
     }
   }
 }
 ```
 
-The response also includes the header `X-Ping-Response: pong`.
+The response also includes the header `X-Ping-Response: pong`. The same
+metrics object is available as JSON from `GET /metrics`.
+
+`total_errors` is retained for compatibility and matches `server_errors`.
+`client_errors` counts recorded 4xx responses. `server_errors` counts recorded
+5xx responses and exceptional request failures. Handler-returned responses and
+direct error responses are included in `status_counts` and the matching error
+bucket. Accepted WebSocket upgrades are tracked through the `websocket`
+resource counters rather than `total_requests`, `status_counts`, or
+`bytes_sent`.
 
 ---
 

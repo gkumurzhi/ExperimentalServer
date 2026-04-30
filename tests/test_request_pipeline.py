@@ -264,6 +264,26 @@ class TestRequestPipeline:
         ]
         assert server.record_calls == [(204, 321, False)]
 
+    def test_handler_returned_500_records_error_metric(self) -> None:
+        server = _PipelineServerStub()
+        server.dispatch_response = HTTPResponse(500)
+        server.send_response_bytes = 111
+        pipeline = RequestPipeline(server)
+
+        result = pipeline.process(
+            _make_raw_request("GET", "/handler-error", {"Host": "example.test"}),
+            _SocketStub(),
+            ("127.0.0.1", 12345),
+            1,
+        )
+
+        assert result is False
+        assert server.post_process_calls
+        assert server.send_calls == [
+            {"status": 500, "build_args": {"cors_origin": None, "keep_alive": False}}
+        ]
+        assert server.record_calls == [(500, 111, True)]
+
     def test_streaming_response_forces_connection_close(self, temp_dir: Path) -> None:
         file_path = temp_dir / "payload.bin"
         file_path.write_bytes(b"streamed")
@@ -374,7 +394,7 @@ class TestRequestPipeline:
         assert len(sock.sent) == 1
         assert b"HTTP/1.1 501" in sock.sent[0]
         assert server.handled_websocket_paths == []
-        assert server.record_calls == [(501, len(sock.sent[0]), False)]
+        assert server.record_calls == [(501, len(sock.sent[0]), True)]
 
     def test_valid_websocket_upgrade_dispatches_handler(self) -> None:
         server = _PipelineServerStub()
@@ -439,7 +459,7 @@ class TestRequestPipeline:
         assert server.handled_websocket_paths == []
         assert server.websocket_acquire_calls == 1
         assert server.websocket_release_calls == 0
-        assert server.record_calls == [(503, len(sock.sent[0]), False)]
+        assert server.record_calls == [(503, len(sock.sent[0]), True)]
 
     def test_internal_error_records_metric_and_sends_500(self) -> None:
         server = _PipelineServerStub()

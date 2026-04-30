@@ -14,7 +14,8 @@ class MetricsCollector:
         self._lock = threading.Lock()
         self._start_time: float = 0.0
         self._request_count: int = 0
-        self._error_count: int = 0
+        self._client_error_count: int = 0
+        self._server_error_count: int = 0
         self._bytes_sent: int = 0
         self._status_counts: dict[int, int] = {}
         self._websocket_active: int = 0
@@ -25,13 +26,20 @@ class MetricsCollector:
         self._start_time = time.monotonic()
 
     def record(self, status_code: int, response_size: int, *, error: bool = False) -> None:
-        """Record a single completed request."""
+        """Record a single completed request.
+
+        Error counters are status-based: 4xx responses are client errors and
+        5xx responses are server errors. The ``error`` flag remains available
+        for exceptional server failures that should count as server errors.
+        """
         with self._lock:
             self._request_count += 1
             self._bytes_sent += response_size
             self._status_counts[status_code] = self._status_counts.get(status_code, 0) + 1
-            if error:
-                self._error_count += 1
+            if 400 <= status_code < 500:
+                self._client_error_count += 1
+            if status_code >= 500 or error:
+                self._server_error_count += 1
 
     def record_websocket_opened(self) -> None:
         """Record a WebSocket connection admitted by the server."""
@@ -55,7 +63,9 @@ class MetricsCollector:
             return {
                 "uptime_seconds": round(uptime, 1),
                 "total_requests": self._request_count,
-                "total_errors": self._error_count,
+                "total_errors": self._server_error_count,
+                "client_errors": self._client_error_count,
+                "server_errors": self._server_error_count,
                 "bytes_sent": self._bytes_sent,
                 "status_counts": dict(self._status_counts),
                 "websocket": {
