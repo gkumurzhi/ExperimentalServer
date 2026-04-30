@@ -1,7 +1,7 @@
 # STAGE-024 — Clean Remaining Documentation Drift
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -50,9 +50,9 @@ Canonical docs and generated mirrors match current implementation for medium-pri
 6. Regenerate/check docs mirrors.
 
 ## Acceptance criteria
-- [ ] No known medium-priority docs drift from the analysis remains unaddressed or intentionally deferred.
-- [ ] `tools/sync_docs.py --check` passes.
-- [ ] Docs do not overstate security properties or runtime defaults.
+- [x] No known medium-priority docs drift from the analysis remains unaddressed or intentionally deferred.
+- [x] `tools/sync_docs.py --check` passes.
+- [x] Docs do not overstate security properties or runtime defaults.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -71,4 +71,8 @@ Canonical docs and generated mirrors match current implementation for medium-pri
 - Rollback: Revert documentation/mirror changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed 2026-04-30 18:12:37 MSK.
+- Canonical docs and generated mirrors now reflect advanced-upload opt-in behavior, Transfer-Encoding rejection, HMAC payload-only coverage, generated filename/collision caveats, INFO response shape, CORS/OPTIONS behavior, WebSocket `clear`/failure/origin semantics, and root-doc sync instructions.
+- Also corrected a threat-model overstatement that described WebSocket upgrade validation as HMAC-backed; it now describes RFC 6455 validation and `Sec-WebSocket-Accept` SHA-1 derivation.
+- Verification: `python3 tools/sync_docs.py --check`; scoped `git diff --check`; CI stale-doc grep; source-to-doc static review; api-documenter, security-auditor, and documentation-engineer verifier subagents passed after the WebSocket threat-model wording fix.
+- Report: `stage-reports/STAGE-024-20260430-175543.md`

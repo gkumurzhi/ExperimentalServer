@@ -19,9 +19,10 @@ Requirements:
 ## Decision
 
 1. **Baseline (stdlib):** XOR-stream against a key derived from a shared
-   secret, followed by an HMAC-SHA256 tag over ciphertext + metadata. This
-   gives integrity and rudimentary confidentiality; it is **not** a
-   substitute for AEAD.
+   secret, followed by an HMAC-SHA256 tag over the payload ciphertext bytes.
+   This gives payload integrity and rudimentary confidentiality; it is **not**
+   a substitute for AEAD and does not authenticate filename or transport
+   metadata.
 2. **Upgrade (optional):** when `cryptography>=44.0` is available, the
    upload path uses AES-256-GCM with a random 12-byte nonce; wire format
    carries a version byte so both clients and the server can distinguish
@@ -36,7 +37,8 @@ Requirements:
 - Zero external deps in the common case; AES-GCM is an opt-in upgrade.
 - The wire format is versioned (`src/security/crypto.py`), so future
   algorithms can be added without breaking existing clients.
-- HMAC prevents silent corruption of uploaded bytes.
+- HMAC prevents silent corruption of uploaded payload bytes when the client
+  supplies a tag.
 
 ### Negative — explicitly out of scope
 

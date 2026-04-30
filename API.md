@@ -21,7 +21,7 @@ below.
 | INFO | Invalid paths return legacy `text/plain` body `Invalid path`. Missing paths return JSON `{"exists": false, "path": "<path>"}`. Hidden paths use the shared JSON error body. |
 | SMUGGLE | Missing files return JSON `{"error": "File not found", "path": "<path>"}`. Source-size failures use JSON `{"error": "...", "status": 413, ...size fields...}`. |
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
-| WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
+| WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`, `503`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
 | Advanced upload | Unknown methods return shared JSON `405` unless `--advanced-upload` is enabled and the request carries an advanced payload in the body, headers, chunked headers, or query string. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
 | Auth and request guards | Basic-auth failures, auth rate limits, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
@@ -44,7 +44,7 @@ the built-in UI assets. Other file paths are resolved inside `uploads/`;
 include `Content-Security-Policy`; uploaded HTML/SVG files are forced to
 download as attachments.
 
-**Status codes:** `200` OK, `404` Not Found
+**Status codes:** `200` OK, `304` Not Modified (if ETag matches), `404` Not Found
 
 ---
 
@@ -173,7 +173,7 @@ workspace.
 
 **Request:**
 ```
-INFO /uploads/path?offset=0&limit=100 HTTP/1.1
+INFO /uploads/?offset=0&limit=100 HTTP/1.1
 ```
 
 **Query parameters:**
@@ -183,23 +183,35 @@ INFO /uploads/path?offset=0&limit=100 HTTP/1.1
 **Response (200):**
 ```json
 {
-  "path": "/uploads",
+  "exists": true,
+  "path": "/uploads/",
+  "name": "uploads",
+  "is_file": false,
+  "is_directory": true,
+  "size": 4096,
+  "size_human": "4.0 KB",
+  "content_type": "unknown",
+  "created": "2025-01-15T10:30:00",
+  "modified": "2025-01-15T10:30:00",
+  "extension": "",
+  "access_scope": "uploads",
   "total_items": 42,
   "offset": 0,
   "limit": 100,
   "contents": [
     {
       "name": "file.txt",
-      "type": "file",
-      "size": 1234,
-      "size_human": "1.2 KB",
-      "modified": "2025-01-15T10:30:00"
+      "is_dir": false
     }
   ]
 }
 ```
 
-**Status codes:** `200` OK, `404` Not Found
+Directory `contents` entries include only `name` and `is_dir`; request `INFO`
+for a specific child path to retrieve size, timestamps, content type, and other
+file metadata for that entry.
+
+**Status codes:** `200` OK, `400` Invalid path, `404` Not Found
 
 ---
 
@@ -492,11 +504,19 @@ Hidden files inside `notes/` are preserved.
 
 ## WebSocket — /notes/ws
 
-Real-time notepad sync over WebSocket (RFC 6455). The server detects an upgrade request on any path starting with `/notes/ws` and performs the handshake inline, before the normal HTTP handler runs. The connection uses a 60-second idle timeout; the server sends a ping frame when idle to keep the connection alive. When the server is installed without `exphttp[crypto]`, the upgrade is rejected with `501`.
+Real-time notepad sync over WebSocket (RFC 6455). The server detects an
+upgrade request on any path starting with `/notes/ws` and performs the
+handshake inline, before the normal HTTP handler runs. The connection uses a
+60-second idle timeout; the server sends a ping frame when idle to keep the
+connection alive. Upgrade validation requires `GET`, `Host`,
+`Upgrade: websocket`, `Connection: Upgrade`, a valid 16-byte
+`Sec-WebSocket-Key`, and `Sec-WebSocket-Version: 13`. When the server is
+installed without `exphttp[crypto]`, the upgrade is rejected with `501`.
 
 **Upgrade request:**
 ```
 GET /notes/ws HTTP/1.1
+Host: <server-host>
 Upgrade: websocket
 Connection: Upgrade
 Sec-WebSocket-Key: <base64-nonce>
@@ -513,6 +533,10 @@ Sec-WebSocket-Accept: <computed accept key>
 
 All WebSocket messages are UTF-8 JSON text frames. The client sends masked frames (required by RFC 6455); the server sends unmasked frames.
 
+Same-origin upgrades are allowed by default. Cross-origin upgrades require the
+`Origin` to match a configured `--cors-origin` value, unless CORS is configured
+as wildcard `*`.
+
 **Client message types:**
 
 | `type` | Fields | Description |
@@ -521,6 +545,7 @@ All WebSocket messages are UTF-8 JSON text frames. The client sends masked frame
 | `load` | `id` | Load a note by ID |
 | `list` | — | List all notes |
 | `delete` | `id` | Delete a note |
+| `clear` | — | Clear all notes from the separate `notes/` directory |
 
 **Server response types:**
 
@@ -530,15 +555,28 @@ All WebSocket messages are UTF-8 JSON text frames. The client sends masked frame
 | `loaded` | `id`, `title`, `data`, ... | Note loaded |
 | `list` | `notes`, `count` | Note list |
 | `deleted` | `success`, `id` | Note deleted |
+| `cleared` | `success`, deletion counters, `preserved` | Notes cleared |
 | `error` | `error` | Error message |
+
+Domain errors for `save`, `load`, `delete`, and `clear` can keep the operation
+response type (`saved`, `loaded`, `deleted`, or `cleared`) while adding
+`error` and `status`. Invalid JSON, non-object messages, unknown message types,
+and invalid note IDs use `{"type": "error", "error": "..."}`.
 
 ---
 
 ## OPTIONS
 
-CORS preflight handler. Returns allowed methods.
+CORS preflight handler. Returns allowed methods when CORS is enabled.
 
-**Response (204):** No body. `Access-Control-Allow-Methods` header included.
+**Response (204):** No body. If CORS is disabled, no
+`Access-Control-Allow-*` headers are emitted. If CORS is enabled,
+`Access-Control-Allow-Methods` lists built-in methods. A requested unknown
+method is added only when `--advanced-upload` is enabled and the method is a
+valid HTTP token. Requested headers are reflected only when they are in the
+server allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
+`X-File-Name`, `X-Session-Id`, `X-Exphttp-No-Gzip`, `X-D`, `X-E`, `X-K`,
+`X-Kb64`, `X-N`, `X-H`, and numeric `X-D-N` chunk headers).
 
 ---
 
@@ -555,7 +593,8 @@ headers, or query parameters. Common fields are:
 - `e`: encryption mode
 - `k`: decryption key
 - `kb64`: whether `k` is base64-encoded
-- `n` / `name`: suggested filename
+- `n` / `name`: suggested filename; omitted names are generated as
+  `<sha256[:12]>.bin`
 - `h` / `hmac`: integrity tag
 
 Header transport also supports chunked payload headers `X-D-0`, `X-D-1`, ... for long values.
@@ -588,6 +627,12 @@ Content-Type: application/json
   "transport": "body"
 }
 ```
+
+The response does not include the final saved filename or `/uploads/...` path.
+If `n` / `name` is omitted, the server uses `<sha256[:12]>.bin`. Before writing,
+the chosen name is sanitized and, if it already exists, receives a random
+suffix. Clients that need a stable follow-up path should provide a filename and
+can confirm the saved workspace contents with `INFO`.
 
 **Header transport example:**
 
@@ -622,7 +667,7 @@ Failed auth returns `401` with `WWW-Authenticate` header. Rate limiting applies 
 
 | Header | Description |
 |--------|-------------|
-| `X-Request-Id` | Unique request correlation ID |
+| `X-Request-Id` | Unique request correlation ID on normally dispatched HTTP responses; direct guard or upgrade errors may be sent before this decoration |
 | `X-Upload-Status` | Upload result: `success`, `error`, `no-data` |
 | `X-Fetch-Status` | Download result: `success`, `file-not-found` |
 | `X-File-Name` | Sanitized filename |

@@ -26,7 +26,7 @@ trusted *after* it is validated at the boundary.
 |--------|------------|
 | Client impersonating a legit user | Basic Auth with PBKDF2-SHA256 + per-user salt; rate limiting on failed auth |
 | Server impersonation (MITM) | TLS with modern ciphers; Let's Encrypt or user-supplied cert |
-| Forged WebSocket Upgrade | `Sec-WebSocket-Key` handshake validated via stdlib HMAC |
+| Malformed WebSocket Upgrade | RFC 6455 upgrade headers are validated and `Sec-WebSocket-Accept` is derived with the standard SHA-1 handshake algorithm |
 
 ### Tampering
 
@@ -34,8 +34,8 @@ trusted *after* it is validated at the boundary.
 |--------|------------|
 | Path traversal in upload/download | `Path.resolve().relative_to(base)` — see ADR-004 |
 | Content-Length smuggling (duplicate/negative CL) | Rejected in `src/http/io.py:_parse_content_length` |
-| Transfer-Encoding smuggling | Known limitation: the backend does not decode chunked bodies; deploy behind a proxy that rejects `Transfer-Encoding` until this is fixed |
-| Advanced upload payload modification | Optional HMAC-SHA256 tag over ciphertext + metadata |
+| Transfer-Encoding smuggling | Requests advertising `Transfer-Encoding` are rejected at the receive layer because the backend does not decode chunked bodies |
+| Advanced upload payload modification | Optional HMAC-SHA256 tag over the encoded/ciphertext payload bytes; filename and transport metadata are not covered |
 | WebSocket frame injection | Frame size capped at 10 MB in `src/websocket.py` |
 
 ### Repudiation
