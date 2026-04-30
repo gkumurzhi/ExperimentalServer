@@ -153,6 +153,7 @@ class TestWSClientMasking:
 
         assert handled_payloads == []
         assert b"HTTP/1.1 101 Switching Protocols" in sock.sent[0]
+        assert len(sock.sent) == 2
         protocol_close = parse_ws_frame(sock.sent[1])
         assert protocol_close is not None
         assert protocol_close[0] == WS_CLOSE

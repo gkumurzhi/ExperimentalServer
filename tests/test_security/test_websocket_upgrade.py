@@ -87,6 +87,23 @@ class TestWebSocketUpgradeSecurity:
         finally:
             server.stop()
 
+    def test_missing_host_upgrade_rejected(self) -> None:
+        port = find_free_port()
+        server = _start_server(port)
+        try:
+            raw = (
+                "GET /notes/ws HTTP/1.1\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "\r\n"
+            ).encode("ascii")
+            response = _send_raw(port, raw)
+            assert b"HTTP/1.1 400 Bad Request" in response
+        finally:
+            server.stop()
+
     def test_same_origin_upgrade_accepted(self) -> None:
         port = find_free_port()
         server = _start_server(port)

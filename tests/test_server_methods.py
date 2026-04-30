@@ -517,13 +517,19 @@ class _ListeningSocketStub:
 
 class TestServerHelpers:
     @staticmethod
-    def _make_masked_ws_frame(opcode: int, payload: bytes) -> bytes:
+    def _make_masked_ws_frame(
+        opcode: int,
+        payload: bytes,
+        *,
+        fin: bool = True,
+        rsv: int = 0,
+    ) -> bytes:
         mask_key = b"\x37\x38\x39\x30"
         masked = bytearray(len(payload))
         for index, value in enumerate(payload):
             masked[index] = value ^ mask_key[index % 4]
 
-        header = bytearray((0x80 | opcode,))
+        header = bytearray(((0x80 if fin else 0x00) | rsv | opcode,))
         length = len(payload)
         if length < 126:
             header.append(0x80 | length)
@@ -535,6 +541,13 @@ class TestServerHelpers:
             header.extend(struct.pack("!Q", length))
         header.extend(mask_key)
         return bytes(header) + bytes(masked)
+
+    @staticmethod
+    def _ws_close_code(frame_bytes: bytes) -> int:
+        frame = parse_ws_frame(frame_bytes)
+        assert frame is not None
+        assert frame[0] == WS_CLOSE
+        return struct.unpack("!H", frame[1][:2])[0]
 
     def test_cleanup_old_smuggle_files_removes_stale_html(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -1041,6 +1054,63 @@ class TestServerHelpers:
         assert close_frame is not None
         assert close_frame[0] == WS_CLOSE
 
+    def test_handle_notepad_ws_rejects_malformed_frames_before_dispatch(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        malformed_cases = [
+            (
+                "fragmented text",
+                self._make_masked_ws_frame(WS_TEXT, b'{"type":"list"}', fin=False),
+                1002,
+            ),
+            (
+                "reserved bit",
+                self._make_masked_ws_frame(WS_TEXT, b'{"type":"list"}', rsv=0x40),
+                1002,
+            ),
+            ("unknown opcode", self._make_masked_ws_frame(0x03, b"payload"), 1002),
+            ("oversized control", self._make_masked_ws_frame(WS_PING, b"x" * 126), 1002),
+            ("invalid close payload", self._make_masked_ws_frame(WS_CLOSE, b"\x03"), 1002),
+            (
+                "invalid close reason",
+                self._make_masked_ws_frame(WS_CLOSE, struct.pack("!H", 1000) + b"\xff"),
+                1007,
+            ),
+        ]
+
+        for case_name, frame, expected_close_code in malformed_cases:
+            server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+            handled_payloads: list[bytes] = []
+
+            def record_payload(
+                _sock: object,
+                payload: bytes,
+                sink: list[bytes] = handled_payloads,
+            ) -> None:
+                sink.append(payload)
+
+            monkeypatch.setattr(
+                server,
+                "_handle_ws_message",
+                record_payload,
+            )
+            server.running = True
+            sock = _WebSocketSocketStub([frame])
+            request = make_request(
+                "GET",
+                "/notes/ws",
+                headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+            )
+
+            server._handle_notepad_ws(sock, request)
+
+            assert handled_payloads == [], case_name
+            assert len(sock.sent) == 2, case_name
+            assert self._ws_close_code(sock.sent[1]) == expected_close_code, case_name
+
     def test_handle_notepad_ws_rejects_oversized_frames(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
@@ -1056,13 +1126,11 @@ class TestServerHelpers:
         server._handle_notepad_ws(sock, request)
 
         too_big_close = parse_ws_frame(sock.sent[1])
-        final_close = parse_ws_frame(sock.sent[-1])
         assert too_big_close is not None
         assert too_big_close[0] == WS_CLOSE
         assert struct.unpack("!H", too_big_close[1][:2])[0] == 1009
         assert too_big_close[1][2:] == b"Message too big"
-        assert final_close is not None
-        assert final_close[0] == WS_CLOSE
+        assert len(sock.sent) == 2
 
     def test_start_opens_browser_and_cleans_up_resources(self, temp_dir, monkeypatch, capsys):
         (temp_dir / "index.html").write_text("<html>ok</html>")

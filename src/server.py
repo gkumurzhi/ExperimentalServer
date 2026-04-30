@@ -636,6 +636,18 @@ class ExperimentalHTTPServer(HandlerMixin):
             return
 
         buf = b""
+        close_sent = False
+
+        def send_close(code: int = 1000, reason: str = "") -> None:
+            nonlocal close_sent
+            if close_sent:
+                return
+            try:
+                sock.sendall(build_ws_close_frame(code, reason))
+                close_sent = True
+            except Exception:
+                pass
+
         try:
             sock.settimeout(60.0)
             while self.running:
@@ -656,17 +668,11 @@ class ExperimentalHTTPServer(HandlerMixin):
                 while True:
                     try:
                         frame = parse_ws_frame(buf, require_mask=True)
-                    except WebSocketProtocolError:
-                        try:
-                            sock.sendall(build_ws_close_frame(1002, "Protocol error"))
-                        except Exception:
-                            pass
+                    except WebSocketProtocolError as e:
+                        send_close(e.close_code, e.close_reason)
                         return
                     except ValueError:
-                        try:
-                            sock.sendall(build_ws_close_frame(1009, "Message too big"))
-                        except Exception:
-                            pass
+                        send_close(1009, "Message too big")
                         return
                     if frame is None:
                         break
@@ -674,10 +680,7 @@ class ExperimentalHTTPServer(HandlerMixin):
                     buf = buf[consumed:]
 
                     if opcode == WS_CLOSE:
-                        try:
-                            sock.sendall(build_ws_close_frame())
-                        except Exception:
-                            pass
+                        send_close()
                         return
 
                     if opcode == WS_PING:
@@ -696,7 +699,4 @@ class ExperimentalHTTPServer(HandlerMixin):
         except Exception as e:
             logger.debug("WS connection error: %s", e)
         finally:
-            try:
-                sock.sendall(build_ws_close_frame())
-            except Exception:
-                pass
+            send_close()

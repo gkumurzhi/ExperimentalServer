@@ -8,6 +8,7 @@ from hypothesis import strategies as st
 from src.websocket import (
     WS_BINARY,
     WS_TEXT,
+    WebSocketProtocolError,
     build_ws_frame,
     parse_ws_frame,
 )
@@ -16,10 +17,10 @@ from src.websocket import (
 @given(data=st.binary(min_size=0, max_size=512))
 @settings(max_examples=200, suppress_health_check=[HealthCheck.too_slow], deadline=None)
 def test_parse_never_crashes_on_random_bytes(data: bytes) -> None:
-    """parse_ws_frame must return None, a valid tuple, or raise ValueError."""
+    """parse_ws_frame must return None, a valid tuple, or raise a documented parser error."""
     try:
         result = parse_ws_frame(data)
-    except ValueError:
+    except (ValueError, WebSocketProtocolError):
         return
     assert result is None or (isinstance(result, tuple) and len(result) == 3)
 

@@ -19,15 +19,37 @@ _MAX_FRAME_SIZE = 10 * 1024 * 1024  # 10 MB
 _WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 # Opcodes
+WS_CONTINUATION = 0x00
 WS_TEXT = 0x01
 WS_BINARY = 0x02
 WS_CLOSE = 0x08
 WS_PING = 0x09
 WS_PONG = 0x0A
+_CONTROL_OPCODES = {WS_CLOSE, WS_PING, WS_PONG}
+_SUPPORTED_OPCODES = {
+    WS_CONTINUATION,
+    WS_TEXT,
+    WS_BINARY,
+    WS_CLOSE,
+    WS_PING,
+    WS_PONG,
+}
+_INVALID_CLOSE_CODES = {1004, 1005, 1006, 1015}
 
 
 class WebSocketProtocolError(Exception):
     """Raised when a frame violates the active WebSocket protocol role."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        close_code: int = 1002,
+        close_reason: str = "Protocol error",
+    ) -> None:
+        super().__init__(message)
+        self.close_code = close_code
+        self.close_reason = close_reason
 
 
 def check_websocket_upgrade(request: HTTPRequest) -> bool:
@@ -39,10 +61,13 @@ def check_websocket_upgrade(request: HTTPRequest) -> bool:
     connection = request.headers.get("connection", "").lower()
     ws_key = request.headers.get("sec-websocket-key", "")
     ws_version = request.headers.get("sec-websocket-version", "")
+    host = request.headers.get("host", "")
 
     if upgrade != "websocket":
         return False
     if "upgrade" not in {part.strip() for part in connection.split(",")}:
+        return False
+    if not host:
         return False
     if ws_version != "13":
         return False
@@ -75,6 +100,33 @@ def build_ws_handshake_response(ws_key: str) -> bytes:
     return "\r\n".join(lines).encode("ascii")
 
 
+def _is_valid_close_code(code: int) -> bool:
+    if code in _INVALID_CLOSE_CODES:
+        return False
+    if 1000 <= code <= 1014:
+        return True
+    return 3000 <= code <= 4999
+
+
+def _validate_close_payload(payload: bytes) -> None:
+    if len(payload) == 1:
+        raise WebSocketProtocolError("Close frame payload cannot be one byte")
+    if len(payload) < 2:
+        return
+
+    code = struct.unpack("!H", payload[:2])[0]
+    if not _is_valid_close_code(code):
+        raise WebSocketProtocolError(f"Invalid close status code: {code}")
+    try:
+        payload[2:].decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise WebSocketProtocolError(
+            "Close frame reason must be valid UTF-8",
+            close_code=1007,
+            close_reason="Invalid payload data",
+        ) from exc
+
+
 def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, bytes, int] | None:
     """
     Parse a single WebSocket frame from *data*.
@@ -90,8 +142,21 @@ def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, byt
     if dlen < 2:
         return None
 
-    # Byte 0: FIN + opcode
-    opcode = data[0] & 0x0F
+    # Byte 0: FIN + RSV bits + opcode
+    first_byte = data[0]
+    fin = bool(first_byte & 0x80)
+    rsv = first_byte & 0x70
+    opcode = first_byte & 0x0F
+    if rsv:
+        raise WebSocketProtocolError("WebSocket reserved bits must be zero")
+    if opcode not in _SUPPORTED_OPCODES:
+        raise WebSocketProtocolError(f"Unsupported opcode: 0x{opcode:x}")
+    if opcode == WS_CONTINUATION:
+        raise WebSocketProtocolError("Continuation frames are not supported")
+    if opcode in _CONTROL_OPCODES and not fin:
+        raise WebSocketProtocolError("Control frames must not be fragmented")
+    if opcode in (WS_TEXT, WS_BINARY) and not fin:
+        raise WebSocketProtocolError("Fragmented WebSocket messages are not supported")
 
     # Byte 1: MASK flag + payload length
     masked = bool(data[1] & 0x80)
@@ -111,6 +176,9 @@ def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, byt
             return None
         payload_len = struct.unpack("!Q", data[2:10])[0]
         offset = 10
+
+    if opcode in _CONTROL_OPCODES and payload_len > 125:
+        raise WebSocketProtocolError("Control frame payload must be 125 bytes or less")
 
     if payload_len > _MAX_FRAME_SIZE:
         raise ValueError(f"WebSocket frame too large: {payload_len} bytes")
@@ -135,6 +203,9 @@ def parse_ws_frame(data: bytes, *, require_mask: bool = False) -> tuple[int, byt
         payload = bytes(payload_bytes)
     else:
         payload = raw_payload
+
+    if opcode == WS_CLOSE:
+        _validate_close_payload(payload)
 
     return opcode, payload, offset + payload_len
 

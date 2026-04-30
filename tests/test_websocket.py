@@ -7,6 +7,7 @@ import pytest
 from src.websocket import (
     WS_BINARY,
     WS_CLOSE,
+    WS_CONTINUATION,
     WS_PING,
     WS_PONG,
     WS_TEXT,
@@ -29,6 +30,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -42,6 +44,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
                 "Sec-WebSocket-Version": "13",
@@ -54,6 +57,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
                 "Sec-WebSocket-Version": "13",
@@ -66,8 +70,22 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert check_websocket_upgrade(req) is False
+
+    def test_missing_host_rejected(self):
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
                 "Sec-WebSocket-Version": "13",
             },
         )
@@ -78,6 +96,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "WebSocket",
                 "Connection": "upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -91,6 +110,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "keep-alive, Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -104,6 +124,7 @@ class TestWsUpgradeDetection:
             "POST",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -117,6 +138,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -129,6 +151,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
@@ -142,6 +165,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "not-base64!!!",
@@ -155,6 +179,7 @@ class TestWsUpgradeDetection:
             "GET",
             "/notes/ws",
             headers={
+                "Host": "127.0.0.1:8080",
                 "Upgrade": "websocket",
                 "Connection": "Upgrade",
                 "Sec-WebSocket-Key": "eA==",
@@ -198,7 +223,13 @@ class TestWsHandshake:
 
 class TestWsFrameParsing:
     @staticmethod
-    def _make_masked_frame(opcode: int, payload: bytes) -> bytes:
+    def _make_masked_frame(
+        opcode: int,
+        payload: bytes,
+        *,
+        fin: bool = True,
+        rsv: int = 0,
+    ) -> bytes:
         """Build a client-to-server masked frame for testing."""
         mask_key = b"\x37\x38\x39\x30"
         masked = bytearray(len(payload))
@@ -206,7 +237,7 @@ class TestWsFrameParsing:
             masked[i] = payload[i] ^ mask_key[i % 4]
 
         header = bytearray()
-        header.append(0x80 | opcode)  # FIN=1
+        header.append((0x80 if fin else 0x00) | rsv | opcode)
 
         length = len(payload)
         if length < 126:
@@ -305,6 +336,52 @@ class TestWsFrameParsing:
         frame = build_ws_frame(b"client request", opcode=WS_TEXT)
         with pytest.raises(WebSocketProtocolError, match="must be masked"):
             parse_ws_frame(frame, require_mask=True)
+
+    def test_reserved_bits_rejected(self):
+        frame = self._make_masked_frame(WS_TEXT, b"{}", rsv=0x40)
+        with pytest.raises(WebSocketProtocolError, match="reserved bits"):
+            parse_ws_frame(frame)
+
+    def test_fragmented_data_frame_rejected(self):
+        frame = self._make_masked_frame(WS_TEXT, b'{"type":"list"}', fin=False)
+        with pytest.raises(WebSocketProtocolError, match="Fragmented"):
+            parse_ws_frame(frame)
+
+    def test_unexpected_continuation_rejected(self):
+        frame = self._make_masked_frame(WS_CONTINUATION, b"fragment")
+        with pytest.raises(WebSocketProtocolError, match="Continuation"):
+            parse_ws_frame(frame)
+
+    def test_unknown_opcode_rejected(self):
+        frame = self._make_masked_frame(0x03, b"payload")
+        with pytest.raises(WebSocketProtocolError, match="Unsupported opcode"):
+            parse_ws_frame(frame)
+
+    def test_fragmented_control_frame_rejected(self):
+        frame = self._make_masked_frame(WS_PING, b"ping", fin=False)
+        with pytest.raises(WebSocketProtocolError, match="Control frames"):
+            parse_ws_frame(frame)
+
+    def test_oversized_control_frame_rejected(self):
+        frame = self._make_masked_frame(WS_PING, b"x" * 126)
+        with pytest.raises(WebSocketProtocolError, match="Control frame payload"):
+            parse_ws_frame(frame)
+
+    def test_close_frame_one_byte_payload_rejected(self):
+        frame = self._make_masked_frame(WS_CLOSE, b"\x03")
+        with pytest.raises(WebSocketProtocolError, match="Close frame payload"):
+            parse_ws_frame(frame)
+
+    def test_close_frame_invalid_status_code_rejected(self):
+        frame = self._make_masked_frame(WS_CLOSE, struct.pack("!H", 1005))
+        with pytest.raises(WebSocketProtocolError, match="Invalid close status"):
+            parse_ws_frame(frame)
+
+    def test_close_frame_invalid_utf8_reason_rejected(self):
+        frame = self._make_masked_frame(WS_CLOSE, struct.pack("!H", 1000) + b"\xff")
+        with pytest.raises(WebSocketProtocolError, match="valid UTF-8") as exc_info:
+            parse_ws_frame(frame)
+        assert exc_info.value.close_code == 1007
 
     def test_multiple_frames_consumed_correctly(self):
         frame1 = self._make_masked_frame(WS_TEXT, b"first")

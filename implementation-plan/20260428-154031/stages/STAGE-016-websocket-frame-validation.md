@@ -1,7 +1,7 @@
 # STAGE-016 — Validate WebSocket Frame Semantics
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -48,10 +48,10 @@ The WebSocket server rejects unsupported or malformed frame/handshake semantics 
 5. Add focused parser and live-upgrade tests.
 
 ## Acceptance criteria
-- [ ] Malformed frame semantics do not reach NOTE application handlers.
-- [ ] Protocol close codes preserve the first real error reason.
-- [ ] Missing required handshake headers are rejected consistently.
-- [ ] Tests cover the listed frame/handshake cases.
+- [x] Malformed frame semantics do not reach NOTE application handlers.
+- [x] Protocol close codes preserve the first real error reason.
+- [x] Missing required handshake headers are rejected consistently.
+- [x] Tests cover the listed frame/handshake cases.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -69,4 +69,6 @@ The WebSocket server rejects unsupported or malformed frame/handshake semantics 
 - Rollback: Revert WebSocket validation and tests for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-30 12:48:36 MSK. WebSocket upgrade validation now requires `Host`, frame parsing rejects unsupported or malformed FIN/RSV/opcode/control/close semantics before NOTE dispatch, and `_handle_notepad_ws()` preserves the first protocol close reason without sending a duplicate normal close.
+
+Verification passed with `.venv/bin/python -m pytest tests/test_websocket.py tests/test_websocket_handlers.py tests/test_security/test_websocket_upgrade.py tests/test_security/test_websocket_frame_limit.py -q` (`79 passed`), additional WebSocket loop/parser/pipeline tests (`133 passed` and `18 passed, 48 deselected`), `.venv/bin/python -m compileall src tests`, scoped `ruff`, `git diff --check`, and the full suite (`600 passed`). WebSocket and QA verifier subagents passed after fixing an intermediate handshake-test isolation gap.
