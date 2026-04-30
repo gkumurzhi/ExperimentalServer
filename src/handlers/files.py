@@ -14,6 +14,7 @@ from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
 from ..http import HTTPRequest, HTTPResponse, make_unique_filename, sanitize_filename
+from ..http.cors import resolve_preflight_allow_headers, resolve_preflight_allow_methods
 from .base import BaseHandler, get_package_resource
 
 logger = logging.getLogger("httpserver")
@@ -327,11 +328,18 @@ class FileHandlersMixin(BaseHandler):
 
         requested_method = request.headers.get("access-control-request-method", "")
         logger.debug(f"OPTIONS preflight: {requested_method}")
-        if requested_method:
-            allowed = "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS"
-            if requested_method not in allowed:
-                allowed = f"{allowed}, {requested_method}"
-            response.set_header("Access-Control-Allow-Methods", allowed)
+        response.set_header(
+            "Access-Control-Allow-Methods",
+            resolve_preflight_allow_methods(
+                requested_method,
+                advanced_upload_enabled=bool(getattr(self, "advanced_upload_enabled", False)),
+            ),
+        )
+
+        requested_headers = request.headers.get("access-control-request-headers", "")
+        allowed_headers = resolve_preflight_allow_headers(requested_headers)
+        if allowed_headers:
+            response.set_header("Access-Control-Allow-Headers", allowed_headers)
 
         return response
 

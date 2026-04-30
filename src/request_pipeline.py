@@ -42,6 +42,8 @@ class RequestPipelineServer(Protocol):
 
     def _build_error_response(self, status: int, message: str) -> HTTPResponse: ...
 
+    def _resolve_cors_origin(self, request: HTTPRequest) -> str | None: ...
+
     def _is_websocket_origin_allowed(self, request: HTTPRequest) -> bool: ...
 
     def _handle_notepad_ws(self, sock: socket.socket, request: HTTPRequest) -> None: ...
@@ -89,9 +91,7 @@ class RequestPipeline:
         """Process one request and return ``True`` when the connection should stay open."""
         start_time = time.monotonic()
         request_id = secrets.token_hex(4)
-        build_args: ResponseBuildArgs = {
-            "cors_origin": self._server.cors_origin,
-        }
+        build_args: ResponseBuildArgs = {"cors_origin": None}
 
         try:
             request = HTTPRequest(data)
@@ -105,6 +105,7 @@ class RequestPipeline:
                 response = self._server._build_error_response(400, "Bad Request")
                 self._send_direct_response(response, client_socket, build_args)
                 return False
+            build_args["cors_origin"] = self._server._resolve_cors_origin(request)
 
             use_keep_alive, remaining = self._server._resolve_keep_alive(request, request_num)
             build_args["keep_alive"] = use_keep_alive

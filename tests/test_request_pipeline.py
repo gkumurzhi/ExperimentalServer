@@ -44,6 +44,7 @@ class _PipelineServerStub:
 
     def __init__(self) -> None:
         self.cors_origin: str | None = None
+        self.resolved_cors_origin: str | None = None
         self._ecdh_manager: object | None = object()
         self.use_keep_alive = False
         self.remaining_requests = 0
@@ -55,6 +56,7 @@ class _PipelineServerStub:
         self.websocket_origin_allowed = True
         self.raise_on_dispatch = False
         self.resolve_calls: list[tuple[str, int]] = []
+        self.cors_resolve_calls: list[str | None] = []
         self.auth_calls: list[tuple[str, tuple[str, int]]] = []
         self.size_calls: list[str] = []
         self.dispatch_calls: list[str] = []
@@ -82,6 +84,10 @@ class _PipelineServerStub:
         response = HTTPResponse(status)
         response.set_body(f"{status}:{message}")
         return response
+
+    def _resolve_cors_origin(self, request: HTTPRequest) -> str | None:
+        self.cors_resolve_calls.append(request.headers.get("origin"))
+        return self.resolved_cors_origin
 
     def _is_websocket_origin_allowed(self, request: HTTPRequest) -> bool:
         return self.websocket_origin_allowed

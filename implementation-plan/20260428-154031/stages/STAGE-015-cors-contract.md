@@ -1,7 +1,7 @@
 # STAGE-015 — Make CORS Origin and Header Contract Valid
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -49,9 +49,9 @@ HTTP CORS responses emit browser-valid origins, methods, and exposed headers ali
 4. Add tests for single origin, multi-origin, wildcard, and OPTIONS behavior with advanced upload on/off.
 
 ## Acceptance criteria
-- [ ] No HTTP response emits comma-separated `Access-Control-Allow-Origin`.
-- [ ] Allowed/exposed CORS headers match documented and implemented behavior.
-- [ ] Preflight responses do not imply unsupported unknown-method dispatch unless intentionally configured.
+- [x] No HTTP response emits comma-separated `Access-Control-Allow-Origin`.
+- [x] Allowed/exposed CORS headers match documented and implemented behavior.
+- [x] Preflight responses do not imply unsupported unknown-method dispatch unless intentionally configured.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -69,4 +69,10 @@ HTTP CORS responses emit browser-valid origins, methods, and exposed headers ali
 - Rollback: Revert CORS config/header/test changes for this stage.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-04-29 20:54:06 MSK.
+
+- Added a shared CORS contract helper module for origin parsing, methods, request headers, exposed headers, and preflight filtering.
+- HTTP CORS now resolves per request `Origin`, echoes only a matching allowed origin, emits `Vary: Origin` for reflected origins, omits ACAO for missing/unlisted origins, and rejects mixed wildcard-plus-explicit origin configs.
+- OPTIONS no longer advertises unknown methods unless `advanced_upload` is enabled, and preflight headers now include implemented auth/conditional/cache and advanced-upload request headers.
+- Exposed headers now include implemented response metadata such as `X-Request-Id`, `X-Smuggle-URL`, `X-File-Modified`, and `ETag`.
+- Verification passed: targeted CORS/OPTIONS tests (`15 passed`), scoped regression suite (`173 passed`), compileall, ruff, git diff check, and security/API/correctness verifier subagents.

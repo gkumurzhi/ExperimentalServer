@@ -82,6 +82,62 @@ class TestHTTPResponse:
         built = response.build(cors_origin="https://app.example")
 
         assert b"Access-Control-Allow-Origin: https://app.example\r\n" in built
+        assert b"Vary: Origin\r\n" in built
+
+    def test_cors_multi_origin_config_is_not_emitted_as_single_header(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(cors_origin="https://app.example, https://admin.example")
+
+        assert b"Access-Control-Allow-Origin:" not in built
+
+    def test_cors_headers_expose_actual_custom_response_headers(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(cors_origin="https://app.example")
+
+        expose_header = next(
+            line
+            for line in built.split(b"\r\n")
+            if line.startswith(b"Access-Control-Expose-Headers:")
+        )
+        assert b"ETag" in expose_header
+        assert b"X-Request-Id" in expose_header
+        assert b"X-Smuggle-URL" in expose_header
+        assert b"X-File-Modified" in expose_header
+
+    def test_cors_headers_allow_implemented_request_headers(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(cors_origin="https://app.example")
+
+        allow_header = next(
+            line
+            for line in built.split(b"\r\n")
+            if line.startswith(b"Access-Control-Allow-Headers:")
+        )
+        assert b"Authorization" in allow_header
+        assert b"If-None-Match" in allow_header
+
+    def test_cors_headers_include_smuggle_method(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        built = response.build(cors_origin="https://app.example")
+
+        methods_header = next(
+            line
+            for line in built.split(b"\r\n")
+            if line.startswith(b"Access-Control-Allow-Methods:")
+        )
+        assert b"SMUGGLE" in methods_header
+
+    def test_cors_vary_origin_appends_existing_vary(self):
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+        response.set_header("Vary", "Accept-Encoding")
+        built = response.build(cors_origin="https://app.example")
+
+        assert b"Vary: Accept-Encoding, Origin\r\n" in built
 
     def test_set_file_streaming(self, tmp_path: Path):
         """Test set_file sets stream_path and correct headers."""

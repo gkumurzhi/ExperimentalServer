@@ -16,7 +16,7 @@
 | STAGE-012 | CLOSED | MEDIUM | Reject Malformed Request Lines | 2026-04-29 17:35:16 MSK | Malformed request lines now return 400 before auth/dispatch/upload; targeted tests, compile, ruff, diff check, and verifier subagents passed. | `stage-reports/STAGE-012-20260429-171354.md` |
 | STAGE-013 | CLOSED | MEDIUM | Fail Closed for Advanced Upload Crypto Errors | 2026-04-29 19:15:28 MSK | Advanced upload now fails closed for AES wrong-key/tamper, unavailable AES support, and invalid URL base64; targeted tests, compile, ruff, diff check, and verifier subagents passed. | `stage-reports/STAGE-013-20260429-185539.md` |
 | STAGE-014 | CLOSED | MEDIUM | Enforce Hidden Upload Policy Consistently | 2026-04-29 19:58:30 MSK | Hidden upload policy now applies to FETCH, SMUGGLE, DELETE, and INFO listings; targeted tests, compile, ruff, diff check, broader handler/server tests, and verifier subagents passed. | `stage-reports/STAGE-014-20260429-194717.md` |
-| STAGE-015 | OPEN | MEDIUM | Make CORS Origin and Header Contract Valid | — | — | — |
+| STAGE-015 | CLOSED | MEDIUM | Make CORS Origin and Header Contract Valid | 2026-04-29 20:54:06 MSK | CORS now emits browser-valid origins, aligned allow/expose headers, and gated unknown-method preflights; targeted tests, compile, ruff, diff check, and verifier subagents passed. | `stage-reports/STAGE-015-20260429-203343.md` |
 | STAGE-016 | OPEN | MEDIUM | Validate WebSocket Frame Semantics | — | — | — |
 | STAGE-017 | OPEN | MEDIUM | Bound WebSocket Resource Use | — | — | — |
 | STAGE-018 | OPEN | MEDIUM | Clarify Metrics and Error Counting | — | — | — |

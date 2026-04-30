@@ -318,6 +318,146 @@ class TestWebSocketOriginValidation:
         assert server._is_websocket_origin_allowed(req) is False
 
 
+class TestCorsContract:
+    def test_multi_origin_http_cors_reflects_only_matching_request_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example, https://admin.example",
+        )
+        req = make_request("GET", "/", headers={"Origin": "https://admin.example"})
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+
+        built = response.build(cors_origin=server._resolve_cors_origin(req))
+
+        assert b"Access-Control-Allow-Origin: https://admin.example\r\n" in built
+        invalid_acao = b"Access-Control-Allow-Origin: https://app.example, https://admin.example"
+        assert invalid_acao not in built
+        assert b"Vary: Origin\r\n" in built
+
+    def test_multi_origin_http_cors_omits_unlisted_request_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example, https://admin.example",
+        )
+        req = make_request("GET", "/", headers={"Origin": "https://evil.example"})
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+
+        built = response.build(cors_origin=server._resolve_cors_origin(req))
+
+        assert b"Access-Control-Allow-Origin:" not in built
+
+    def test_http_cors_omits_header_without_request_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+        )
+        req = make_request("GET", "/")
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+
+        built = response.build(cors_origin=server._resolve_cors_origin(req))
+
+        assert b"Access-Control-Allow-Origin:" not in built
+
+    def test_wildcard_http_cors_keeps_wildcard_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
+        req = make_request("GET", "/", headers={"Origin": "https://evil.example"})
+        response = HTTPResponse(200)
+        response.set_body("OK", "text/plain")
+
+        built = response.build(cors_origin=server._resolve_cors_origin(req))
+
+        assert b"Access-Control-Allow-Origin: *\r\n" in built
+        assert b"Vary: Origin\r\n" not in built
+
+    def test_mixed_wildcard_origin_config_is_rejected(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+
+        with pytest.raises(ValueError, match="wildcard"):
+            ExperimentalHTTPServer(
+                root_dir=str(temp_dir),
+                quiet=True,
+                cors_origin="*, https://app.example",
+            )
+
+    def test_options_does_not_allow_unknown_method_without_advanced_upload(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            advanced_upload=False,
+        )
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={"Access-Control-Request-Method": "XUPLOAD"},
+        )
+
+        response = server.handle_options(req)
+
+        allowed = response.headers["Access-Control-Allow-Methods"]
+        assert "XUPLOAD" not in allowed
+        assert "SMUGGLE" in allowed
+
+    def test_options_allows_unknown_method_when_advanced_upload_enabled(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            advanced_upload=True,
+        )
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={
+                "Access-Control-Request-Method": "XUPLOAD",
+                "Access-Control-Request-Headers": "X-D-10, X-N, X-Unknown",
+            },
+        )
+
+        response = server.handle_options(req)
+
+        assert "XUPLOAD" in response.headers["Access-Control-Allow-Methods"]
+        allowed_headers = response.headers["Access-Control-Allow-Headers"]
+        assert "X-D-10" in allowed_headers
+        assert "X-N" in allowed_headers
+        assert "X-Unknown" not in allowed_headers
+
+    def test_options_allows_auth_and_conditional_request_headers(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+        )
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization, If-None-Match, X-Unknown",
+            },
+        )
+
+        response = server.handle_options(req)
+
+        allowed_headers = response.headers["Access-Control-Allow-Headers"]
+        assert "Authorization" in allowed_headers
+        assert "If-None-Match" in allowed_headers
+        assert "X-Unknown" not in allowed_headers
+
+
 class _SendSocketStub:
     def __init__(self) -> None:
         self.sent: list[bytes] = []

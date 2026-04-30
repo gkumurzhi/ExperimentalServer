@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 from .config import HIDDEN_FILES, __version__
 from .handlers import HandlerMixin
 from .http import HTTPRequest, HTTPResponse
+from .http.cors import parse_cors_origins, resolve_cors_origin
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
 from .request_pipeline import RequestPipeline, ResponseBuildArgs
@@ -99,6 +100,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.open_browser = open_browser
         self.json_log = json_log
         self.cors_origin = cors_origin or None
+        self.cors_origins = parse_cors_origins(self.cors_origin)
         self.advanced_upload_enabled = advanced_upload
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
@@ -540,6 +542,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         if "gzip" in request.headers.get("accept-encoding", ""):
             self._maybe_gzip_response(response)
 
+    def _resolve_cors_origin(self, request: HTTPRequest) -> str | None:
+        """Resolve configured CORS origins against the request Origin header."""
+        request_origin = request.headers.get("origin")
+        if not request_origin:
+            return None
+        return resolve_cors_origin(self.cors_origin, request_origin)
+
     def _build_error_response(self, status: int, message: str) -> HTTPResponse:
         response = HTTPResponse(status)
         response.set_body(
@@ -554,16 +563,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not origin:
             return True
 
-        configured_origin = self.cors_origin
-        if configured_origin == "*":
+        if self.cors_origins == ("*",):
             return True
 
-        if configured_origin:
-            allowed_origins = {
-                item.strip() for item in configured_origin.split(",") if item.strip()
-            }
-            if origin in allowed_origins:
-                return True
+        if origin in self.cors_origins:
+            return True
 
         host = request.headers.get("host", "")
         if not host:

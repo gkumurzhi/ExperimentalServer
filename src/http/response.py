@@ -7,6 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import HTTP_STATUS_MESSAGES, __version__
+from .cors import (
+    CORS_ALLOW_HEADERS_HEADER,
+    CORS_ALLOW_METHODS_HEADER,
+    CORS_EXPOSE_HEADERS_HEADER,
+    normalize_cors_header_origin,
+)
 
 
 class HTTPResponse:
@@ -114,32 +120,38 @@ class HTTPResponse:
 
     def _set_cors_headers(self, cors_origin: str | None = None) -> None:
         """Set CORS headers."""
+        cors_origin = normalize_cors_header_origin(cors_origin)
         if not cors_origin:
             return
 
         if "Access-Control-Allow-Origin" not in self.headers:
             self.set_header("Access-Control-Allow-Origin", cors_origin)
+        if cors_origin != "*":
+            self._add_vary_header("Origin")
 
         if "Access-Control-Allow-Methods" not in self.headers:
             self.set_header(
                 "Access-Control-Allow-Methods",
-                "GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, INFO, PING, NONE, NOTE, OPTIONS",
+                CORS_ALLOW_METHODS_HEADER,
             )
 
         if "Access-Control-Allow-Headers" not in self.headers:
-            self.set_header(
-                "Access-Control-Allow-Headers",
-                "Content-Type, X-File-Name, X-Session-Id, X-Exphttp-No-Gzip, "
-                "X-D, X-E, X-K, X-Kb64, X-N, X-H, "
-                "X-D-0, X-D-1, X-D-2, X-D-3, X-D-4, X-D-5, X-D-6, X-D-7, X-D-8, X-D-9",
-            )
+            self.set_header("Access-Control-Allow-Headers", CORS_ALLOW_HEADERS_HEADER)
 
         if "Access-Control-Expose-Headers" not in self.headers:
-            self.set_header(
-                "Access-Control-Expose-Headers",
-                "X-File-Name, X-File-Size, X-File-Path, "
-                "X-Upload-Status, X-Fetch-Status, X-Ping-Response",
-            )
+            self.set_header("Access-Control-Expose-Headers", CORS_EXPOSE_HEADERS_HEADER)
+
+    def _add_vary_header(self, value: str) -> None:
+        """Append a Vary token if it is not already present."""
+        current = self.headers.get("Vary")
+        if not current:
+            self.set_header("Vary", value)
+            return
+
+        tokens = [token.strip() for token in current.split(",") if token.strip()]
+        if value.lower() not in {token.lower() for token in tokens}:
+            tokens.append(value)
+        self.set_header("Vary", ", ".join(tokens))
 
     def __repr__(self) -> str:
         return f"HTTPResponse(status={self.status_code})"
