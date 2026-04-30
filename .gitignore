@@ -53,3 +53,7 @@ Thumbs.db
 
 # Agent review artifacts
 agents_review/
+
+# Local Codex stage runner
+tools/close_plan_stages.py
+tests/test_close_plan_stages.py
