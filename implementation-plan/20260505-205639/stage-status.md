@@ -9,7 +9,7 @@
 | STAGE-005 | CLOSED | HIGH | Complete container ACME/sslip operator path | 2026-05-05 22:41:47 MSK | Added opt-in ACME Compose profile, documented Docker/NAT/sslip prerequisites, and preserved the default plain HTTP container path; verification passed. | `stage-reports/STAGE-005-20260505-223234.md` |
 | STAGE-006 | CLOSED | MEDIUM | Remove stale crypto/dependency copy drift | 2026-05-05 23:06:14 MSK | Removed stale crypto-extra/runtime dependency guidance from active runtime/UI/docs/smoke copy, documented compatibility-only references, and added active stale-reference guards; verification passed. | `stage-reports/STAGE-006-20260505-224442.md` |
 | STAGE-007 | CLOSED | MEDIUM | Align pre-commit and dependency completeness checks | 2026-05-05 23:29:51 MSK | Aligned pre-commit mypy deps with constrained ACME/crypto pins, added CI/security installed dependency completeness checks, and verified strict pinned constraints audit. | `stage-reports/STAGE-007-20260505-231228.md` |
-| STAGE-008 | OPEN | MEDIUM | Add Docker TLS and runtime import smoke | - | - | - |
+| STAGE-008 | CLOSED | MEDIUM | Add Docker TLS and runtime import smoke | 2026-05-05 23:44:54 MSK | Added built-image dependency import, dynamic-port HTTP/TLS Docker PING smoke, proxy bypass, and TLS healthcheck override; verification passed. | `stage-reports/STAGE-008-20260505-233412.md` |
 | STAGE-009 | OPEN | MEDIUM | Guard Notepad plaintext title and dirty transitions | - | - | - |
 | STAGE-010 | OPEN | MEDIUM | Make Notepad WebSocket saves idempotent | - | - | - |
 | STAGE-011 | OPEN | MEDIUM | Add advanced-upload JSON body guardrails | - | - | - |

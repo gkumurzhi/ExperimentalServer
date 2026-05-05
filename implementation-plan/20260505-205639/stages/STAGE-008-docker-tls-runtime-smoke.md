@@ -1,7 +1,7 @@
 # STAGE-008 - Add Docker TLS and runtime import smoke
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -49,11 +49,11 @@ Extend CI Docker smoke so the image proves required runtime crypto/ACME imports 
 5. Account for Docker healthcheck behavior in TLS mode, either by overriding/disabling it during smoke or waiting/probing independently.
 
 ## Acceptance criteria
-- [ ] Docker CI fails if the image cannot import required ACME/crypto runtime packages.
-- [ ] Docker CI proves self-signed TLS mode responds to HTTPS PING.
-- [ ] Existing plain HTTP Docker smoke remains present.
-- [ ] The smoke does not require live ACME, public network ingress, or secrets.
-- [ ] Healthcheck behavior does not create false negatives for the TLS smoke container.
+- [x] Docker CI fails if the image cannot import required ACME/crypto runtime packages.
+- [x] Docker CI proves self-signed TLS mode responds to HTTPS PING.
+- [x] Existing plain HTTP Docker smoke remains present.
+- [x] The smoke does not require live ACME, public network ingress, or secrets.
+- [x] Healthcheck behavior does not create false negatives for the TLS smoke container.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -73,4 +73,4 @@ Extend CI Docker smoke so the image proves required runtime crypto/ACME imports 
 - Rollback: Revert TLS smoke to an import-only check and document Docker TLS smoke as a manual command until timing is stabilized.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 23:44:54 MSK. The release-smoke Docker step now validates built-image `acme`, `cryptography`, `josepy`, and `OpenSSL` imports, keeps the existing plain HTTP PING smoke, and adds a self-signed TLS PING smoke. The smoke uses ephemeral localhost host ports, bypasses proxy variables for local probes, and disables the HTTP-only image healthcheck only for the TLS container to avoid false negatives. Local Docker build/import/HTTP/TLS verification and verifier subagent review passed.

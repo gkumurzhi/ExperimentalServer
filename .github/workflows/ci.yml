@@ -184,10 +184,51 @@ jobs:
       - name: Docker smoke
         run: |
           set -euo pipefail
+          http_cid=""
+          tls_cid=""
+          cleanup() {
+            if [ -n "${http_cid}" ]; then
+              docker rm -f "${http_cid}" >/dev/null 2>&1 || true
+            fi
+            if [ -n "${tls_cid}" ]; then
+              docker rm -f "${tls_cid}" >/dev/null 2>&1 || true
+            fi
+          }
+          probe_ping() {
+            local url="$1"
+            local output="$2"
+            shift 2
+            for _ in {1..30}; do
+              if curl --noproxy '*' "$@" -fsS -X PING "${url}" | tee "${output}" \
+                && grep '"status": "pong"' "${output}"; then
+                return 0
+              fi
+              sleep 1
+            done
+            return 1
+          }
+          trap cleanup EXIT
+
           docker build -t exphttp:ci .
+          docker run --rm --entrypoint python exphttp:ci \
+            -c "import acme, cryptography, josepy; from OpenSSL import SSL"
           docker run --rm exphttp:ci --version
-          cid="$(docker run -d -p 18082:8080 exphttp:ci)"
-          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
-          sleep 2
-          curl -fsS -X PING http://127.0.0.1:18082/ | tee /tmp/ping.json
-          grep '"status": "pong"' /tmp/ping.json
+          http_cid="$(docker run -d -p 127.0.0.1::8080 exphttp:ci)"
+          http_port="$(docker port "${http_cid}" 8080/tcp | awk -F: '{print $NF}')"
+          if ! probe_ping "http://127.0.0.1:${http_port}/" /tmp/ping.json; then
+            docker logs "${http_cid}"
+            exit 1
+          fi
+
+          tls_cid="$(
+            docker run -d --no-healthcheck -p 127.0.0.1::8080 exphttp:ci \
+              --host 0.0.0.0 \
+              --port 8080 \
+              --dir /data \
+              --tls
+          )"
+          tls_port="$(docker port "${tls_cid}" 8080/tcp | awk -F: '{print $NF}')"
+          if ! probe_ping "https://127.0.0.1:${tls_port}/" /tmp/tls-ping.json -k; then
+            docker logs "${tls_cid}"
+            exit 1
+          fi

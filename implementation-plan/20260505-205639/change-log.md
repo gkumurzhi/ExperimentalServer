@@ -41,3 +41,9 @@
 - Files changed: `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `tools/check_dependency_constraints.py`, `CONTRIBUTING.md`, `docs/contributing.md`, `implementation-plan/20260505-205639/stages/STAGE-007-precommit-dependency-completeness.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-007-20260505-231228.md`
 - Verification: refreshed pre-commit mypy hook, installed dependency smoke, constraints-vs-installed checker, strict pinned `pip-audit`, clean constrained install smoke, clean security-job simulation, YAML/docs/stale-doc checks, ruff, diff hygiene, dependency-manager review, reviewer rework, and QA review passed.
 - Report: `stage-reports/STAGE-007-20260505-231228.md`
+
+## 2026-05-05 23:44:54 MSK — STAGE-008
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `implementation-plan/20260505-205639/stages/STAGE-008-docker-tls-runtime-smoke.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/change-log.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-008-20260505-233412.md`
+- Verification: workflow Docker smoke syntax, whitespace diff check, full built-image Docker smoke with runtime imports plus HTTP and self-signed TLS PING, cleanup check, explorer review, reviewer review, and docker-expert re-review passed.
+- Report: `stage-reports/STAGE-008-20260505-233412.md`
