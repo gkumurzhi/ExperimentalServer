@@ -17,3 +17,9 @@
 - Files changed: `src/security/tls.py`, `src/security/tls_manager.py`, `tests/test_security/test_tls.py`, `tests/test_security/test_tls_manager.py`, `implementation-plan/20260505-205639/stages/STAGE-003-acme-cache-pair-validation.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-003-20260505-214641.md`
 - Verification: targeted TLS tests, mypy, ruff, compileall, CLI smoke, static secret review, Context7 cryptography docs check, explorer review, correctness review, and security-auditor re-review passed.
 - Report: `stage-reports/STAGE-003-20260505-214641.md`
+
+## 2026-05-05 22:22:27 MSK — STAGE-004
+- Status: CLOSED
+- Files changed: `src/cli.py`, `src/server.py`, `tests/test_cli.py`, `implementation-plan/20260505-205639/stages/STAGE-004-cli-tls-and-limit-validation.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-004-20260505-221247.md`
+- Verification: targeted CLI and TLS manager tests, CLI help, safe invalid-argument subprocess checks, ruff, mypy, diff checks, explorer review, correctness review, and final CLI verification review passed.
+- Report: `stage-reports/STAGE-004-20260505-221247.md`

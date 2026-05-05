@@ -1,7 +1,7 @@
 # STAGE-004 - Normalize CLI TLS source and numeric validation
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -51,11 +51,11 @@ Make invalid CLI configuration fail early with argparse-style exit code `2`, and
 5. Add parametrized CLI tests asserting exit code `2` and useful messages.
 
 ## Acceptance criteria
-- [ ] `--key` alone no longer starts plaintext HTTP.
-- [ ] `--cert` alone and `--key` alone both fail early.
-- [ ] user-supplied cert/key combined with ACME mode is rejected or follows an explicitly documented behavior.
-- [ ] `--port`, `--max-size`, and `--workers` invalid lower/out-of-range values fail at CLI parse/validation time.
-- [ ] Programmatic server construction rejects invalid primary limits before sockets/thread pools are created.
+- [x] `--key` alone no longer starts plaintext HTTP.
+- [x] `--cert` alone and `--key` alone both fail early.
+- [x] user-supplied cert/key combined with ACME mode is rejected or follows an explicitly documented behavior.
+- [x] `--port`, `--max-size`, and `--workers` invalid lower/out-of-range values fail at CLI parse/validation time.
+- [x] Programmatic server construction rejects invalid primary limits before sockets/thread pools are created.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -75,4 +75,4 @@ Make invalid CLI configuration fail early with argparse-style exit code `2`, and
 - Rollback: Revert validation changes or explicitly support `0` with actual bound-port display and tests.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 22:22:27 MSK. Added bounded argparse validators for CLI numeric flags, explicit TLS source validation for cert/key and ACME/sslip combinations, and server constructor guards for invalid primary runtime limits before filesystem/socket side effects. Targeted CLI, TLS manager, static, subprocess, and verification subagent checks passed.

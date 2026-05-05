@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import src.cli as cli
+from src import ExperimentalHTTPServer
 from src.cli import create_parser
 
 
@@ -71,6 +72,25 @@ class TestCLIParser:
         args = self.parser.parse_args(["-H", "0.0.0.0", "-p", "443"])
         assert args.host == "0.0.0.0"
         assert args.port == 443
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--port", "0"],
+            ["--port", "-1"],
+            ["--port", "65536"],
+            ["--max-size", "0"],
+            ["--max-size", "-1"],
+            ["--workers", "0"],
+            ["--workers", "-1"],
+            ["--acme-http-port", "0"],
+            ["--acme-http-port", "65536"],
+        ],
+    )
+    def test_numeric_limits_are_rejected_at_parse_time(self, argv):
+        with pytest.raises(SystemExit) as exc_info:
+            self.parser.parse_args(argv)
+        assert exc_info.value.code == 2
 
     @pytest.mark.parametrize("flag", ["--opsec", "--sandbox", "-o", "-s"])
     def test_removed_mode_flags_are_rejected(self, flag):
@@ -244,7 +264,7 @@ class TestCLIMain:
         ("argv", "expected_tls"),
         [
             (["--tls"], True),
-            (["--cert", "/tmp/cert.pem"], True),
+            (["--cert", "/tmp/cert.pem", "--key", "/tmp/key.pem"], True),
             (["--letsencrypt", "--domain", "example.com"], True),
             (["--sslip"], True),
         ],
@@ -275,6 +295,50 @@ class TestCLIMain:
         with pytest.raises(SystemExit) as exc_info:
             cli.main(["--letsencrypt"])
         assert exc_info.value.code == 2
+
+    @pytest.mark.parametrize(
+        ("argv", "message"),
+        [
+            (["--cert", "cert.pem"], "--cert and --key must be provided together"),
+            (["--key", "key.pem"], "--cert and --key must be provided together"),
+            (["--cert", ""], "--cert and --key must be provided together"),
+            (["--key", ""], "--cert and --key must be provided together"),
+            (["--cert", "", "--key", ""], "--cert and --key values must not be empty"),
+            (
+                [
+                    "--cert",
+                    "cert.pem",
+                    "--key",
+                    "key.pem",
+                    "--letsencrypt",
+                    "--domain",
+                    "example.com",
+                ],
+                "--cert/--key cannot be combined with --letsencrypt or --sslip",
+            ),
+            (
+                ["--cert", "cert.pem", "--key", "key.pem", "--sslip"],
+                "--cert/--key cannot be combined with --letsencrypt or --sslip",
+            ),
+        ],
+    )
+    def test_main_rejects_invalid_tls_source_combinations(
+        self,
+        monkeypatch,
+        capsys,
+        argv,
+        message,
+    ):
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not be constructed for invalid CLI config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(argv)
+
+        assert exc_info.value.code == 2
+        assert message in capsys.readouterr().err
 
     def test_main_allows_letsencrypt_with_sslip_without_domain(self, monkeypatch):
         captured: dict[str, object] = {}
@@ -374,3 +438,29 @@ class TestCLIMain:
 
         with pytest.raises(OSError):
             socket.create_connection(("127.0.0.1", port), timeout=0.2)
+
+
+class TestServerConstructorValidation:
+    @pytest.mark.parametrize(
+        ("kwargs", "message"),
+        [
+            ({"port": 0}, "port must be between 1 and 65535"),
+            ({"port": -1}, "port must be between 1 and 65535"),
+            ({"port": 65536}, "port must be between 1 and 65535"),
+            ({"max_upload_size": 0}, "max_upload_size must be greater than 0"),
+            ({"max_upload_size": -1}, "max_upload_size must be greater than 0"),
+            ({"max_workers": 0}, "max_workers must be greater than 0"),
+            ({"max_workers": -1}, "max_workers must be greater than 0"),
+        ],
+    )
+    def test_invalid_primary_limits_fail_before_filesystem_side_effects(
+        self,
+        temp_dir: Path,
+        kwargs,
+        message,
+    ):
+        with pytest.raises(ValueError, match=message):
+            ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, **kwargs)
+
+        assert not (temp_dir / "uploads").exists()
+        assert not (temp_dir / "notes").exists()

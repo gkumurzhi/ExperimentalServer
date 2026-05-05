@@ -97,6 +97,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         max_websocket_connections: int | None = None,
         websocket_frame_idle_timeout: float = 5.0,
     ):
+        if port < 1 or port > 65535:
+            raise ValueError("port must be between 1 and 65535")
+        if max_upload_size <= 0:
+            raise ValueError("max_upload_size must be greater than 0")
+        if max_workers <= 0:
+            raise ValueError("max_workers must be greater than 0")
+
         self.host = host
         self.port = port
         self.root_dir = Path(root_dir).resolve()

@@ -6,11 +6,31 @@ CLI entry point for ExperimentalHTTPServer.
 import argparse
 import signal
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from types import FrameType
 from typing import Any
 
 from . import ExperimentalHTTPServer, __version__
+
+
+def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Callable[[str], int]:
+    """Return an argparse type function for an integer with inclusive bounds."""
+
+    def parse(value: str) -> int:
+        try:
+            parsed = int(value, 10)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{name} must be an integer") from None
+
+        if parsed < minimum:
+            if maximum is None:
+                raise argparse.ArgumentTypeError(f"{name} must be at least {minimum}")
+            raise argparse.ArgumentTypeError(f"{name} must be between {minimum} and {maximum}")
+        if maximum is not None and parsed > maximum:
+            raise argparse.ArgumentTypeError(f"{name} must be between {minimum} and {maximum}")
+        return parsed
+
+    return parse
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -42,7 +62,12 @@ Custom HTTP methods:
         "-H", "--host", default="127.0.0.1", metavar="HOST", help="Bind host (default: 127.0.0.1)"
     )
     basic.add_argument(
-        "-p", "--port", type=int, default=8080, metavar="PORT", help="Listen port (default: 8080)"
+        "-p",
+        "--port",
+        type=_bounded_int("port", minimum=1, maximum=65535),
+        default=8080,
+        metavar="PORT",
+        help="Listen port (default: 8080)",
     )
     basic.add_argument(
         "-d", "--dir", default=".", metavar="DIR", help="Root directory (default: current)"
@@ -71,7 +96,7 @@ Custom HTTP methods:
     limits.add_argument(
         "-m",
         "--max-size",
-        type=int,
+        type=_bounded_int("max size", minimum=1),
         default=100,
         metavar="MB",
         help="Max upload size in MB (default: 100)",
@@ -79,7 +104,7 @@ Custom HTTP methods:
     limits.add_argument(
         "-w",
         "--workers",
-        type=int,
+        type=_bounded_int("workers", minimum=1),
         default=10,
         metavar="N",
         help="Number of worker threads (default: 10)",
@@ -129,7 +154,7 @@ Custom HTTP methods:
     )
     tls.add_argument(
         "--acme-http-port",
-        type=int,
+        type=_bounded_int("ACME HTTP port", minimum=1, maximum=65535),
         default=80,
         metavar="PORT",
         help="Bind port for HTTP-01 challenge server (default: 80)",
@@ -144,6 +169,39 @@ Custom HTTP methods:
     )
 
     return parser
+
+
+def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    acme_mode = args.letsencrypt or args.sslip
+    has_cert = args.cert is not None
+    has_key = args.key is not None
+
+    if has_cert != has_key:
+        parser.error("--cert and --key must be provided together")
+    if has_cert and (not args.cert or not args.key):
+        parser.error("--cert and --key values must not be empty")
+    if has_cert and acme_mode:
+        parser.error("--cert/--key cannot be combined with --letsencrypt or --sslip")
+
+    if args.letsencrypt and not args.domain and not args.sslip:
+        parser.error("--letsencrypt requires --domain unless --sslip is used")
+    if args.sslip and args.domain:
+        parser.error("--sslip cannot be combined with --domain")
+    if args.public_ip and not args.sslip:
+        parser.error("--public-ip requires --sslip")
+
+    if not acme_mode:
+        acme_only_flags = [
+            ("--domain", args.domain),
+            ("--email", args.email),
+            ("--acme-staging", args.acme_staging),
+            ("--acme-server", args.acme_server),
+            ("--acme-http-address", args.acme_http_address),
+            ("--acme-http-port", args.acme_http_port != 80),
+        ]
+        for flag, active in acme_only_flags:
+            if active:
+                parser.error(f"{flag} requires --letsencrypt or --sslip")
 
 
 def _install_shutdown_signal_handlers(server: ExperimentalHTTPServer) -> dict[signal.Signals, Any]:
@@ -171,15 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Main entry point."""
     parser = create_parser()
     args = parser.parse_args(argv)
-
-    if args.letsencrypt and not args.domain and not args.sslip:
-        parser.error("--letsencrypt requires --domain unless --sslip is used")
-    if args.sslip and args.domain:
-        parser.error("--sslip cannot be combined with --domain")
-    if args.public_ip and not args.sslip:
-        parser.error("--public-ip requires --sslip")
-    if args.acme_http_port < 1 or args.acme_http_port > 65535:
-        parser.error("--acme-http-port must be between 1 and 65535")
+    _validate_args(parser, args)
 
     # Build config from arguments
     config = {
