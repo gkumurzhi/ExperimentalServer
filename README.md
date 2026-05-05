@@ -39,7 +39,7 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 - Загрузка файлов через методы `NONE`, `POST`, `PUT`, `PATCH`
 - Скачивание файлов через метод `FETCH` с заголовками для загрузки
 - Получение метаданных файлов/директорий через `INFO` (JSON)
-- **Secure Notepad** — метод `NOTE` с end-to-end шифрованием AES-256-GCM и ECDH P-256 (требует `exphttp[crypto]`)
+- **Secure Notepad** — метод `NOTE` с end-to-end шифрованием AES-256-GCM и ECDH P-256
 - **WebSocket** — реал-тайм синхронизация блокнота (RFC 6455) по `/notes/ws`
 - **HTTPS/TLS** — самоподписные сертификаты на лету или свои
 - **Basic Auth** — HTTP аутентификация с генерацией паролей
@@ -54,8 +54,7 @@ HTTP-сервер с поддержкой произвольных HTTP-мето
 ## Требования
 
 - Python 3.10 — 3.13 (эта матрица проверяется в CI; используются type hints с `|` синтаксисом)
-- Стандартная библиотека (без внешних зависимостей для runtime)
-- OpenSSL (опционально, для генерации TLS сертификатов)
+- Runtime-зависимости из `pyproject.toml` (`cryptography`, `acme` и их транзитивные пакеты)
 - Typed package (PEP 561) — поддержка статической типизации
 
 ## Быстрый старт
@@ -167,6 +166,12 @@ exphttp [опции]
 | `--letsencrypt` | Получить сертификат Let's Encrypt | выключен |
 | `--domain DOMAIN` | Домен для Let's Encrypt | - |
 | `--email EMAIL` | Email для Let's Encrypt уведомлений | - |
+| `--sslip` | Получить Let's Encrypt сертификат для `<public-ip>.sslip.io` | выключен |
+| `--public-ip IP` | Публичный IPv4 для `--sslip` (иначе автоопределение) | - |
+| `--acme-staging` | Использовать Let's Encrypt staging | выключен |
+| `--acme-server URL` | Пользовательский ACME directory URL | - |
+| `--acme-http-address ADDR` | Адрес HTTP-01 challenge server | все интерфейсы |
+| `--acme-http-port PORT` | Порт HTTP-01 challenge server | `80` |
 | `--auth USER:PASS` | Включить Basic Auth | выключен |
 | `--auth random` | Сгенерировать случайные credentials в интерактивном терминале | - |
 | `--help` | Показать справку | - |
@@ -211,7 +216,7 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth random -m 200
 | `INFO` | Метаданные файла/директории (JSON) | Только uploads/ |
 | `PING` | Проверка доступности сервера | n/a |
 | `NONE` | Загрузка файлов на сервер | `uploads/` |
-| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM, требует `exphttp[crypto]`) | Только notes/ |
+| `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM) | Только notes/ |
 | `SMUGGLE` | HTML Smuggling — генерация страницы со встроенным файлом | Только uploads/ |
 | Любой нестандартный метод с payload | Загрузка (продвинутая) через `d`/`data`, `X-D` или `?d=` | `uploads/` |
 
@@ -330,7 +335,7 @@ curl -X CHECKDATA -H "Content-Type: application/json" \
 ### Автоматическая генерация
 
 ```bash
-# Генерирует временный сертификат (требует OpenSSL)
+# Генерирует временный сертификат
 exphttp --tls
 ```
 
@@ -352,7 +357,7 @@ exphttp --tls --cert localhost+1.pem --key localhost+1-key.pem
 
 ### Let's Encrypt
 
-Автоматическое получение доверенных сертификатов (требует установленный [certbot](https://certbot.eff.org/) и открытый порт 80):
+Автоматическое получение доверенных сертификатов через встроенный ACME-клиент (требуется, чтобы внешний порт 80 доходил до HTTP-01 challenge server):
 
 ```bash
 # Получить сертификат и запустить HTTPS
@@ -360,32 +365,17 @@ exphttp --letsencrypt --domain example.com -p 443
 
 # С email для уведомлений об истечении
 exphttp --letsencrypt --domain example.com --email admin@example.com
+
+# Быстрый валидный HTTPS для текущего публичного IPv4 через sslip.io
+exphttp --sslip -H 0.0.0.0 -p 443
+
+# Тестовый выпуск без production rate limits
+exphttp --letsencrypt --domain example.com --acme-staging
 ```
 
-Сертификат сохраняется в `~/.exphttp/letsencrypt/` и переиспользуется при следующих запусках. Автоматически обновляется, если до истечения осталось менее 30 дней.
+Сертификат сохраняется в `~/.exphttp/acme/` и переиспользуется при следующих запусках. Старые сертификаты из `~/.exphttp/letsencrypt/` читаются для совместимости, но новые выпуски пишутся только в `~/.exphttp/acme/`. Автоматическое обновление происходит при старте, если до истечения осталось менее 30 дней.
 
-#### Установка certbot
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install certbot
-
-# Fedora / RHEL / CentOS
-sudo dnf install certbot
-
-# Arch Linux
-sudo pacman -S certbot
-
-# macOS (Homebrew)
-brew install certbot
-
-# pip (любая ОС)
-pip install certbot
-```
-
-> Если certbot не установлен или OpenSSL недоступен для самоподписанного
-> сертификата, запуск с TLS завершится ошибкой. Это сделано намеренно, чтобы
-> не снижать уровень защиты молча.
+Если явно запрошен `--letsencrypt` или `--sslip`, ошибка ACME не заменяется самоподписанным сертификатом: запуск завершится ошибкой, чтобы не снижать уровень защиты молча. Wildcard-сертификаты и DNS-01 challenge в этой версии не поддерживаются.
 
 ### cURL с самоподписным сертификатом
 
@@ -708,7 +698,7 @@ pip install -e ".[dev]"
 # С линтерами
 pip install -e ".[lint]"
 
-# Локально как в CI (pytest + hypothesis + benchmark + mypy + ruff + crypto)
+# Локально как в CI (pytest + hypothesis + benchmark + mypy + ruff)
 PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 
 # Документация сайта

@@ -1,45 +1,44 @@
-# ADR-003: `cryptography` is an optional dependency
+# ADR-003: Runtime crypto and ACME dependencies
 
 - **Status:** accepted
 
 ## Context
 
-The project advertises "zero external dependencies for core functionality".
-However, three features benefit from modern crypto primitives:
+The project originally advertised "zero external dependencies for core functionality".
+That kept simple installs small, but it made production-grade TLS and Secure Notepad
+harder to operate:
 
-- AES-256-GCM encryption for advanced upload payloads (superior to XOR+HMAC baseline).
-- ECDH P-256 key exchange for the Secure Notepad end-to-end mode.
-- Let's Encrypt certificate acquisition (via `certbot`, external tool).
-
-Requiring `cryptography` unconditionally would conflict with the "works in
-any minimal Python environment" goal — the library pulls in OpenSSL FFI
-bindings and can be awkward on restricted systems.
+- Self-signed TLS certificates depended on an external `openssl` executable.
+- Let's Encrypt issuance depended on an external `certbot` executable.
+- Secure Notepad and AEAD upload handling needed `cryptography` anyway.
 
 ## Decision
 
-Keep `cryptography>=44.0` in the `[crypto]` optional extras group of
-`pyproject.toml`. The code:
+Make crypto and ACME support part of the default runtime install:
 
-- Detects availability at import time (`try: from cryptography... except ImportError`).
-- Falls back to stdlib primitives for advanced upload payload handling (XOR+HMAC) and disables the
-  Secure Notepad ECDH path entirely when unavailable.
-- Logs a warning (not an error) when a feature is degraded due to missing
-  deps.
-- Marks tests that require `cryptography` with `@pytest.mark.skipif(not HAS_CRYPTOGRAPHY, ...)`.
+- Keep `cryptography` as a normal dependency for AES-GCM, ECDH, X.509 parsing,
+  and self-signed certificate generation.
+- Add Certbot's official `acme` Python library as a normal dependency for
+  built-in HTTP-01 certificate issuance.
+- Keep the `[crypto]` extra as an empty compatibility extra so old install
+  commands continue to work.
+- Keep fail-closed behavior if the crypto backend is unavailable in an
+  unsupported or manually modified environment.
 
 ## Consequences
 
 ### Positive
 
-- `pip install exphttp` still works on supported Python 3.10-3.13; the minimal path
-  serves files and supports advanced uploads with XOR handling.
-- Enthusiasts who need AEAD/ECDH install with `pip install exphttp[crypto]`.
-- CI matrix tests both with and without the extra, catching drift between
-  code paths.
+- `pip install exphttp` includes the same crypto/TLS behavior used by CI and
+  Docker.
+- TLS no longer requires external `openssl` or `certbot` binaries.
+- Let’s Encrypt and sslip.io certificate issuance can be tested through Python
+  mocks rather than subprocess behavior.
 
 ### Negative
 
-- Two code paths to maintain for advanced upload encryption (baseline + AEAD).
-- Test matrix gets a conditional dimension; 34 tests are skipped on the
-  crypto-less path.
-- Feature-parity warnings must be kept accurate as new features are added.
+- The default dependency surface is larger and includes OpenSSL-backed wheels.
+- Dependency security scanning matters more because crypto/ACME packages are now
+  in the normal runtime path.
+- Environments that require strict stdlib-only Python installs must pin an older
+  release or vendor their own reduced build.

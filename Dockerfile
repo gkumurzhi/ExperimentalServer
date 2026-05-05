@@ -41,11 +41,11 @@ RUN groupadd --system --gid ${APP_UID} ${APP_USER} && \
             --home-dir /home/${APP_USER} --create-home \
             --shell /usr/sbin/nologin ${APP_USER}
 
-# Install the wheel; include the crypto extra for full feature parity.
+# Install the wheel with its runtime ACME/crypto dependencies.
 COPY constraints /tmp/constraints
 COPY --from=build /build/dist/*.whl /tmp/
 RUN PIP_CONSTRAINT=/tmp/constraints/ci.txt pip install --upgrade pip && \
-    PIP_CONSTRAINT=/tmp/constraints/ci.txt pip install "$(ls /tmp/*.whl)[crypto]" && \
+    PIP_CONSTRAINT=/tmp/constraints/ci.txt pip install "$(ls /tmp/*.whl)" && \
     rm -rf /tmp/*.whl /tmp/constraints
 
 # Prepare a writable data directory.

@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
+import stat
 import subprocess
+from types import SimpleNamespace
 
 import pytest
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 
+from src.security import tls as tls_module
 from src.security.tls import (
     check_cert_needs_renewal,
     check_certbot_available,
@@ -14,21 +21,16 @@ from src.security.tls import (
     generate_self_signed_cert,
     get_cert_info,
     obtain_letsencrypt_cert,
+    resolve_public_ipv4,
+    sslip_domain_for_ip,
+    validate_public_ipv4,
 )
 
-# Skip all tests that require openssl if it's not available
-HAS_OPENSSL = check_openssl_available()
-needs_openssl = pytest.mark.skipif(not HAS_OPENSSL, reason="openssl not available")
 
-
-class TestCheckOpenssl:
+class TestCheckOpenSSL:
     def test_returns_bool(self):
         result = check_openssl_available()
         assert isinstance(result, bool)
-
-    @needs_openssl
-    def test_openssl_available_on_this_system(self):
-        assert check_openssl_available() is True
 
     def test_returns_false_when_openssl_missing(self, monkeypatch):
         def fake_run(*_args, **_kwargs):
@@ -68,14 +70,6 @@ class TestCheckCertbot:
 
         assert check_certbot_available() is False
 
-    def test_returns_false_when_certbot_check_times_out(self, monkeypatch):
-        def fake_run(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="certbot --version", timeout=5)
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        assert check_certbot_available() is False
-
 
 class TestGenerateCertInMemory:
     def test_returns_string_paths(self, monkeypatch, tmp_path):
@@ -92,7 +86,6 @@ class TestGenerateCertInMemory:
         assert key_result == str(key_path)
 
 
-@needs_openssl
 class TestGenerateSelfSignedCert:
     def test_generates_cert_and_key_files(self, tmp_path):
         cert_path = tmp_path / "cert.pem"
@@ -105,306 +98,222 @@ class TestGenerateSelfSignedCert:
 
         assert result_cert == cert_path
         assert result_key == key_path
-        assert cert_path.exists()
-        assert key_path.exists()
-        assert cert_path.stat().st_size > 0
-        assert key_path.stat().st_size > 0
+        assert cert_path.read_text(encoding="utf-8").startswith("-----BEGIN CERTIFICATE-----")
+        assert key_path.read_text(encoding="utf-8").startswith("-----BEGIN RSA PRIVATE KEY-----")
+        if os.name != "nt":
+            assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
 
     def test_generates_temp_files_when_no_path(self):
         cert_path, key_path = generate_self_signed_cert()
         try:
             assert cert_path.exists()
             assert key_path.exists()
-            # PEM files should start with -----BEGIN
-            assert cert_path.read_text().startswith("-----BEGIN")
-            assert key_path.read_text().startswith("-----BEGIN")
         finally:
             cert_path.unlink(missing_ok=True)
             key_path.unlink(missing_ok=True)
 
-    def test_custom_common_name(self, tmp_path):
+    def test_custom_common_name_and_san(self, tmp_path):
         cert_path, key_path = generate_self_signed_cert(
             cert_path=tmp_path / "cert.pem",
             key_path=tmp_path / "key.pem",
             common_name="myhost.local",
         )
-        # Verify CN via openssl
-        result = subprocess.run(
-            ["openssl", "x509", "-in", str(cert_path), "-noout", "-subject"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert "myhost.local" in result.stdout
+
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        cn = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        san = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+
+        assert cn == "myhost.local"
+        assert "myhost.local" in san.get_values_for_type(x509.DNSName)
+        key_path.unlink(missing_ok=True)
 
     def test_custom_validity_days(self, tmp_path):
-        cert_path, key_path = generate_self_signed_cert(
+        cert_path, _key_path = generate_self_signed_cert(
             cert_path=tmp_path / "cert.pem",
             key_path=tmp_path / "key.pem",
             days=7,
         )
-        assert cert_path.exists()
 
-    def test_cert_is_x509(self, tmp_path):
-        cert_path, key_path = generate_self_signed_cert(
-            cert_path=tmp_path / "cert.pem",
-            key_path=tmp_path / "key.pem",
-        )
-        result = subprocess.run(
-            ["openssl", "x509", "-in", str(cert_path), "-noout", "-text"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        assert result.returncode == 0
-        assert "Issuer:" in result.stdout
-
-    def test_retries_without_addext_when_initial_command_fails(self, tmp_path, monkeypatch):
-        calls: list[list[str]] = []
-
-        def fake_run(cmd, **_kwargs):
-            calls.append(cmd)
-            if len(calls) == 1:
-                return subprocess.CompletedProcess(cmd, 1, stderr="unknown option -addext")
-            return subprocess.CompletedProcess(cmd, 0, stderr="")
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        cert_path, key_path = generate_self_signed_cert(
-            cert_path=tmp_path / "cert.pem",
-            key_path=tmp_path / "key.pem",
-        )
-
-        assert cert_path == tmp_path / "cert.pem"
-        assert key_path == tmp_path / "key.pem"
-        assert len(calls) == 2
-        assert "-addext" in calls[0]
-        assert "-addext" not in calls[1]
-
-    def test_timeout_raises_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="openssl", timeout=30)
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        with pytest.raises(RuntimeError, match="timed out"):
-            generate_self_signed_cert(
-                cert_path=tmp_path / "cert.pem",
-                key_path=tmp_path / "key.pem",
-            )
-
-    def test_missing_openssl_raises_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(*_args, **_kwargs):
-            raise FileNotFoundError
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        with pytest.raises(RuntimeError, match="OpenSSL not found"):
-            generate_self_signed_cert(
-                cert_path=tmp_path / "cert.pem",
-                key_path=tmp_path / "key.pem",
-            )
-
-    def test_raises_runtime_error_when_fallback_also_fails(self, tmp_path, monkeypatch):
-        calls: list[list[str]] = []
-
-        def fake_run(cmd, **_kwargs):
-            calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="still broken")
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        with pytest.raises(RuntimeError, match="still broken"):
-            generate_self_signed_cert(
-                cert_path=tmp_path / "cert.pem",
-                key_path=tmp_path / "key.pem",
-            )
-
-        assert len(calls) == 2
-        assert "-addext" in calls[0]
-        assert "-addext" not in calls[1]
+        assert check_cert_needs_renewal(cert_path, days=30) is True
 
 
-@needs_openssl
 class TestCheckCertNeedsRenewal:
     def test_nonexistent_cert_needs_renewal(self, tmp_path):
         assert check_cert_needs_renewal(tmp_path / "nope.pem") is True
 
     def test_fresh_cert_does_not_need_renewal(self, tmp_path):
-        cert_path, key_path = generate_self_signed_cert(
+        cert_path, _key_path = generate_self_signed_cert(
             cert_path=tmp_path / "cert.pem",
             key_path=tmp_path / "key.pem",
             days=365,
         )
-        # A 365-day cert should not need renewal within 30 days
+
         assert check_cert_needs_renewal(cert_path, days=30) is False
 
     def test_short_lived_cert_needs_renewal(self, tmp_path):
-        cert_path, key_path = generate_self_signed_cert(
+        cert_path, _key_path = generate_self_signed_cert(
             cert_path=tmp_path / "cert.pem",
             key_path=tmp_path / "key.pem",
             days=1,
         )
-        # A 1-day cert needs renewal if we check with 30-day window
+
         assert check_cert_needs_renewal(cert_path, days=30) is True
 
-    def test_missing_openssl_treats_cert_as_needing_renewal(self, tmp_path, monkeypatch):
+    def test_invalid_cert_needs_renewal(self, tmp_path):
         cert_path = tmp_path / "cert.pem"
-        cert_path.write_text("cert", encoding="utf-8")
-
-        def fake_run(*_args, **_kwargs):
-            raise FileNotFoundError
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        assert check_cert_needs_renewal(cert_path, days=30) is True
-
-    def test_timeout_treats_cert_as_needing_renewal(self, tmp_path, monkeypatch):
-        cert_path = tmp_path / "cert.pem"
-        cert_path.write_text("cert", encoding="utf-8")
-
-        def fake_run(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="openssl x509", timeout=10)
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+        cert_path.write_text("not a cert", encoding="utf-8")
 
         assert check_cert_needs_renewal(cert_path, days=30) is True
 
 
-@needs_openssl
 class TestGetCertInfo:
-    def test_returns_dict_with_subject(self, tmp_path):
+    def test_returns_dict_with_subject_and_dates(self, tmp_path):
         cert_path, _ = generate_self_signed_cert(
             cert_path=tmp_path / "cert.pem",
             key_path=tmp_path / "key.pem",
             common_name="test.local",
         )
+
         info = get_cert_info(cert_path)
-        assert isinstance(info, dict)
+
         assert "error" not in info
-        # Should have date fields
-        assert any("Not" in k or "subject" in k.lower() for k in info)
+        assert "CN=test.local" in info["subject"]
+        assert "notBefore" in info
+        assert "notAfter" in info
 
     def test_nonexistent_cert_returns_error(self, tmp_path):
         info = get_cert_info(tmp_path / "nope.pem")
+
         assert "error" in info
-
-    def test_ignores_non_key_value_lines(self, tmp_path, monkeypatch):
-        cert_path = tmp_path / "cert.pem"
-        cert_path.write_text("cert", encoding="utf-8")
-
-        monkeypatch.setattr(
-            "src.security.tls.subprocess.run",
-            lambda cmd, **_kwargs: subprocess.CompletedProcess(
-                cmd,
-                0,
-                stdout="subject=CN = demo\nnotBefore=now\nnotAfter=later\nnoise-without-equals\n",
-                stderr="",
-            ),
-        )
-
-        info = get_cert_info(cert_path)
-
-        assert info == {
-            "subject": "CN = demo",
-            "notBefore": "now",
-            "notAfter": "later",
-        }
-
-    def test_returns_error_when_openssl_call_raises(self, tmp_path, monkeypatch):
-        cert_path = tmp_path / "cert.pem"
-        cert_path.write_text("cert", encoding="utf-8")
-
-        def fake_run(*_args, **_kwargs):
-            raise OSError("boom")
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
-
-        info = get_cert_info(cert_path)
-
-        assert info == {"error": "boom"}
 
 
 class TestObtainLetsEncryptCert:
-    def test_uses_default_config_dir_when_not_provided(self, tmp_path, monkeypatch):
+    def test_uses_default_acme_config_dir_when_not_provided(self, tmp_path, monkeypatch):
         fake_home = tmp_path / "home"
-        config_dir = fake_home / ".exphttp" / "letsencrypt"
-        live_dir = config_dir / "live" / "example.com"
-        cert_path = live_dir / "fullchain.pem"
-        key_path = live_dir / "privkey.pem"
-
         monkeypatch.setattr("src.security.tls.Path.home", lambda: fake_home)
+        self._patch_acme_success(monkeypatch)
 
-        def fake_run(cmd, **_kwargs):
-            live_dir.mkdir(parents=True, exist_ok=True)
-            cert_path.write_text("cert", encoding="utf-8")
-            key_path.write_text("key", encoding="utf-8")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+        result_cert, result_key = obtain_letsencrypt_cert(domain="Example.COM")
 
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+        assert (
+            result_cert
+            == fake_home / ".exphttp" / "acme" / "live" / "example.com" / "fullchain.pem"
+        )
+        assert (
+            result_key == fake_home / ".exphttp" / "acme" / "live" / "example.com" / "privkey.pem"
+        )
+        assert result_cert.read_text(encoding="utf-8") == "FULLCHAIN"
+        assert result_key.exists()
 
-        result_cert, result_key = obtain_letsencrypt_cert(domain="example.com")
-
-        assert result_cert == cert_path
-        assert result_key == key_path
-
-    def test_returns_generated_live_paths(self, tmp_path, monkeypatch):
-        config_dir = tmp_path / "letsencrypt"
-        live_dir = config_dir / "live" / "example.com"
-        cert_path = live_dir / "fullchain.pem"
-        key_path = live_dir / "privkey.pem"
-
-        def fake_run(cmd, **_kwargs):
-            live_dir.mkdir(parents=True, exist_ok=True)
-            cert_path.write_text("cert", encoding="utf-8")
-            key_path.write_text("key", encoding="utf-8")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+    def test_writes_generated_certificate_and_private_key(self, tmp_path, monkeypatch):
+        calls: dict[str, object] = {}
+        self._patch_acme_success(monkeypatch, calls=calls)
 
         result_cert, result_key = obtain_letsencrypt_cert(
             domain="example.com",
             email="ops@example.com",
-            config_dir=config_dir,
+            config_dir=tmp_path,
+            server_url="https://acme.example/directory",
+            http_address="127.0.0.1",
+            http_port=5002,
         )
 
-        assert result_cert == cert_path
-        assert result_key == key_path
-        assert (config_dir / "work").exists()
-        assert (config_dir / "logs").exists()
+        assert result_cert == tmp_path / "live" / "example.com" / "fullchain.pem"
+        assert result_key == tmp_path / "live" / "example.com" / "privkey.pem"
+        assert result_cert.read_text(encoding="utf-8") == "FULLCHAIN"
+        assert (tmp_path / "accounts").exists()
+        assert calls["email"] == "ops@example.com"
+        assert calls["server"] == ("127.0.0.1", 5002)
+        if os.name != "nt":
+            assert stat.S_IMODE(result_key.stat().st_mode) == 0o600
 
-    def test_missing_output_files_raise_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(cmd, **_kwargs):
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+    def test_invalid_domain_raises_value_error(self, tmp_path):
+        with pytest.raises(ValueError, match="invalid domain"):
+            obtain_letsencrypt_cert(domain="../example.com", config_dir=tmp_path)
 
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+    def test_wildcard_domain_is_rejected(self, tmp_path):
+        with pytest.raises(ValueError, match="wildcard"):
+            obtain_letsencrypt_cert(domain="*.example.com", config_dir=tmp_path)
 
-        with pytest.raises(RuntimeError, match="certificate files not found"):
+    def test_challenge_bind_error_is_runtime_error(self, tmp_path, monkeypatch):
+        self._patch_acme_success(monkeypatch)
+
+        def fail_server(*_args, **_kwargs):
+            raise OSError("address in use")
+
+        monkeypatch.setattr(tls_module, "_challenge_server", fail_server)
+
+        with pytest.raises(RuntimeError, match="could not bind ACME HTTP-01"):
             obtain_letsencrypt_cert(domain="example.com", config_dir=tmp_path)
 
-    def test_nonzero_certbot_exit_raises_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(cmd, **_kwargs):
-            return subprocess.CompletedProcess(cmd, 2, stdout="", stderr="certbot failed")
+    @staticmethod
+    def _patch_acme_success(monkeypatch, calls: dict[str, object] | None = None) -> None:
+        calls = calls if calls is not None else {}
 
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+        class FakeClient:
+            def __init__(self) -> None:
+                self.answered = []
 
-        with pytest.raises(RuntimeError, match="certbot error \\(code 2\\)"):
-            obtain_letsencrypt_cert(domain="example.com", config_dir=tmp_path)
+            def new_order(self, csr_pem: bytes):
+                calls["csr_prefix"] = csr_pem[:20]
+                return object()
 
-    def test_missing_certbot_raises_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(*_args, **_kwargs):
-            raise FileNotFoundError
+            def answer_challenge(self, challenge_body, response) -> None:
+                self.answered.append((challenge_body, response))
 
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+            def poll_and_finalize(self, order, deadline):
+                calls["deadline"] = deadline
+                return SimpleNamespace(fullchain_pem="FULLCHAIN")
 
-        with pytest.raises(RuntimeError, match="certbot not found"):
-            obtain_letsencrypt_cert(domain="example.com", config_dir=tmp_path)
+        fake_client = FakeClient()
 
-    def test_timeout_raises_runtime_error(self, tmp_path, monkeypatch):
-        def fake_run(*_args, **_kwargs):
-            raise subprocess.TimeoutExpired(cmd="certbot", timeout=120)
+        def fake_client_factory(_account_key, *, directory_url, user_agent, timeout):
+            calls["directory_url"] = directory_url
+            calls["user_agent"] = user_agent
+            calls["timeout"] = timeout
+            return fake_client
 
-        monkeypatch.setattr("src.security.tls.subprocess.run", fake_run)
+        def fake_ensure_account(_acme_client, *, email):
+            calls["email"] = email
+            return None
 
-        with pytest.raises(RuntimeError, match="certbot command timed out"):
-            obtain_letsencrypt_cert(domain="example.com", config_dir=tmp_path)
+        def fake_http01_challenges(_acme_client, _order):
+            return set(), [("challenge", "response")]
+
+        @contextlib.contextmanager
+        def fake_challenge_server(_resources, *, address, port, timeout):
+            calls["server"] = (address, port)
+            calls["challenge_timeout"] = timeout
+            yield object()
+
+        monkeypatch.setattr(tls_module, "_acme_client_for_key", fake_client_factory)
+        monkeypatch.setattr(tls_module, "_ensure_account", fake_ensure_account)
+        monkeypatch.setattr(tls_module, "_http01_challenges", fake_http01_challenges)
+        monkeypatch.setattr(tls_module, "_challenge_server", fake_challenge_server)
+
+
+class TestPublicIpHelpers:
+    def test_resolve_public_ipv4(self, monkeypatch):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self, _limit: int) -> bytes:
+                return b"8.8.8.8\n"
+
+        monkeypatch.setattr(
+            "src.security.tls.urllib.request.urlopen",
+            lambda _request, timeout: FakeResponse(),
+        )
+
+        assert resolve_public_ipv4() == "8.8.8.8"
+
+    def test_validate_public_ipv4_rejects_private_address(self):
+        with pytest.raises(ValueError, match="not globally routable"):
+            validate_public_ipv4("192.168.0.1")
+
+    def test_sslip_domain_for_ip(self):
+        assert sslip_domain_for_ip("8.8.4.4") == "8-8-4-4.sslip.io"

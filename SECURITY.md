@@ -56,8 +56,8 @@ High-level assumptions:
   smuggling, TLS misconfiguration, advanced upload payload forgery.
 - **Out of scope:** advanced traffic analysis of the advanced upload flow, timing
   attacks below microsecond resolution, DoS via resource exhaustion from
-  authenticated users, vulnerabilities in `cryptography` / OpenSSL / Python
-  stdlib (report upstream).
+  authenticated users, vulnerabilities in `cryptography` / `acme` /
+  PyOpenSSL / Python stdlib (report upstream).
 
 ## Advanced Upload Caveats
 

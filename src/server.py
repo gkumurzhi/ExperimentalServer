@@ -77,6 +77,12 @@ class ExperimentalHTTPServer(HandlerMixin):
         letsencrypt: bool = False,
         domain: str | None = None,
         email: str | None = None,
+        sslip: bool = False,
+        public_ip: str | None = None,
+        acme_staging: bool = False,
+        acme_server: str | None = None,
+        acme_http_address: str = "",
+        acme_http_port: int = 80,
         # Auth options
         auth: str | None = None,  # "user:password" or "random"
         # Debug
@@ -124,10 +130,22 @@ class ExperimentalHTTPServer(HandlerMixin):
             domain=domain,
             email=email,
             host=host,
+            sslip=sslip,
+            public_ip=public_ip,
+            acme_staging=acme_staging,
+            acme_server=acme_server,
+            acme_http_address=acme_http_address,
+            acme_http_port=acme_http_port,
         )
         self.letsencrypt = letsencrypt
         self.domain = domain
         self.email = email
+        self.sslip = sslip
+        self.public_ip = public_ip
+        self.acme_staging = acme_staging
+        self.acme_server = acme_server
+        self.acme_http_address = acme_http_address
+        self.acme_http_port = acme_http_port
 
         # Temporary SMUGGLE files (deleted after serving)
         self._temp_smuggle_files: set[str] = set()
@@ -326,6 +344,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Start the server."""
         # Set up TLS
         self._setup_tls()
+        self.domain = self._tls.domain
+        self.public_ip = self._tls.public_ip
 
         if self.debug:
             logger.debug("Debug logging enabled")
@@ -339,7 +359,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.running = True
 
         protocol = "https" if self.tls_enabled else "http"
-        url = f"{protocol}://{self.host}:{self.port}"
+        display_host = self.domain if self.sslip and self.domain else self.host
+        url = f"{protocol}://{display_host}:{self.port}"
 
         print("=" * 60)
         print(f"  exphttp v{__version__}")

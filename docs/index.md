@@ -13,12 +13,11 @@ research, CTF practice, and controlled red/blue team exercises.
 - Custom HTTP methods beyond the RFC 7231 set: `FETCH`, `INFO`, `PING`,
   `NONE`, `NOTE`, `SMUGGLE`, plus advanced upload through any unknown
   method carrying upload payload data.
-- Full TLS 1.2+ with self-signed, user-supplied, or Let's Encrypt
+- Full TLS 1.2+ with self-signed, user-supplied, Let's Encrypt, or sslip.io
   certificates.
 - Basic Auth with PBKDF2-SHA256 hashing and rate-limited brute-force
   protection.
-- Secure Notepad with ECDH P-256 + AES-256-GCM when `cryptography` is
-  installed.
+- Secure Notepad with ECDH P-256 + AES-256-GCM.
 - WebSocket support (RFC 6455) for real-time note synchronisation.
 - Advanced upload through JSON body, HTTP headers, or URL parameters with
   optional XOR+HMAC payload handling.
@@ -27,12 +26,11 @@ research, CTF practice, and controlled red/blue team exercises.
 ## Install
 
 ```bash
-pip install exphttp            # core only, stdlib
-pip install "exphttp[crypto]"  # adds AES-GCM + ECDH features
+pip install exphttp
 ```
 
-The NOTE API and `/notes/ws` fail closed with `501` when the server is
-installed without `exphttp[crypto]`.
+The default install includes the runtime crypto and ACME dependencies used by
+TLS and Secure Notepad.
 
 ## Quick start
 

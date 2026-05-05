@@ -95,11 +95,44 @@ Custom HTTP methods:
     tls.add_argument(
         "--letsencrypt",
         action="store_true",
-        help="Obtain Let's Encrypt certificate (requires certbot and open port 80)",
+        help="Obtain Let's Encrypt certificate with built-in ACME HTTP-01",
     )
     tls.add_argument("--domain", metavar="DOMAIN", help="Domain for Let's Encrypt certificate")
     tls.add_argument(
         "--email", metavar="EMAIL", help="Email for Let's Encrypt notifications (optional)"
+    )
+    tls.add_argument(
+        "--sslip",
+        action="store_true",
+        help="Obtain a Let's Encrypt certificate for the public IPv4 sslip.io hostname",
+    )
+    tls.add_argument(
+        "--public-ip",
+        metavar="IP",
+        help="Public IPv4 override for --sslip (default: auto-detect)",
+    )
+    tls.add_argument(
+        "--acme-staging",
+        action="store_true",
+        help="Use Let's Encrypt staging ACME directory",
+    )
+    tls.add_argument(
+        "--acme-server",
+        metavar="URL",
+        help="Custom ACME directory URL (overrides --acme-staging)",
+    )
+    tls.add_argument(
+        "--acme-http-address",
+        default="",
+        metavar="ADDR",
+        help="Bind address for HTTP-01 challenge server (default: all interfaces)",
+    )
+    tls.add_argument(
+        "--acme-http-port",
+        type=int,
+        default=80,
+        metavar="PORT",
+        help="Bind port for HTTP-01 challenge server (default: 80)",
     )
 
     # Authentication
@@ -139,8 +172,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = create_parser()
     args = parser.parse_args(argv)
 
-    if args.letsencrypt and not args.domain:
-        parser.error("--letsencrypt requires --domain")
+    if args.letsencrypt and not args.domain and not args.sslip:
+        parser.error("--letsencrypt requires --domain unless --sslip is used")
+    if args.sslip and args.domain:
+        parser.error("--sslip cannot be combined with --domain")
+    if args.public_ip and not args.sslip:
+        parser.error("--public-ip requires --sslip")
+    if args.acme_http_port < 1 or args.acme_http_port > 65535:
+        parser.error("--acme-http-port must be between 1 and 65535")
 
     # Build config from arguments
     config = {
@@ -151,12 +190,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,
-        "tls": args.tls or bool(args.cert) or args.letsencrypt,
+        "tls": args.tls or bool(args.cert) or args.letsencrypt or args.sslip,
         "cert_file": args.cert,
         "key_file": args.key,
         "letsencrypt": args.letsencrypt,
         "domain": args.domain,
         "email": args.email,
+        "sslip": args.sslip,
+        "public_ip": args.public_ip,
+        "acme_staging": args.acme_staging,
+        "acme_server": args.acme_server,
+        "acme_http_address": args.acme_http_address,
+        "acme_http_port": args.acme_http_port,
         "auth": args.auth,
         "open_browser": args.open,
         "json_log": args.json_log,

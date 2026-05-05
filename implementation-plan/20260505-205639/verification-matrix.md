@@ -1,0 +1,17 @@
+# Verification Matrix
+
+| Stage | Required checks | Optional checks | Known blockers | Baseline needed? |
+|---|---|---|---|---|
+| STAGE-001 | `python -m src --help`; release-smoke stale-doc guard command/script; `ruff check` on changed tool/workflow-adjacent scripts if any | Full release smoke | Existing workspace has many unrelated dirty files | Yes, capture current grep false positive before changing |
+| STAGE-002 | Notepad HKDF/example interoperability tests; `python examples/notepad_client.py --help`; `python tools/sync_docs.py --check` | Live temp-server example round trip | Product decision on durable notes remains open; default plan documents current session-key limits | Yes, confirm old example mismatch |
+| STAGE-003 | `pytest -q tests/test_security/test_tls_manager.py tests/test_security/test_tls.py`; focused missing/invalid/mismatched key tests | Manual cache-path inspection | No live ACME staging domain in analysis | Yes, test current missing-key fail-late behavior |
+| STAGE-004 | `pytest -q tests/test_cli.py`; `python -m src --help`; invalid argument subprocess checks return code 2 | Cross-platform smoke subset | Decision on whether `--port 0` is supported | Yes, record current accepted zero/negative values |
+| STAGE-005 | `docker compose -f examples/docker/docker-compose.yml config`; `mkdocs build --strict`; docs sync if API docs changed | Manual ACME staging checklist dry run | Live ACME issuance not available by default | No, source analysis already captured incomplete Compose path |
+| STAGE-006 | stale-reference grep/script; `python tools/sync_docs.py --check`; `mkdocs build --strict`; targeted UI smoke assertion update | Full browser smoke | Historical changelog/ADR references may need allowlist | Yes, list approved historical references |
+| STAGE-007 | `pre-commit run mypy --all-files`; `python -m pip check`; installed import smoke; security workflow syntax review | `pip-audit --strict -r constraints/ci.txt`; installed-env audit | Local interpreter may need dependency refresh | Yes, compare hook deps to `constraints/ci.txt` |
+| STAGE-008 | Docker build; container `python -c "import acme, cryptography"`; TLS container run and `curl -k -X PING` | Compose invariant check in CI | Docker may be unavailable locally | Yes, keep current HTTP Docker smoke passing |
+| STAGE-009 | Browser smoke or unit tests for dirty edit switch/new flow; UI text assertions; notepad metadata tests | Manual UI check | UI copy depends on product title-privacy decision | Yes, reproduce debounce-loss path if feasible |
+| STAGE-010 | WebSocket save/reconnect/idempotency tests; browser smoke for drop-before-ack flow | Load/slow-network test | Needs a design for operation IDs or client-generated note IDs | Yes, cover current duplicate/stuck-save risk |
+| STAGE-011 | Advanced-upload oversized JSON body test asserting early 413/no JSON parse; API docs sync | Memory profiling | Receive layer still buffers up to global cap | Yes, prove current guard happens after parse |
+| STAGE-012 | Concurrent upload same-name test; failure-injection notepad write test; persistence regression suite | Filesystem crash-simulation review | Cross-platform atomic semantics need care | Yes, capture existing check-then-open behavior |
+| STAGE-013 | `pytest --collect-only -q -p no:cacheprovider`; tracked/ignored test guard; CI workflow review | Full pytest | Must decide whether local Codex runner files are project code | Yes, record currently collected ignored tests |

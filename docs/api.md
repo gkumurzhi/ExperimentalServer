@@ -326,7 +326,7 @@ upload limit.
 
 ## NOTE
 
-Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow requires the `cryptography` package; when the server is installed without `exphttp[crypto]`, NOTE operations fail closed with `501`. Notes are stored in the separate top-level `notes/` directory as `<id>.enc` + `<id>.meta.json` pairs, alongside `uploads/` rather than inside it.
+Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow uses the runtime `cryptography` dependency and fails closed with `501` if the crypto backend is unavailable. Notes are stored in the separate top-level `notes/` directory as `<id>.enc` + `<id>.meta.json` pairs, alongside `uploads/` rather than inside it.
 
 ### NOTE /notes/key
 
@@ -345,7 +345,7 @@ NOTE /notes/key HTTP/1.1
 }
 ```
 
-If the `cryptography` package is not installed, `hasEcdh` is `false` and `publicKey` is absent. In that mode, save/load/list/delete NOTE operations are unavailable and return `501`.
+If the crypto backend is unavailable, `hasEcdh` is `false` and `publicKey` is absent. In that mode, save/load/list/delete NOTE operations are unavailable and return `501`.
 
 ---
 
@@ -430,7 +430,7 @@ X-Session-Id: <sessionId>   (optional, audit-only; ignored when expired)
 }
 ```
 
-**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `501` Secure Notepad unavailable without `exphttp[crypto]`
+**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `501` Secure Notepad crypto backend unavailable
 
 ---
 
@@ -453,7 +453,7 @@ NOTE /notes/a1b2c3d4... HTTP/1.1
 }
 ```
 
-**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad unavailable without `exphttp[crypto]`
+**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad crypto backend unavailable
 
 ---
 
@@ -472,7 +472,7 @@ NOTE /notes/a1b2c3d4...?delete HTTP/1.1
 }
 ```
 
-**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad unavailable without `exphttp[crypto]`
+**Status codes:** `200` OK, `404` Not Found, `501` Secure Notepad crypto backend unavailable
 
 ---
 
@@ -500,7 +500,7 @@ NOTE /notes?clear=1 HTTP/1.1
 
 Hidden files inside `notes/` are preserved.
 
-**Status codes:** `200` OK, `500` Clear failed, `501` Secure Notepad unavailable without `exphttp[crypto]`
+**Status codes:** `200` OK, `500` Clear failed, `501` Secure Notepad crypto backend unavailable
 
 ---
 
@@ -513,7 +513,7 @@ handshake inline, before the normal HTTP handler runs. The connection uses a
 connection alive. Upgrade validation requires `GET`, `Host`,
 `Upgrade: websocket`, `Connection: Upgrade`, a valid 16-byte
 `Sec-WebSocket-Key`, and `Sec-WebSocket-Version: 13`. When the server is
-installed without `exphttp[crypto]`, the upgrade is rejected with `501`.
+running without the crypto backend, the upgrade is rejected with `501`.
 
 **Upgrade request:**
 ```

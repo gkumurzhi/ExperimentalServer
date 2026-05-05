@@ -29,7 +29,7 @@ src/
     auth.py            # Basic Auth + rate limiter
     crypto.py          # XOR/HMAC helpers
     keys.py            # ECDH P-256 for Secure Notepad
-    tls.py             # cert generation helpers + Let's Encrypt integration
+    tls.py             # cert generation helpers + built-in ACME/sslip.io integration
     tls_manager.py     # TLSManager: SSL context lifecycle + temp files
   utils/
     captcha.py         # PIL-free CAPTCHA renderer

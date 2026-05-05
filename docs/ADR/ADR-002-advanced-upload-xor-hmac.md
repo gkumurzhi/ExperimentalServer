@@ -1,18 +1,19 @@
 # ADR-002: Advanced upload payload protection — XOR + HMAC baseline with optional AES-GCM
 
-- **Status:** accepted
+- **Status:** accepted; dependency-policy portions superseded by
+  [ADR-003](ADR-003-cryptography-optional.md)
 
 ## Context
 
 Advanced upload allows clients to send encoded payloads through JSON bodies,
-headers, chunked headers, or URL parameters. Some clients also need a stdlib-only
-way to obfuscate payload bytes and detect accidental or malicious tampering.
-The server must work in environments where installing `cryptography` is
-impossible (air-gapped research VMs, minimal containers).
+headers, chunked headers, or URL parameters. Early versions also needed a
+stdlib-only way to obfuscate payload bytes and detect accidental or malicious
+tampering. The default runtime now includes `cryptography`; the XOR+HMAC path is
+kept as a compatibility baseline, not as a dependency-policy requirement.
 
 Requirements:
 
-- Run with stdlib only.
+- Preserve the existing XOR+HMAC wire format.
 - Provide authenticity, not just confidentiality (detect tampering).
 - Accept an upgrade path to modern AEAD when the library is available.
 
@@ -23,8 +24,8 @@ Requirements:
    This gives payload integrity and rudimentary confidentiality; it is **not**
    a substitute for AEAD and does not authenticate filename or transport
    metadata.
-2. **Upgrade (optional):** when `cryptography>=44.0` is available, the
-   upload path uses AES-256-GCM with a random 12-byte nonce; wire format
+2. **Upgrade:** with the runtime `cryptography` dependency, the upload path uses
+   AES-256-GCM with a random 12-byte nonce; wire format
    carries a version byte so both clients and the server can distinguish
    baseline vs. AEAD payloads.
 3. **Transport selection is explicit:** clients choose JSON body, header,
@@ -34,7 +35,7 @@ Requirements:
 
 ### Positive
 
-- Zero external deps in the common case; AES-GCM is an opt-in upgrade.
+- Existing XOR+HMAC clients remain compatible.
 - The wire format is versioned (`src/security/crypto.py`), so future
   algorithms can be added without breaking existing clients.
 - HMAC prevents silent corruption of uploaded payload bytes when the client

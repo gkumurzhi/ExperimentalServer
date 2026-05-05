@@ -8,8 +8,7 @@ Usage:
 Optional:
     --note-id <hex>    Update an existing note instead of creating a new one.
 
-Requires `cryptography`:
-    pip install "exphttp[crypto]"
+Requires `cryptography`, which is installed with the default `exphttp` package.
 """
 
 from __future__ import annotations
@@ -29,7 +28,7 @@ try:
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 except ImportError:
-    print("This example requires 'cryptography'. Install with: pip install 'exphttp[crypto]'")
+    print("This example requires 'cryptography'. Install or repair the exphttp environment.")
     sys.exit(1)
 
 

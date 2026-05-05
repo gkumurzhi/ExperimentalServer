@@ -12,11 +12,16 @@ import ssl
 from pathlib import Path
 
 from .tls import (
+    DEFAULT_ACME_HTTP_ADDRESS,
+    DEFAULT_ACME_HTTP_PORT,
+    LE_PRODUCTION_DIRECTORY,
+    LE_STAGING_DIRECTORY,
     check_cert_needs_renewal,
-    check_certbot_available,
-    check_openssl_available,
     generate_self_signed_cert,
     obtain_letsencrypt_cert,
+    resolve_public_ipv4,
+    sslip_domain_for_ip,
+    validate_public_ipv4,
 )
 
 logger = logging.getLogger("httpserver")
@@ -35,6 +40,12 @@ class TLSManager:
         domain: str | None,
         email: str | None,
         host: str,
+        sslip: bool = False,
+        public_ip: str | None = None,
+        acme_staging: bool = False,
+        acme_server: str | None = None,
+        acme_http_address: str = DEFAULT_ACME_HTTP_ADDRESS,
+        acme_http_port: int = DEFAULT_ACME_HTTP_PORT,
     ) -> None:
         self.enabled = enabled
         self.cert_file = cert_file
@@ -43,10 +54,17 @@ class TLSManager:
         self.domain = domain
         self.email = email
         self.host = host
+        self.sslip = sslip
+        self.public_ip = public_ip
+        self.acme_staging = acme_staging
+        self.acme_server = acme_server
+        self.acme_http_address = acme_http_address
+        self.acme_http_port = acme_http_port
         self.ssl_context: ssl.SSLContext | None = None
         self.temp_cert_files: list[str] = []
         self._used_self_signed = False
         self._used_letsencrypt = False
+        self._used_sslip = False
 
     def setup(self) -> None:
         """Acquire a certificate and build the SSL context."""
@@ -55,7 +73,12 @@ class TLSManager:
         if (self.cert_file is None) != (self.key_file is None):
             raise RuntimeError("--cert and --key must be provided together")
 
-        if self.letsencrypt and self.domain:
+        if self.sslip:
+            self._prepare_sslip_domain()
+
+        if self.letsencrypt or self.sslip:
+            if not self.domain:
+                raise RuntimeError("--letsencrypt requires --domain unless --sslip is used.")
             self._try_letsencrypt()
 
         if not self.cert_file or not self.key_file:
@@ -63,23 +86,48 @@ class TLSManager:
 
         self._build_context()
 
-    def _try_letsencrypt(self) -> None:
-        if not check_certbot_available():
-            raise RuntimeError("certbot not found. Install certbot or remove --letsencrypt.")
+    def _prepare_sslip_domain(self) -> None:
+        if self.domain:
+            raise RuntimeError("--sslip cannot be combined with --domain.")
+        ip = validate_public_ipv4(self.public_ip) if self.public_ip else resolve_public_ipv4()
+        self.public_ip = ip
+        self.domain = sslip_domain_for_ip(ip)
+        self._used_sslip = True
 
+    def _try_letsencrypt(self) -> None:
         assert self.domain is not None
-        config_dir = Path.home() / ".exphttp" / "letsencrypt"
+        config_dir = Path.home() / ".exphttp" / "acme"
         cert_path = config_dir / "live" / self.domain / "fullchain.pem"
         key_path = config_dir / "live" / self.domain / "privkey.pem"
+        legacy_cert_path = (
+            Path.home() / ".exphttp" / "letsencrypt" / "live" / self.domain / "fullchain.pem"
+        )
+        legacy_key_path = (
+            Path.home() / ".exphttp" / "letsencrypt" / "live" / self.domain / "privkey.pem"
+        )
 
         if not cert_path.exists() or check_cert_needs_renewal(cert_path):
-            print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
-            cert_path, key_path = obtain_letsencrypt_cert(
-                domain=self.domain,
-                email=self.email,
-                config_dir=config_dir,
-            )
-            print(f"[TLS] Certificate obtained: {cert_path}")
+            if (
+                not cert_path.exists()
+                and legacy_cert_path.exists()
+                and legacy_key_path.exists()
+                and not check_cert_needs_renewal(legacy_cert_path)
+            ):
+                print(f"[TLS] Using legacy Let's Encrypt certificate for {self.domain}")
+                cert_path = legacy_cert_path
+                key_path = legacy_key_path
+            else:
+                print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
+                cert_path, key_path = obtain_letsencrypt_cert(
+                    domain=self.domain,
+                    email=self.email,
+                    config_dir=config_dir,
+                    server_url=self._acme_directory_url(),
+                    http_address=self.acme_http_address,
+                    http_port=self.acme_http_port,
+                    user_agent="exphttp/acme",
+                )
+                print(f"[TLS] Certificate obtained: {cert_path}")
         else:
             print(f"[TLS] Using existing Let's Encrypt certificate for {self.domain}")
 
@@ -88,9 +136,6 @@ class TLSManager:
         self._used_letsencrypt = True
 
     def _generate_self_signed(self) -> None:
-        if not check_openssl_available():
-            raise RuntimeError("OpenSSL not found. Install OpenSSL or provide --cert and --key.")
-
         print("[TLS] Generating self-signed certificate...")
         common_name = self.host if self.host != "0.0.0.0" else "localhost"
         cert_path, key_path = generate_self_signed_cert(common_name=common_name)
@@ -111,10 +156,19 @@ class TLSManager:
     def describe(self) -> str:
         """Short human-readable description of the active certificate."""
         if self._used_letsencrypt and self.domain:
+            if self._used_sslip:
+                return f"Let's Encrypt sslip.io ({self.domain})"
             return f"Let's Encrypt ({self.domain})"
         if self._used_self_signed:
             return "self-signed"
         return self.cert_file or "unknown"
+
+    def _acme_directory_url(self) -> str:
+        if self.acme_server:
+            return self.acme_server
+        if self.acme_staging:
+            return LE_STAGING_DIRECTORY
+        return LE_PRODUCTION_DIRECTORY
 
     def cleanup(self) -> None:
         """Remove any temporary cert/key files we created."""

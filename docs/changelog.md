@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Infrastructure:** multi-stage `Dockerfile` with non-root user and HEALTHCHECK, plus `.dockerignore`
 - **Tests:** 46 new tests (`test_metrics.py`, `test_handler_registry.py`, `test_security/test_tls_manager.py`, `test_http/test_io.py`, `test_property/` with Hypothesis)
 - **Deps:** new optional extras `[test]` (hypothesis, pytest-benchmark) and `[docs]` (mkdocs-material)
+- **TLS:** `--sslip` mode for issuing a valid Let's Encrypt certificate for the current public IPv4 via `sslip.io`
 
 ### Changed
 - **Refactor:** extracted `MetricsCollector` to `src/metrics.py`
@@ -35,10 +36,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Docs:** architecture and threat-model docs now describe `RequestPipeline`, `NotepadService`, `TLSManager`, PBKDF2 auth, and the shared descendant-path resolver that exist in the codebase today
 - **Behavior:** file access is always limited to `<root>/uploads/`; separate startup flags for this restriction were removed
 - **Behavior:** advanced upload is enabled by default; unknown non-standard methods carrying body, header, chunked-header, or URL payload data are accepted as uploads
+- **TLS:** self-signed certificates are generated with `cryptography`; Let's Encrypt issuance uses the built-in `acme` client instead of a `certbot` subprocess
+- **Deps:** `cryptography` and Certbot's `acme` library are runtime dependencies; `[crypto]` remains as an empty compatibility extra
 - **Size:** `src/server.py` reduced from 1,000 LOC to 869 LOC
 
 - NOTE method for Secure Notepad with end-to-end AES-256-GCM encryption
-- ECDH P-256 key exchange for session key derivation (requires `cryptography` package)
+- ECDH P-256 key exchange for session key derivation (uses the runtime `cryptography` package)
 - WebSocket support (RFC 6455) for real-time notepad sync via `/notes/ws`
 - Upload method selector — POST, PUT, PATCH, and NONE all perform file upload
 - HEAD, PATCH, DELETE HTTP method handlers

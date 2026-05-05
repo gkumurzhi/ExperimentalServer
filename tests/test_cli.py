@@ -60,6 +60,12 @@ class TestCLIParser:
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
+        assert args.sslip is False
+        assert args.public_ip is None
+        assert args.acme_staging is False
+        assert args.acme_server is None
+        assert args.acme_http_address == ""
+        assert args.acme_http_port == 80
 
     def test_custom_host_port(self):
         args = self.parser.parse_args(["-H", "0.0.0.0", "-p", "443"])
@@ -128,6 +134,28 @@ class TestCLIParser:
         args = self.parser.parse_args(["--letsencrypt", "--domain", "example.com"])
         assert args.letsencrypt is True
         assert args.domain == "example.com"
+
+    def test_sslip_flags(self):
+        args = self.parser.parse_args(["--sslip", "--public-ip", "8.8.8.8"])
+        assert args.sslip is True
+        assert args.public_ip == "8.8.8.8"
+
+    def test_acme_flags(self):
+        args = self.parser.parse_args(
+            [
+                "--acme-staging",
+                "--acme-server",
+                "https://acme.example/directory",
+                "--acme-http-address",
+                "127.0.0.1",
+                "--acme-http-port",
+                "5002",
+            ]
+        )
+        assert args.acme_staging is True
+        assert args.acme_server == "https://acme.example/directory"
+        assert args.acme_http_address == "127.0.0.1"
+        assert args.acme_http_port == 5002
 
     def test_version_flag(self):
         with pytest.raises(SystemExit) as exc_info:
@@ -199,6 +227,12 @@ class TestCLIMain:
             "letsencrypt": False,
             "domain": None,
             "email": None,
+            "sslip": False,
+            "public_ip": None,
+            "acme_staging": False,
+            "acme_server": None,
+            "acme_http_address": "",
+            "acme_http_port": 80,
             "auth": "admin:secret",
             "open_browser": True,
             "json_log": True,
@@ -212,6 +246,7 @@ class TestCLIMain:
             (["--tls"], True),
             (["--cert", "/tmp/cert.pem"], True),
             (["--letsencrypt", "--domain", "example.com"], True),
+            (["--sslip"], True),
         ],
     )
     def test_main_enables_tls_when_any_tls_input_is_present(
@@ -239,6 +274,39 @@ class TestCLIMain:
     def test_main_requires_domain_for_letsencrypt(self):
         with pytest.raises(SystemExit) as exc_info:
             cli.main(["--letsencrypt"])
+        assert exc_info.value.code == 2
+
+    def test_main_allows_letsencrypt_with_sslip_without_domain(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class ServerStub:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def start(self):
+                return None
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", ServerStub)
+
+        result = cli.main(["--letsencrypt", "--sslip"])
+
+        assert result == 0
+        assert captured["tls"] is True
+        assert captured["letsencrypt"] is True
+        assert captured["sslip"] is True
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--sslip", "--domain", "example.com"],
+            ["--public-ip", "8.8.8.8"],
+            ["--acme-http-port", "0"],
+            ["--acme-http-port", "70000"],
+        ],
+    )
+    def test_main_rejects_invalid_acme_combinations(self, argv):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(argv)
         assert exc_info.value.code == 2
 
     def test_main_returns_zero_on_keyboard_interrupt(self, monkeypatch):

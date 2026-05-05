@@ -69,12 +69,7 @@ class TestTLSManagerSelfSigned:
 
 class TestTLSManagerWithProvidedCert:
     def test_uses_provided_cert_without_generating(self, tmp_path: Path) -> None:
-        # Generate a throwaway self-signed cert to point TLSManager at.
-        # Skip if OpenSSL is unavailable.
-        from src.security.tls import check_openssl_available, generate_self_signed_cert
-
-        if not check_openssl_available():
-            pytest.skip("OpenSSL not available")
+        from src.security.tls import generate_self_signed_cert
 
         cert, key = generate_self_signed_cert(common_name="localhost")
         try:
@@ -114,27 +109,8 @@ class TestTLSManagerDescribe:
 
 
 class TestTLSManagerControlFlow:
-    def test_generate_self_signed_fails_when_openssl_missing(self, monkeypatch) -> None:
-        m = TLSManager(
-            enabled=True,
-            cert_file=None,
-            key_file=None,
-            letsencrypt=False,
-            domain=None,
-            email=None,
-            host="127.0.0.1",
-        )
-
-        monkeypatch.setattr("src.security.tls_manager.check_openssl_available", lambda: False)
-
-        with pytest.raises(RuntimeError, match="OpenSSL not found"):
-            m._generate_self_signed()
-        assert m.enabled is True
-        assert m.cert_file is None
-        assert m.key_file is None
-
     def test_try_letsencrypt_uses_existing_certificate(self, tmp_path: Path, monkeypatch) -> None:
-        config_dir = tmp_path / ".exphttp" / "letsencrypt"
+        config_dir = tmp_path / ".exphttp" / "acme"
         live_dir = config_dir / "live" / "example.com"
         cert_path = live_dir / "fullchain.pem"
         key_path = live_dir / "privkey.pem"
@@ -144,7 +120,6 @@ class TestTLSManagerControlFlow:
 
         obtain_mock = Mock()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr("src.security.tls_manager.check_certbot_available", lambda: True)
         monkeypatch.setattr(
             "src.security.tls_manager.check_cert_needs_renewal",
             lambda _path: False,
@@ -173,7 +148,7 @@ class TestTLSManagerControlFlow:
         tmp_path: Path,
         monkeypatch,
     ) -> None:
-        config_dir = tmp_path / ".exphttp" / "letsencrypt"
+        config_dir = tmp_path / ".exphttp" / "acme"
         obtained_cert = config_dir / "live" / "example.com" / "fullchain.pem"
         obtained_key = config_dir / "live" / "example.com" / "privkey.pem"
 
@@ -184,7 +159,6 @@ class TestTLSManagerControlFlow:
             return obtained_cert, obtained_key
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        monkeypatch.setattr("src.security.tls_manager.check_certbot_available", lambda: True)
         monkeypatch.setattr("src.security.tls_manager.check_cert_needs_renewal", lambda _path: True)
         monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
 
@@ -204,11 +178,49 @@ class TestTLSManagerControlFlow:
         assert m.key_file == str(obtained_key)
         assert m.describe() == "Let's Encrypt (example.com)"
 
-    def test_setup_fails_from_missing_certbot(
+    def test_try_letsencrypt_reuses_fresh_legacy_cert_when_new_store_is_empty(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        legacy_dir = tmp_path / ".exphttp" / "letsencrypt" / "live" / "example.com"
+        legacy_cert = legacy_dir / "fullchain.pem"
+        legacy_key = legacy_dir / "privkey.pem"
+        legacy_dir.mkdir(parents=True)
+        legacy_cert.write_text("legacy cert", encoding="utf-8")
+        legacy_key.write_text("legacy key", encoding="utf-8")
+
+        obtain_mock = Mock()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.security.tls_manager.check_cert_needs_renewal", lambda _path: False
+        )
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", obtain_mock)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        m._try_letsencrypt()
+
+        assert m.cert_file == str(legacy_cert)
+        assert m.key_file == str(legacy_key)
+        obtain_mock.assert_not_called()
+
+    def test_setup_propagates_acme_failure(
         self,
         monkeypatch,
     ) -> None:
-        monkeypatch.setattr("src.security.tls_manager.check_certbot_available", lambda: False)
+        def fail_obtain(**_kwargs):
+            raise RuntimeError("acme failed")
+
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fail_obtain)
 
         m = TLSManager(
             enabled=True,
@@ -220,8 +232,58 @@ class TestTLSManagerControlFlow:
             host="127.0.0.1",
         )
 
-        with pytest.raises(RuntimeError, match="certbot not found"):
+        with pytest.raises(RuntimeError, match="acme failed"):
             m.setup()
+
+    def test_sslip_resolves_public_ip_and_domain(self, tmp_path: Path, monkeypatch) -> None:
+        obtained_cert = (
+            tmp_path / ".exphttp" / "acme" / "live" / "8-8-8-8.sslip.io" / "fullchain.pem"
+        )
+        obtained_key = tmp_path / ".exphttp" / "acme" / "live" / "8-8-8-8.sslip.io" / "privkey.pem"
+
+        def fake_obtain(**kwargs):
+            assert kwargs["domain"] == "8-8-8-8.sslip.io"
+            obtained_cert.parent.mkdir(parents=True, exist_ok=True)
+            obtained_cert.write_text("cert", encoding="utf-8")
+            obtained_key.write_text("key", encoding="utf-8")
+            return obtained_cert, obtained_key
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("src.security.tls_manager.resolve_public_ipv4", lambda: "8.8.8.8")
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=False,
+            domain=None,
+            email="ops@example.com",
+            host="0.0.0.0",
+            sslip=True,
+        )
+
+        m._prepare_sslip_domain()
+        m._try_letsencrypt()
+
+        assert m.domain == "8-8-8-8.sslip.io"
+        assert m.public_ip == "8.8.8.8"
+        assert m.describe() == "Let's Encrypt sslip.io (8-8-8-8.sslip.io)"
+
+    def test_sslip_rejects_domain_combination(self) -> None:
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=False,
+            domain="example.com",
+            email=None,
+            host="0.0.0.0",
+            sslip=True,
+        )
+
+        with pytest.raises(RuntimeError, match="cannot be combined"):
+            m._prepare_sslip_domain()
 
     def test_setup_propagates_self_signed_generation_failure(
         self,
@@ -231,21 +293,21 @@ class TestTLSManagerControlFlow:
             enabled=True,
             cert_file=None,
             key_file=None,
-            letsencrypt=True,
+            letsencrypt=False,
             domain=None,
             email=None,
             host="127.0.0.1",
         )
 
         def fail_self_signed() -> None:
-            raise RuntimeError("no openssl")
+            raise RuntimeError("self signed failed")
 
         monkeypatch.setattr(m, "_generate_self_signed", fail_self_signed)
 
         build_mock = Mock()
         monkeypatch.setattr(m, "_build_context", build_mock)
 
-        with pytest.raises(RuntimeError, match="no openssl"):
+        with pytest.raises(RuntimeError, match="self signed failed"):
             m.setup()
         build_mock.assert_not_called()
 
