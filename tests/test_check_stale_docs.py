@@ -45,6 +45,50 @@ def test_active_stale_reference_is_reported(tmp_path: Path) -> None:
     assert "removed Secure Notepad HMAC header" in findings[0].message
 
 
+def test_active_crypto_extra_guidance_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "CONTRIBUTING.md").write_text(
+        'pip install -e ".[crypto,dev,lint,test]"\n',
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path == Path("CONTRIBUTING.md")
+    assert "compatibility-only `crypto` extra" in findings[0].message
+
+
+def test_active_ui_crypto_extra_remediation_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    ui_path = tmp_path / "src" / "data" / "static" / "ui" / "core.js"
+    ui_path.parent.mkdir(parents=True)
+    ui_path.write_text(
+        'notepadUnavailableServer: "Notepad unavailable: exphttp[crypto] required."\n',
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path == Path("src/data/static/ui/core.js")
+    assert "stale crypto extra remediation" in findings[0].message
+
+
+def test_active_package_crypto_extra_variant_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "pip install exphttp[crypto,dev]\n",
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path == Path("README.md")
+    assert "stale crypto extra remediation" in findings[0].message
+
+
 def test_main_returns_failure_with_actionable_output(
     tmp_path: Path,
     monkeypatch,

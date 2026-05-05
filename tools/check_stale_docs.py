@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when active docs/examples contain stale public contract references."""
+"""Fail when active docs, UI strings, and smoke checks contain stale references."""
 
 from __future__ import annotations
 
@@ -16,8 +16,16 @@ DEFAULT_TARGETS: tuple[str, ...] = (
     "README.md",
     "API.md",
     "CLAUDE.md",
+    "CONTRIBUTING.md",
+    "mkdocs.yml",
     "docs",
     "examples",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/workflows/ci.yml",
+    "src/request_pipeline.py",
+    "src/handlers/notepad.py",
+    "src/data/static/ui/core.js",
+    "tools/browser_smoke.playwright.js",
 )
 
 HISTORICAL_PATHS: frozenset[Path] = frozenset(
@@ -64,6 +72,30 @@ STALE_PATTERNS: tuple[StalePattern, ...] = (
     StalePattern(
         re.compile(r"ciphertext \+ metadata"),
         "stale Notepad recoverability wording",
+    ),
+    StalePattern(
+        re.compile(r"exphttp\[[^\]\n]*\bcrypto\b[^\]\n]*\]"),
+        "stale crypto extra remediation; repair the default runtime install instead",
+    ),
+    StalePattern(
+        re.compile(r'\.\[[^"\]\n]*crypto[^"\]\n]*\]'),
+        "stale active install command with compatibility-only `crypto` extra",
+    ),
+    StalePattern(
+        re.compile(r"zero external dependencies", re.IGNORECASE),
+        "stale zero-dependency runtime wording",
+    ),
+    StalePattern(
+        re.compile(r"\bpure Python\b", re.IGNORECASE),
+        "stale pure-Python runtime wording",
+    ),
+    StalePattern(
+        re.compile(r"чистом Python без внешних зависимостей", re.IGNORECASE),
+        "stale zero-dependency runtime wording",
+    ),
+    StalePattern(
+        re.compile(r"Optional cryptography", re.IGNORECASE),
+        "stale optional-cryptography wording; crypto is a default runtime dependency",
     ),
 )
 
@@ -142,7 +174,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
         description=(
-            "Check active documentation and examples for stale public contract references. "
+            "Check active documentation, UI strings, and smoke checks for stale references. "
             "Historical changelog files are intentionally ignored."
         )
     )

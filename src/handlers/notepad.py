@@ -36,7 +36,8 @@ from .base import BaseHandler
 logger = logging.getLogger("httpserver")
 
 _NOTE_CRYPTO_REQUIRED_ERROR = (
-    "Secure Notepad requires the cryptography package; install exphttp[crypto]"
+    "Secure Notepad requires the default cryptography runtime dependency; "
+    "repair or reinstall exphttp"
 )
 
 

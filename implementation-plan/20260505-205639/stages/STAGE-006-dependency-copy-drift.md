@@ -1,7 +1,7 @@
 # STAGE-006 - Remove stale crypto/dependency copy drift
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -56,11 +56,11 @@ Align source, UI, docs, and smoke expectations with the current dependency polic
 6. Sync docs and build the docs site.
 
 ## Acceptance criteria
-- [ ] Active runtime/UI messages no longer tell users to install `exphttp[crypto]` as a fix.
-- [ ] Active README/docs setup text no longer claims zero external dependencies for the current default runtime.
-- [ ] `[crypto]` is documented, if mentioned, as compatibility-only/no-op.
-- [ ] Browser smoke expectations match the new UI copy.
-- [ ] Historical references are either allowed explicitly or reworded without breaking changelog/ADR meaning.
+- [x] Active runtime/UI messages no longer tell users to install `exphttp[crypto]` as a fix.
+- [x] Active README/docs setup text no longer claims zero external dependencies for the current default runtime.
+- [x] `[crypto]` is documented, if mentioned, as compatibility-only/no-op.
+- [x] Browser smoke expectations match the new UI copy.
+- [x] Historical references are either allowed explicitly or reworded without breaking changelog/ADR meaning.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -80,4 +80,4 @@ Align source, UI, docs, and smoke expectations with the current dependency polic
 - Rollback: Restore a single explicitly labeled compatibility note while keeping runtime remediation text accurate.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 23:06:14 MSK. Runtime, UI, setup docs, CI/PR install examples, MkDocs navigation, and browser smoke expectations now describe crypto/ACME as default runtime dependencies and direct broken environments to repair or reinstall the default runtime install. The `[crypto]` extra remains only as empty compatibility metadata/context. Verification passed: stale-reference checker, targeted stale-check tests, docs sync, MkDocs strict build, ruff, JS syntax check, full browser smoke, and subagent verification.

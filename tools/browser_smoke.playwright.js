@@ -109,7 +109,26 @@ async (page) => {
 
   async function confirmAppDialog(expectedTextOrPattern, timeout = 10000) {
     const dialog = page.locator('#appDialog [role="alertdialog"]');
-    await dialog.waitFor({ state: "visible", timeout });
+    try {
+      await dialog.waitFor({ state: "visible", timeout });
+    } catch (error) {
+      const snapshot = await page.evaluate(() => {
+        const activeTab = document.querySelector('.tool-tabs .tab.active');
+        const activeElement = document.activeElement;
+        return {
+          activeTabId: activeTab?.id || "",
+          activeTabText: activeTab?.textContent?.trim() || "",
+          activeElementId: activeElement?.id || "",
+          activeElementText: activeElement?.textContent?.trim() || "",
+          appDialogText: document.getElementById("appDialog")?.textContent?.trim() || "",
+        };
+      });
+      const expectedDialog = String(expectedTextOrPattern);
+      throw new Error(
+        `confirmAppDialog(${expectedDialog}) did not open: ` +
+          `${JSON.stringify(snapshot)}; ${error.message}`
+      );
+    }
     if (expectedTextOrPattern) {
       const isRegex = expectedTextOrPattern instanceof RegExp;
       const expected = isRegex ? expectedTextOrPattern.source : expectedTextOrPattern;
@@ -2481,15 +2500,15 @@ async (page) => {
     await assertLocaleSnapshot({
       uploadTabText: "Загрузка",
       filesTabText: "Скачивание",
-      opsecTabText: "Загрузка (продвинутая)",
+      opsecTabText: "Продвинутая загрузка",
       noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
     });
     await switchLanguage("en");
     await assertLocaleSnapshot({
-      uploadTabText: "Uploads",
-      filesTabText: "Download",
+      uploadTabText: "Upload to server",
+      filesTabText: "Download from server",
       opsecTabText: "Advanced upload",
       noteListText: "No notes",
       charCountText: "0 chars",
@@ -2499,7 +2518,7 @@ async (page) => {
     await assertLocaleSnapshot({
       uploadTabText: "Загрузка",
       filesTabText: "Скачивание",
-      opsecTabText: "Загрузка (продвинутая)",
+      opsecTabText: "Продвинутая загрузка",
       noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
@@ -2675,14 +2694,14 @@ async (page) => {
     }
 
     const expectedUnavailableRu =
-      "Блокнот недоступен: нужен exphttp[crypto] на сервере.";
+      "Блокнот недоступен: восстановите или переустановите стандартные runtime-зависимости сервера.";
     const expectedUnavailableEn =
-      "Notepad unavailable: exphttp[crypto] required on server.";
+      "Notepad unavailable: repair or reinstall the server default runtime dependencies.";
 
     await switchLanguage("ru");
     await page.locator("#tab-opsec").click();
     await waitForTabState("opsec", { focused: true });
-    await waitForAdvancedUploadCapability(false);
+    await waitForAdvancedUploadCapability(true);
     await page.locator("#tab-notepad").click();
     await waitForUnavailableMessage(expectedUnavailableRu);
     const ruSnapshot = await getUnavailableSnapshot();
@@ -2710,7 +2729,7 @@ async (page) => {
 
   await page.goto(unavailableUrl, { waitUntil: "domcontentloaded" });
   await waitForSpaReady();
-  await waitForAdvancedUploadCapability(false);
+  await waitForAdvancedUploadCapability(true);
   const unavailablePath = await runUnavailablePath();
 
   return {

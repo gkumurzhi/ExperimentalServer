@@ -54,7 +54,7 @@ nav:
       - Overview: architecture.md
       - ADR-001 · Handler registry: ADR/ADR-001-handler-registry.md
       - ADR-002 · Advanced upload payloads: ADR/ADR-002-advanced-upload-xor-hmac.md
-      - ADR-003 · Optional cryptography: ADR/ADR-003-cryptography-optional.md
+      - ADR-003 · Runtime crypto and ACME: ADR/ADR-003-cryptography-optional.md
       - ADR-004 · Uploads via relative_to: ADR/ADR-004-uploads-relative-to.md
       - ADR-005 · Concurrency model: ADR/ADR-005-threadpool-over-asyncio.md
   - Security:

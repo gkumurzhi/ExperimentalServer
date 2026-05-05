@@ -4,8 +4,8 @@
 
 ## Context
 
-The project originally advertised "zero external dependencies for core functionality".
-That kept simple installs small, but it made production-grade TLS and Secure Notepad
+The project originally advertised a stdlib-only core runtime. That kept simple
+installs small, but it made production-grade TLS and Secure Notepad
 harder to operate:
 
 - Self-signed TLS certificates depended on an external `openssl` executable.

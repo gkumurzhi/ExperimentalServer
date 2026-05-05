@@ -19,7 +19,7 @@ Please fill out the sections below; delete any that do not apply.
 ## Checklist
 
 - [ ] Tests added/updated and `pytest` passes locally
-- [ ] Tooling installed with `PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"`
+- [ ] Tooling installed with `PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[dev,lint,test]"`
 - [ ] `pre-commit run --all-files` passes, or `ruff check` and `ruff format --check` pass
 - [ ] `mypy src` has no new errors
 - [ ] `CHANGELOG.md` updated under `[Unreleased]`

@@ -34,7 +34,6 @@ class _LiveServer:
         self,
         root_dir: Path,
         *,
-        advanced_upload: bool = False,
         disable_ecdh: bool = False,
     ) -> None:
         self.server = ExperimentalHTTPServer(
@@ -42,7 +41,6 @@ class _LiveServer:
             port=_find_free_port(),
             root_dir=str(root_dir),
             quiet=True,
-            advanced_upload=advanced_upload,
         )
         if disable_ecdh:
             self.server._ecdh_manager = None
@@ -161,7 +159,7 @@ def run_browser_smoke() -> dict[str, object]:
         opsec_upload_boundary_fixture.write_bytes(b"C" * 18000)
         opsec_upload_large_fixture.write_bytes(b"B" * 18001)
 
-        live = _LiveServer(normal_root, advanced_upload=True)
+        live = _LiveServer(normal_root)
         unavailable_live = _LiveServer(unavailable_root, disable_ecdh=True)
         try:
             live.start()

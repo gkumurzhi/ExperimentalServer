@@ -29,3 +29,9 @@
 - Files changed: `Dockerfile`, `examples/docker/docker-compose.yml`, `README.md`, `docs/architecture.md`, `implementation-plan/20260505-205639/stages/STAGE-005-container-acme-sslip-guidance.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-005-20260505-223234.md`
 - Verification: Docker Compose default/profile config, `.venv/bin/mkdocs build --strict`, docs sync, Dockerfile check, static ops review, diff hygiene, explorer review, docker-expert review, and reviewer review passed.
 - Report: `stage-reports/STAGE-005-20260505-223234.md`
+
+## 2026-05-05 23:06:14 MSK — STAGE-006
+- Status: CLOSED
+- Files changed: `.github/PULL_REQUEST_TEMPLATE.md`, `.github/workflows/ci.yml`, `CLAUDE.md`, `CONTRIBUTING.md`, `README.md`, `docs/ADR/ADR-003-cryptography-optional.md`, `docs/contributing.md`, `docs/index.md`, `mkdocs.yml`, `src/data/static/ui/core.js`, `src/handlers/notepad.py`, `src/request_pipeline.py`, `tests/test_check_stale_docs.py`, `tools/browser_smoke.py`, `tools/browser_smoke.playwright.js`, `tools/check_stale_docs.py`, `implementation-plan/20260505-205639/stages/STAGE-006-dependency-copy-drift.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-006-20260505-224442.md`
+- Verification: stale-reference checker, targeted stale-check tests, docs sync, MkDocs strict build, ruff, JS syntax check, full browser smoke, explorer review, correctness review, and docs/copy re-review passed.
+- Report: `stage-reports/STAGE-006-20260505-224442.md`

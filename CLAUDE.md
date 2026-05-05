@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ExperimentalHTTPServer is a feature-rich HTTP server written in pure Python for supported Python 3.10-3.13 with zero external dependencies for core functionality. It supports custom HTTP methods, TLS/HTTPS, Basic Authentication, uploads-only file access, advanced uploads, Secure Notepad, and HTML Smuggling.
+ExperimentalHTTPServer is a feature-rich Python HTTP server for supported Python 3.10-3.13 runtimes. It supports custom HTTP methods, TLS/HTTPS, ACME certificate issuance, Basic Authentication, uploads-only file access, advanced uploads, Secure Notepad, and HTML Smuggling.
 
 Canonical project documentation lives in:
 
@@ -88,7 +88,7 @@ BaseHandler (handlers/base.py - common utilities)
 2. **Authentication**: HTTP Basic Auth with SHA256+salt hashing (security/auth.py)
 3. **Authorization**: User file operations are constrained to `uploads/`, with hidden file protection
 4. **Advanced upload integrity**: Optional XOR obfuscation and HMAC verification for advanced upload payloads
-5. **Secure Notepad**: ECDH key exchange and AES-256-GCM note encryption when `cryptography` is installed
+5. **Secure Notepad**: ECDH key exchange and AES-256-GCM note encryption through the default runtime cryptography backend
 
 ## Adding New HTTP Methods
 

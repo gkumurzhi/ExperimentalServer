@@ -10,7 +10,7 @@ cycle short.
 git clone <repo-url>
 cd ExperimentalHTTPServer
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[crypto,dev,lint,test]"
+pip install -e ".[dev,lint,test]"
 pre-commit install           # recommended: runs ruff/mypy/yaml checks on commit
 ```
 
@@ -22,7 +22,7 @@ constraints file. This also pins the `pre-commit` executable installed by the
 `dev` extra:
 
 ```bash
-PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[dev,lint,test]"
 ```
 
 `constraints/ci.txt` is the only committed dependency authority for CI,
@@ -37,7 +37,7 @@ In Windows PowerShell, set the constraint as an environment variable:
 
 ```powershell
 $env:PIP_CONSTRAINT = "constraints/ci.txt"
-pip install -e ".[crypto,dev,lint,test]"
+pip install -e ".[dev,lint,test]"
 Remove-Item Env:PIP_CONSTRAINT
 ```
 

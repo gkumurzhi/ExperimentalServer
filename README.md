@@ -8,7 +8,7 @@
 ![Type checked](https://img.shields.io/badge/mypy-strict-blue.svg)
 ![Lint](https://img.shields.io/badge/ruff-passing-blue.svg)
 
-HTTP-сервер с поддержкой произвольных HTTP-методов, написанный на чистом Python без внешних зависимостей.
+HTTP-сервер на Python с поддержкой произвольных HTTP-методов, TLS, ACME и защищённых заметок.
 
 📄 **Документация:** [Threat Model](docs/threat-model.md) · [ADR](docs/ADR/) · [Security Policy](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [Examples](examples/) · [Docker](Dockerfile)
 
@@ -747,7 +747,7 @@ pip install -e ".[dev]"
 pip install -e ".[lint]"
 
 # Локально как в CI (pytest + hypothesis + benchmark + mypy + ruff)
-PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[dev,lint,test]"
 
 # Документация сайта
 pip install -e ".[docs]"
@@ -761,7 +761,7 @@ security workflow и Docker wheel build, используйте общий const
 Он также фиксирует `pre-commit`, который входит в `dev` extra:
 
 ```bash
-PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
+PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[dev,lint,test]"
 ```
 
 `constraints/ci.txt` — единственный коммитимый источник закрепленных версий
@@ -777,7 +777,7 @@ PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[crypto,dev,lint,test]"
 
 ```powershell
 $env:PIP_CONSTRAINT = "constraints/ci.txt"
-pip install -e ".[crypto,dev,lint,test]"
+pip install -e ".[dev,lint,test]"
 Remove-Item Env:PIP_CONSTRAINT
 ```
 

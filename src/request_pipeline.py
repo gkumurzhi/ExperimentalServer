@@ -208,7 +208,8 @@ class RequestPipeline:
         if self._server._ecdh_manager is None:
             response = self._server._build_error_response(
                 501,
-                "Secure Notepad requires the cryptography package; install exphttp[crypto]",
+                "Secure Notepad requires the default cryptography runtime dependency; "
+                "repair or reinstall exphttp",
             )
             self._send_direct_response(response, client_socket, build_args)
             return False

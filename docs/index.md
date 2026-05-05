@@ -1,6 +1,6 @@
 # ExperimentalHTTPServer
 
-An experimental HTTP server in pure Python for Python 3.10-3.13, built for
+An experimental HTTP server for Python 3.10-3.13, built for
 research, CTF practice, and controlled red/blue team exercises.
 
 !!! warning "Experimental by design"
