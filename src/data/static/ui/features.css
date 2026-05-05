@@ -1137,9 +1137,20 @@
     min-height: 44px;
 }
 
-#notepadTitleInput {
+.notepad-title-field {
     flex: 1 1 240px;
     min-width: min(240px, 100%);
+}
+
+.notepad-title-field #notepadTitleInput {
+    width: 100%;
+}
+
+.notepad-metadata-note {
+    margin: var(--space-1) 0 0;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
 }
 
 @media (min-width: 1101px) {

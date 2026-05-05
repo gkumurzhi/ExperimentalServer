@@ -47,3 +47,9 @@
 - Files changed: `.github/workflows/ci.yml`, `implementation-plan/20260505-205639/stages/STAGE-008-docker-tls-runtime-smoke.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/change-log.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-008-20260505-233412.md`
 - Verification: workflow Docker smoke syntax, whitespace diff check, full built-image Docker smoke with runtime imports plus HTTP and self-signed TLS PING, cleanup check, explorer review, reviewer review, and docker-expert re-review passed.
 - Report: `stage-reports/STAGE-008-20260505-233412.md`
+
+## 2026-05-06 00:24:27 MSK — STAGE-009
+- Status: CLOSED
+- Files changed: `src/data/static/ui/notepad.js`, `src/data/static/ui/core.js`, `src/data/index.html`, `src/data/static/ui/features.css`, `tools/browser_smoke.playwright.js`, `tests/test_ui_inspector_redaction.py`, `implementation-plan/20260505-205639/stages/STAGE-009-notepad-title-dirty-guard.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-009-20260505-234732.md`
+- Verification: JS syntax, diff whitespace, targeted Notepad/redaction tests, full pytest suite, focused Notepad browser probe, full browser smoke with dirty-transition and stale-load coverage, scoped ruff, explorer review, QA review, frontend review, and correctness review passed.
+- Report: `stage-reports/STAGE-009-20260505-234732.md`

@@ -416,8 +416,11 @@
                 <div id="notepad-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-notepad" hidden>
                     <div class="tool-card note-shell">
                         <div class="notepad-toolbar">
-                            <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Заголовок</label>
-                            <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Заголовок" maxlength="200" disabled>
+                            <div class="notepad-title-field">
+                                <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Заголовок (видим серверу)</label>
+                                <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Заголовок (видим серверу)" maxlength="200" aria-describedby="notepadTitleMetadataHint" disabled>
+                                <p class="notepad-metadata-note" id="notepadTitleMetadataHint" data-i18n="notepadTitleMetadataHint">Текст заметки шифруется. Заголовок видим серверу как метаданные.</p>
+                            </div>
                             <button class="btn-note btn--sm" id="notepadNewBtn" data-i18n="notepadNewBtn">Новая</button>
                             <button
                                 class="btn-danger btn--sm btn-icon"

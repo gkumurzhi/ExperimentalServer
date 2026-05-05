@@ -451,6 +451,7 @@ async (page) => {
     noteListText,
     charCountText,
     themeLabel,
+    notepadTitleMetadataHintText,
   }) {
     await waitForText(page.locator("#tab-upload"), uploadTabText);
     await waitForText(page.locator("#tab-files"), filesTabText);
@@ -461,6 +462,9 @@ async (page) => {
     });
     await waitForText(page.locator("#notepadNoteList"), noteListText);
     await waitForText(page.locator("#notepadCharCount"), charCountText);
+    if (notepadTitleMetadataHintText) {
+      await waitForText(page.locator("#notepadTitleMetadataHint"), notepadTitleMetadataHintText);
+    }
     await waitForPageCondition(
       `theme button translated (${themeLabel})`,
       ([expectedLabel]) => {
@@ -2181,7 +2185,7 @@ async (page) => {
   }
 
   async function createAutosavedNote(title, text) {
-    await page.getByRole("button", { name: /Новая|New/ }).click();
+    await page.locator("#notepadNewBtn").click();
     await page.locator("#notepadTitleInput").fill(title);
     await page.locator("#notepadTextarea").fill(text);
     try {
@@ -2196,6 +2200,97 @@ async (page) => {
   async function clickNoteByTitle(title) {
     await page.locator(".note-item", { hasText: title }).click();
     await waitForValue("#notepadTitleInput", title);
+  }
+
+  async function assertDirtyTransitionFlushes() {
+    const sourceTitle = "Browser Smoke Dirty Source";
+    const targetTitle = "Browser Smoke Dirty Target";
+    const sourceOriginal = "dirty transition original body";
+    const targetText = "dirty transition target body";
+    const sourceEditedForSwitch = "dirty edit saved before note switch";
+    const sourceEditedForNew = "dirty edit saved before new note";
+
+    await createAutosavedNote(sourceTitle, sourceOriginal);
+    await createAutosavedNote(targetTitle, targetText);
+    await clickNoteByTitle(sourceTitle);
+
+    await page.locator("#notepadTextarea").fill(sourceEditedForSwitch);
+    await page.locator(".note-item", { hasText: targetTitle }).click();
+    await waitForValue("#notepadTitleInput", targetTitle, 15000);
+    await clickNoteByTitle(sourceTitle);
+    await waitForValue("#notepadTextarea", sourceEditedForSwitch, 15000);
+
+    await page.locator("#notepadTextarea").fill(sourceEditedForNew);
+    await page.locator("#notepadNewBtn").click();
+    await waitForValue("#notepadTitleInput", "", 15000);
+    await clickNoteByTitle(sourceTitle);
+    await waitForValue("#notepadTextarea", sourceEditedForNew, 15000);
+
+    return {
+      sourceTitle,
+      targetTitle,
+      sourceEditedForSwitch,
+      sourceEditedForNew,
+    };
+  }
+
+  async function assertStaleLoadDoesNotOverwriteDirtyDraft() {
+    const targetTitle = "Browser Smoke Stale Load Target";
+    const targetText = "stale load target body";
+    const draftTitle = "Browser Smoke Race Dirty Draft";
+    const draftText = "draft typed while note load is pending";
+
+    await createAutosavedNote(targetTitle, targetText);
+    const encodedTargetId = await page.locator(".note-item", { hasText: targetTitle }).getAttribute("data-note-id");
+    if (!encodedTargetId) {
+      throw new Error(`Could not resolve note id for ${targetTitle}`);
+    }
+    await page.locator("#notepadNewBtn").click();
+    await waitForValue("#notepadTitleInput", "", 15000);
+
+    await page.evaluate(([noteId]) => {
+      const originalSendCustomRequest = window.sendCustomRequest;
+      let releaseLoad = null;
+      const delay = new Promise((resolve) => {
+        releaseLoad = resolve;
+      });
+
+      window.__exphttpReleaseStaleNoteLoad = () => {
+        window.sendCustomRequest = originalSendCustomRequest;
+        releaseLoad();
+      };
+
+      window.sendCustomRequest = async (...args) => {
+        const [method, url] = args;
+        if (method === "NOTE" && String(url).includes(`/notes/${noteId}`)) {
+          await delay;
+        }
+        return originalSendCustomRequest.apply(window, args);
+      };
+    }, [decodeURIComponent(encodedTargetId)]);
+
+    await page.locator(".note-item", { hasText: targetTitle }).click();
+    await waitForText(page.locator("#notepadSaveIndicator"), /Загрузка|Loading/, 15000);
+    await page.locator("#notepadNewBtn").click();
+    await waitForValue("#notepadTitleInput", "", 15000);
+    await page.locator("#notepadTitleInput").fill(draftTitle);
+    await page.locator("#notepadTextarea").fill(draftText);
+    await waitForPageCondition(
+      "draft is dirty while load is pending",
+      () => document.body.classList.contains("notepad-dirty"),
+      null,
+      10000
+    );
+
+    await page.evaluate(() => window.__exphttpReleaseStaleNoteLoad());
+    await page.waitForTimeout(500);
+    await waitForValue("#notepadTitleInput", draftTitle, 15000);
+    await waitForValue("#notepadTextarea", draftText, 15000);
+
+    return {
+      targetTitle,
+      draftTitle,
+    };
   }
 
   async function clearNotesViaUiAndAssert(uploadPathToPreserve) {
@@ -2504,6 +2599,7 @@ async (page) => {
       noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
+      notepadTitleMetadataHintText: "Заголовок видим серверу как метаданные.",
     });
     await switchLanguage("en");
     await assertLocaleSnapshot({
@@ -2513,6 +2609,7 @@ async (page) => {
       noteListText: "No notes",
       charCountText: "0 chars",
       themeLabel: "Toggle theme",
+      notepadTitleMetadataHintText: "The title is server-visible metadata.",
     });
     await switchLanguage("ru");
     await assertLocaleSnapshot({
@@ -2522,6 +2619,7 @@ async (page) => {
       noteListText: "Нет заметок",
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
+      notepadTitleMetadataHintText: "Заголовок видим серверу как метаданные.",
     });
 
     const noteTitle = "Browser Smoke Note";
@@ -2534,7 +2632,7 @@ async (page) => {
     await waitForText(page.locator("#notepadSaveIndicator"), "Сохранено", 15000);
     await waitForText(page.locator("#notepadCharCount"), `${noteText.length} симв.`, 15000);
 
-    await page.getByRole("button", { name: /Новая|New/ }).click();
+    await page.locator("#notepadNewBtn").click();
     await loadNoteByKeyboard(noteTitle);
 
     const loadedTitle = await page.locator("#notepadTitleInput").inputValue();
@@ -2571,6 +2669,9 @@ async (page) => {
     );
     await waitForText(page.locator("#notepadNoteList"), /Нет заметок|No notes/, 15000);
 
+    const dirtyTransition = await assertDirtyTransitionFlushes();
+    const staleLoadGuard = await assertStaleLoadDoesNotOverwriteDirtyDraft();
+
     await page.locator('input[name="notepadTransport"][value="ws"]').check();
     await waitForConnectionStatus("connected", "ws", 15000);
 
@@ -2589,7 +2690,7 @@ async (page) => {
     }
 
     await page.locator('input[name="notepadTransport"][value="http"]').check();
-    await page.getByRole("button", { name: /Новая|New/ }).click();
+    await page.locator("#notepadNewBtn").click();
     await clickNoteByTitle(wsNoteTitle);
 
     const wsLoadedTitle = await page.locator("#notepadTitleInput").inputValue();
@@ -2629,6 +2730,8 @@ async (page) => {
       notesClearPreservedUpload,
       selectedUploadDeleted: requestPanelFetchPath,
       selectedNoteDeleted: selectiveDeleteTitle,
+      dirtyTransition,
+      staleLoadGuard,
       mobileLayout,
     };
   }

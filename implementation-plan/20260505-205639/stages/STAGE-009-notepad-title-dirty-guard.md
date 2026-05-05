@@ -1,7 +1,7 @@
 # STAGE-009 - Guard Notepad plaintext title and dirty transitions
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -52,11 +52,11 @@ Make the UI honest about plaintext note titles and prevent recent dirty edits fr
 5. Add browser smoke or JS/unit-style coverage for dirty edit followed immediately by note switch/new.
 
 ## Acceptance criteria
-- [ ] Dirty edits are not silently lost when switching notes or creating a new note before debounce save completes.
-- [ ] Title privacy copy no longer implies titles are encrypted.
-- [ ] Existing Notepad HTTP and WS happy paths still pass.
-- [ ] Tests or smoke cover at least one dirty-transition regression.
-- [ ] Redaction/inspector expectations remain explicit about title visibility.
+- [x] Dirty edits are not silently lost when switching notes or creating a new note before debounce save completes.
+- [x] Title privacy copy no longer implies titles are encrypted.
+- [x] Existing Notepad HTTP and WS happy paths still pass.
+- [x] Tests or smoke cover at least one dirty-transition regression.
+- [x] Redaction/inspector expectations remain explicit about title visibility.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -76,4 +76,9 @@ Make the UI honest about plaintext note titles and prevent recent dirty edits fr
 - Rollback: Revert UI guard and smoke changes, retaining only copy updates if title privacy wording is still needed.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed at 2026-05-06 00:24:27 MSK.
+
+- Added Notepad dirty-state versioning, editor instance tracking, forced-save transition guards, stale load invalidation, and WebSocket save snapshot queueing so note switch/new flows do not silently lose recent edits or let stale async completions clean/overwrite the active editor.
+- Updated UI copy, title placeholder, and visible hint to state that note text is encrypted while note titles are server-visible metadata.
+- Extended browser smoke coverage for dirty switch/new and delayed stale-load protection, and kept inspector regression explicit that titles remain visible while sensitive Notepad fields are redacted.
+- Verification passed: JS syntax, diff whitespace, targeted Notepad/redaction tests, full pytest suite, focused Notepad Playwright probe, full browser smoke, scoped ruff, and verifier subagents.

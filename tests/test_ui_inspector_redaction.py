@@ -225,7 +225,7 @@ def test_inspector_redacts_advanced_upload_raw_and_copy_output(
     assert "preview.txt" in combined
 
 
-def test_inspector_redacts_notepad_session_key_and_data_fields(
+def test_inspector_redacts_notepad_session_key_and_data_fields_but_keeps_title_visible(
     inspector_probe: dict[str, str],
 ) -> None:
     notepad_raw = inspector_probe["notepadRaw"]

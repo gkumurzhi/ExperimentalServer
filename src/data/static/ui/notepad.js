@@ -18,6 +18,12 @@ let notepadIsDirty = false;
 let notepadStatusState = 'connecting';
 let notepadListCache = [];
 let notepadListMode = 'notes';
+let notepadEditorInstanceId = 0;
+let notepadDirtyVersion = 0;
+let notepadActiveSavePromise = null;
+let notepadPendingWsSaveSnapshots = [];
+let notepadLoadRequestSeq = 0;
+let notepadActiveLoadRequestId = null;
 
 const NOTEPAD_HTTP_DELAY = 500;
 const NOTEPAD_WS_DELAY = 300;
@@ -108,7 +114,9 @@ function notepadTraceHttpError(request, path, error) {
 }
 
 if (notepadNewBtnEl) {
-    notepadNewBtnEl.addEventListener('click', notepadNewNote);
+    notepadNewBtnEl.addEventListener('click', () => {
+        void notepadNewNote();
+    });
 }
 
 if (notepadDeleteBtnEl) {
@@ -134,7 +142,7 @@ if (notepadNoteListEl) {
 
         const encodedNoteId = noteItem.dataset.noteId;
         if (encodedNoteId) {
-            notepadLoadNote(decodeURIComponent(encodedNoteId));
+            void notepadLoadNote(decodeURIComponent(encodedNoteId), noteItem);
         }
     });
 
@@ -207,6 +215,29 @@ function notepadFormatListDate(updatedAt) {
     return new Intl.DateTimeFormat(locale, formatOptions).format(date);
 }
 
+function notepadMarkDirty() {
+    notepadDirtyVersion++;
+    notepadIsDirty = true;
+    document.body.classList.add('notepad-dirty');
+}
+
+function notepadMarkClean() {
+    notepadIsDirty = false;
+    document.body.classList.remove('notepad-dirty');
+}
+
+function notepadReplaceEditorState() {
+    notepadEditorInstanceId++;
+    notepadActiveLoadRequestId = null;
+    notepadMarkClean();
+    clearTimeout(notepadAutoSaveTimer);
+    notepadAutoSaveTimer = null;
+}
+
+function notepadIsActiveLoad(loadRequestId) {
+    return loadRequestId === null || loadRequestId === notepadActiveLoadRequestId;
+}
+
 function notepadGetStatusText(state) {
     const stateKeyMap = {
         'connecting': 'notepadConnecting',
@@ -243,9 +274,7 @@ function notepadMarkUnavailable(state) {
     notepadTitleInput.value = '';
     notepadTextarea.value = '';
     notepadCharCount.textContent = notepadFormatCharCount(0);
-    notepadIsDirty = false;
-    document.body.classList.remove('notepad-dirty');
-    clearTimeout(notepadAutoSaveTimer);
+    notepadReplaceEditorState();
     notepadDisconnectWs(true);
     notepadSetEditingEnabled(false);
     notepadUpdateSelectedDeleteButton();
@@ -278,15 +307,13 @@ document.querySelectorAll('input[name="notepadTransport"]').forEach(el => {
 // Auto-save on textarea input
 notepadTextarea.addEventListener('input', () => {
     notepadCharCount.textContent = notepadFormatCharCount(notepadTextarea.value.length);
-    notepadIsDirty = true;
-    document.body.classList.add('notepad-dirty');
+    notepadMarkDirty();
     notepadScheduleAutoSave();
 });
 
 // Auto-save on title input
 notepadTitleInput.addEventListener('input', () => {
-    notepadIsDirty = true;
-    document.body.classList.add('notepad-dirty');
+    notepadMarkDirty();
     notepadScheduleAutoSave();
 });
 
@@ -295,6 +322,44 @@ function notepadScheduleAutoSave() {
     notepadSetStatus('unsaved');
     clearTimeout(notepadAutoSaveTimer);
     notepadAutoSaveTimer = setTimeout(notepadSave, notepadGetDelay());
+}
+
+async function notepadConfirmDirtyTransition(options = {}) {
+    if (!notepadIsDirty) return true;
+
+    clearTimeout(notepadAutoSaveTimer);
+    notepadAutoSaveTimer = null;
+
+    if (notepadActiveSavePromise) {
+        const activeSaved = await notepadActiveSavePromise;
+        if (activeSaved && !notepadIsDirty) {
+            return true;
+        }
+    }
+
+    const saved = await notepadSave({ forceHttp: true, refreshList: false });
+    if (saved && !notepadIsDirty) {
+        return true;
+    }
+
+    const confirmed = await showConfirmDialog({
+        title: t('notepadDiscardTitle'),
+        message: t('notepadDiscardConfirm'),
+        details: options.details || '',
+        confirmLabel: t('notepadDiscardBtn'),
+        triggerEl: options.triggerEl || null,
+        initialFocus: 'cancel',
+    });
+
+    if (confirmed) {
+        notepadReplaceEditorState();
+        clearTimeout(notepadAutoSaveTimer);
+        notepadAutoSaveTimer = null;
+        return true;
+    }
+
+    notepadSetStatus('unsaved');
+    return false;
 }
 
 function notepadSetStatus(state) {
@@ -624,6 +689,41 @@ function notepadSendWs(msg) {
     }
 }
 
+function notepadCaptureSaveSnapshot() {
+    const titleRaw = notepadTitleInput.value.trim();
+    return {
+        editorInstanceId: notepadEditorInstanceId,
+        dirtyVersion: notepadDirtyVersion,
+        noteId: notepadCurrentId || '',
+        titleRaw,
+        title: titleRaw || t('notepadUntitled'),
+        text: notepadTextarea.value,
+        sessionId: notepadSessionId || '',
+    };
+}
+
+function notepadApplySaveSuccess(snapshot, result, options = {}) {
+    const sameEditor = snapshot && snapshot.editorInstanceId === notepadEditorInstanceId;
+
+    if (sameEditor) {
+        if (!snapshot.noteId && !notepadCurrentId && result.id) {
+            notepadCurrentId = result.id;
+        }
+        notepadDeleteBtnEl.disabled = false;
+
+        if (snapshot.dirtyVersion === notepadDirtyVersion) {
+            notepadMarkClean();
+            notepadSetStatus('saved');
+        } else if (notepadIsDirty) {
+            notepadSetStatus('unsaved');
+        }
+    }
+
+    if (options.refreshList !== false) {
+        notepadRefreshList();
+    }
+}
+
 function notepadHandleWsMessage(msg, rawText = '') {
     setExchangeInspector('notepad', {
         phase: msg.type === 'error' ? 'error' : 'complete',
@@ -644,12 +744,10 @@ function notepadHandleWsMessage(msg, rawText = '') {
 
     if (msg.type === 'saved') {
         if (msg.success) {
-            if (!notepadCurrentId) notepadCurrentId = msg.id;
-            notepadDeleteBtnEl.disabled = false;
-            notepadSetStatus('saved');
-            notepadIsDirty = false;
-            document.body.classList.remove('notepad-dirty');
-            notepadRefreshList();
+            const snapshot = notepadPendingWsSaveSnapshots.shift() || null;
+            if (snapshot) {
+                notepadApplySaveSuccess(snapshot, msg);
+            }
         } else {
             notepadSetStatus('error');
         }
@@ -658,7 +756,7 @@ function notepadHandleWsMessage(msg, rawText = '') {
     } else if (msg.type === 'list') {
         notepadRenderList(msg.notes || []);
     } else if (msg.type === 'deleted') {
-        notepadNewNote();
+        notepadApplyNewNoteState();
     } else if (msg.type === 'cleared') {
         notepadApplyClearResult(msg);
     } else if (msg.type === 'error') {
@@ -669,38 +767,54 @@ function notepadHandleWsMessage(msg, rawText = '') {
 
 // ── CRUD operations ─────────────────────────────────────
 
-async function notepadSave() {
+async function notepadSave(options = {}) {
+    const savePromise = notepadRunSave(options);
+    notepadActiveSavePromise = savePromise;
+    try {
+        return await savePromise;
+    } finally {
+        if (notepadActiveSavePromise === savePromise) {
+            notepadActiveSavePromise = null;
+        }
+    }
+}
+
+async function notepadRunSave(options = {}) {
     if (!notepadAvailable || !notepadDerivedKey) {
         notepadSetStatus('sessionFailed');
-        return;
+        return false;
     }
-    const text = notepadTextarea.value;
-    const title = notepadTitleInput.value.trim() || t('notepadUntitled');
+    clearTimeout(notepadAutoSaveTimer);
+    notepadAutoSaveTimer = null;
 
-    if (!text && !notepadCurrentId) return;
+    const snapshot = notepadCaptureSaveSnapshot();
+
+    if (!snapshot.text && !snapshot.titleRaw && !snapshot.noteId) return false;
 
     notepadSetStatus('saving');
 
     try {
-        const encrypted = await notepadEncrypt(text);
+        const encrypted = await notepadEncrypt(snapshot.text);
         const dataB64 = uint8ToBase64(encrypted);
 
-        if (notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
+        if (!options.forceHttp && notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
             // WebSocket save
+            notepadPendingWsSaveSnapshots.push(snapshot);
             notepadSendWs({
                 type: 'save',
-                sessionId: notepadSessionId || '',
-                noteId: notepadCurrentId || '',
-                title: title,
+                sessionId: snapshot.sessionId,
+                noteId: snapshot.noteId,
+                title: snapshot.title,
                 data: dataB64,
             });
+            return true;
         } else {
             // HTTP save
-            const payload = { title: title, data: dataB64 };
-            if (notepadCurrentId) payload.id = notepadCurrentId;
+            const payload = { title: snapshot.title, data: dataB64 };
+            if (snapshot.noteId) payload.id = snapshot.noteId;
 
             const headers = { 'Content-Type': 'application/json' };
-            if (notepadSessionId) headers['X-Session-Id'] = notepadSessionId;
+            if (snapshot.sessionId) headers['X-Session-Id'] = snapshot.sessionId;
 
             const body = JSON.stringify(payload);
             const trace = notepadTraceHttpStart('/notes', body, headers);
@@ -710,19 +824,17 @@ async function notepadSave() {
             const result = JSON.parse(respText);
 
             if (result.success) {
-                if (!notepadCurrentId) notepadCurrentId = result.id;
-                notepadDeleteBtnEl.disabled = false;
-                notepadSetStatus('saved');
-                notepadIsDirty = false;
-                document.body.classList.remove('notepad-dirty');
-                notepadRefreshList();
+                notepadApplySaveSuccess(snapshot, result, options);
+                return true;
             } else {
                 notepadSetStatus('error');
+                return false;
             }
         }
     } catch (e) {
         console.error('[Notepad] Save error:', e);
         notepadSetStatus('error');
+        return false;
     }
 }
 
@@ -784,12 +896,27 @@ function notepadRenderList(notes) {
     }).join('');
 }
 
-async function notepadLoadNote(id) {
+async function notepadLoadNote(id, triggerEl = null) {
     if (!notepadAvailable || !notepadDerivedKey) {
         notepadSetStatus('sessionFailed');
         return;
     }
+    if (id === notepadCurrentId) {
+        return;
+    }
+
+    if (notepadIsDirty) {
+        const targetNote = notepadListCache.find(note => note.id === id);
+        const canReplaceEditor = await notepadConfirmDirtyTransition({
+            triggerEl,
+            details: targetNote ? (targetNote.title || t('notepadUntitled')) : id,
+        });
+        if (!canReplaceEditor) return;
+    }
+
     notepadSetStatus('loading');
+    const loadRequestId = ++notepadLoadRequestSeq;
+    notepadActiveLoadRequestId = loadRequestId;
 
     try {
         const path = '/notes/' + id;
@@ -799,34 +926,48 @@ async function notepadLoadNote(id) {
         notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
         const result = JSON.parse(text);
 
+        if (!notepadIsActiveLoad(loadRequestId)) {
+            return;
+        }
+
         if (response.status === 404) {
             notepadSetStatus('loadError');
             return;
         }
 
-        await notepadHandleLoadResult(result);
+        await notepadHandleLoadResult(result, { loadRequestId });
     } catch (e) {
+        if (!notepadIsActiveLoad(loadRequestId)) {
+            return;
+        }
         console.error('[Notepad] Load error:', e);
         notepadSetStatus('loadError');
     }
 }
 
-async function notepadHandleLoadResult(result) {
+async function notepadHandleLoadResult(result, options = {}) {
     try {
         if (!notepadAvailable || !notepadDerivedKey) {
             notepadSetStatus('sessionFailed');
             return;
         }
+        const loadRequestId = options.loadRequestId || null;
+        if (!notepadIsActiveLoad(loadRequestId)) {
+            return;
+        }
+
         const encryptedBytes = base64ToUint8(result.data);
         const plaintext = await notepadDecrypt(encryptedBytes);
+        if (!notepadIsActiveLoad(loadRequestId) || notepadIsDirty) {
+            return;
+        }
 
+        notepadReplaceEditorState();
         notepadCurrentId = result.id;
         notepadTitleInput.value = result.title || '';
         notepadTextarea.value = plaintext;
         notepadCharCount.textContent = notepadFormatCharCount(plaintext.length);
         notepadDeleteBtnEl.disabled = false;
-        notepadIsDirty = false;
-        document.body.classList.remove('notepad-dirty');
         notepadSetStatus('loaded');
         notepadRefreshList();
     } catch (e) {
@@ -839,15 +980,13 @@ async function notepadHandleLoadResult(result) {
     }
 }
 
-function notepadNewNote() {
+function notepadApplyNewNoteState() {
+    notepadReplaceEditorState();
     notepadCurrentId = null;
     notepadTitleInput.value = '';
     notepadTextarea.value = '';
     notepadCharCount.textContent = notepadFormatCharCount(0);
     notepadDeleteBtnEl.disabled = true;
-    notepadIsDirty = false;
-    document.body.classList.remove('notepad-dirty');
-    clearTimeout(notepadAutoSaveTimer);
     if (!notepadInitDone) {
         notepadSetStatus('connecting');
     } else if (!notepadAvailable) {
@@ -857,6 +996,19 @@ function notepadNewNote() {
         notepadTitleInput.focus();
     }
     notepadRefreshList();
+}
+
+async function notepadNewNote(options = {}) {
+    if (!options.skipDirtyGuard && notepadIsDirty) {
+        const canReplaceEditor = await notepadConfirmDirtyTransition({
+            triggerEl: options.triggerEl || notepadNewBtnEl,
+            details: notepadTitleInput.value.trim() || t('notepadUntitled'),
+        });
+        if (!canReplaceEditor) return false;
+    }
+
+    notepadApplyNewNoteState();
+    return true;
 }
 
 async function notepadDeleteNote() {
@@ -889,7 +1041,7 @@ async function notepadDeleteNote() {
             }
 
             if (response.ok && result && result.success) {
-                notepadNewNote();
+                notepadApplyNewNoteState();
                 return;
             }
 
@@ -915,14 +1067,12 @@ async function notepadDeleteNote() {
 }
 
 function notepadResetEditorAfterDelete() {
+    notepadReplaceEditorState();
     notepadCurrentId = null;
     notepadTitleInput.value = '';
     notepadTextarea.value = '';
     notepadCharCount.textContent = notepadFormatCharCount(0);
     notepadDeleteBtnEl.disabled = true;
-    notepadIsDirty = false;
-    document.body.classList.remove('notepad-dirty');
-    clearTimeout(notepadAutoSaveTimer);
 }
 
 async function notepadDeleteSelectedNotes() {
