@@ -8,7 +8,16 @@ from unittest.mock import Mock
 
 import pytest
 
+from src.security.tls import generate_self_signed_cert
 from src.security.tls_manager import TLSManager
+
+
+def _write_cert_pair(cert_path: Path, key_path: Path, common_name: str = "example.com") -> None:
+    generate_self_signed_cert(
+        cert_path=cert_path,
+        key_path=key_path,
+        common_name=common_name,
+    )
 
 
 class TestTLSManagerDisabled:
@@ -114,9 +123,7 @@ class TestTLSManagerControlFlow:
         live_dir = config_dir / "live" / "example.com"
         cert_path = live_dir / "fullchain.pem"
         key_path = live_dir / "privkey.pem"
-        live_dir.mkdir(parents=True)
-        cert_path.write_text("cert", encoding="utf-8")
-        key_path.write_text("key", encoding="utf-8")
+        _write_cert_pair(cert_path, key_path)
 
         obtain_mock = Mock()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -143,6 +150,168 @@ class TestTLSManagerControlFlow:
         assert m.describe() == "Let's Encrypt (example.com)"
         obtain_mock.assert_not_called()
 
+    def test_try_letsencrypt_renews_when_fresh_cache_key_is_missing(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        capsys,
+    ) -> None:
+        config_dir = tmp_path / ".exphttp" / "acme"
+        live_dir = config_dir / "live" / "example.com"
+        cert_path = live_dir / "fullchain.pem"
+        key_path = live_dir / "privkey.pem"
+        _write_cert_pair(cert_path, key_path)
+        key_path.unlink()
+
+        obtain_calls: list[dict[str, object]] = []
+
+        def fake_obtain(**kwargs):
+            obtain_calls.append(kwargs)
+            _write_cert_pair(cert_path, key_path)
+            return cert_path, key_path
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.security.tls_manager.check_cert_needs_renewal",
+            lambda _path: False,
+        )
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        m._try_letsencrypt()
+
+        assert obtain_calls
+        assert m.cert_file == str(cert_path)
+        assert m.key_file == str(key_path)
+        output = capsys.readouterr().out
+        assert "private key file is missing" in output
+        assert "BEGIN RSA PRIVATE KEY" not in output
+
+    def test_try_letsencrypt_fails_early_for_unparsable_cached_key(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        config_dir = tmp_path / ".exphttp" / "acme"
+        live_dir = config_dir / "live" / "example.com"
+        cert_path = live_dir / "fullchain.pem"
+        key_path = live_dir / "privkey.pem"
+        _write_cert_pair(cert_path, key_path)
+        key_path.write_text("not a private key", encoding="utf-8")
+
+        obtain_mock = Mock()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.security.tls_manager.check_cert_needs_renewal",
+            lambda _path: False,
+        )
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", obtain_mock)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            m._try_letsencrypt()
+
+        message = str(exc_info.value)
+        assert "private key file is not a valid unencrypted PEM private key" in message
+        assert "not a private key" not in message
+        obtain_mock.assert_not_called()
+
+    def test_try_letsencrypt_fails_early_when_cert_missing_and_cached_key_is_unparsable(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        live_dir = tmp_path / ".exphttp" / "acme" / "live" / "example.com"
+        key_path = live_dir / "privkey.pem"
+        live_dir.mkdir(parents=True)
+        key_path.write_text("not a private key", encoding="utf-8")
+
+        obtain_mock = Mock()
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", obtain_mock)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            m._try_letsencrypt()
+
+        message = str(exc_info.value)
+        assert "private key file is not a valid unencrypted PEM private key" in message
+        assert "not a private key" not in message
+        assert "MalformedFraming" not in message
+        obtain_mock.assert_not_called()
+
+    def test_try_letsencrypt_renews_mismatched_cached_pair(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        config_dir = tmp_path / ".exphttp" / "acme"
+        live_dir = config_dir / "live" / "example.com"
+        cert_path = live_dir / "fullchain.pem"
+        key_path = live_dir / "privkey.pem"
+        _write_cert_pair(cert_path, key_path)
+        other_cert = tmp_path / "other-fullchain.pem"
+        other_key = tmp_path / "other-privkey.pem"
+        _write_cert_pair(other_cert, other_key, common_name="other.example.com")
+        key_path.write_bytes(other_key.read_bytes())
+
+        obtain_calls: list[dict[str, object]] = []
+
+        def fake_obtain(**kwargs):
+            obtain_calls.append(kwargs)
+            _write_cert_pair(cert_path, key_path)
+            return cert_path, key_path
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.security.tls_manager.check_cert_needs_renewal",
+            lambda _path: False,
+        )
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        m._try_letsencrypt()
+
+        assert obtain_calls
+        assert m.cert_file == str(cert_path)
+        assert m.key_file == str(key_path)
+
     def test_try_letsencrypt_obtains_when_certificate_needs_renewal(
         self,
         tmp_path: Path,
@@ -153,9 +322,7 @@ class TestTLSManagerControlFlow:
         obtained_key = config_dir / "live" / "example.com" / "privkey.pem"
 
         def fake_obtain(**_kwargs):
-            obtained_cert.parent.mkdir(parents=True, exist_ok=True)
-            obtained_cert.write_text("cert", encoding="utf-8")
-            obtained_key.write_text("key", encoding="utf-8")
+            _write_cert_pair(obtained_cert, obtained_key)
             return obtained_cert, obtained_key
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -178,6 +345,45 @@ class TestTLSManagerControlFlow:
         assert m.key_file == str(obtained_key)
         assert m.describe() == "Let's Encrypt (example.com)"
 
+    def test_try_letsencrypt_rejects_invalid_obtained_pair(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        config_dir = tmp_path / ".exphttp" / "acme"
+        obtained_cert = config_dir / "live" / "example.com" / "fullchain.pem"
+        obtained_key = config_dir / "live" / "example.com" / "privkey.pem"
+
+        def fake_obtain(**_kwargs):
+            _write_cert_pair(obtained_cert, obtained_key)
+            other_cert = tmp_path / "obtained-other-fullchain.pem"
+            other_key = tmp_path / "obtained-other-privkey.pem"
+            _write_cert_pair(other_cert, other_key, common_name="other.example.com")
+            obtained_key.write_bytes(other_key.read_bytes())
+            return obtained_cert, obtained_key
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr("src.security.tls_manager.check_cert_needs_renewal", lambda _path: True)
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            m._try_letsencrypt()
+
+        message = str(exc_info.value)
+        assert "Obtained Let's Encrypt certificate cache for example.com is unusable" in message
+        assert "certificate and private key do not match" in message
+        assert "BEGIN RSA PRIVATE KEY" not in message
+
     def test_try_letsencrypt_reuses_fresh_legacy_cert_when_new_store_is_empty(
         self,
         tmp_path: Path,
@@ -186,9 +392,7 @@ class TestTLSManagerControlFlow:
         legacy_dir = tmp_path / ".exphttp" / "letsencrypt" / "live" / "example.com"
         legacy_cert = legacy_dir / "fullchain.pem"
         legacy_key = legacy_dir / "privkey.pem"
-        legacy_dir.mkdir(parents=True)
-        legacy_cert.write_text("legacy cert", encoding="utf-8")
-        legacy_key.write_text("legacy key", encoding="utf-8")
+        _write_cert_pair(legacy_cert, legacy_key)
 
         obtain_mock = Mock()
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -213,13 +417,61 @@ class TestTLSManagerControlFlow:
         assert m.key_file == str(legacy_key)
         obtain_mock.assert_not_called()
 
+    def test_try_letsencrypt_renews_mismatched_legacy_cache(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+    ) -> None:
+        config_dir = tmp_path / ".exphttp" / "acme"
+        obtained_cert = config_dir / "live" / "example.com" / "fullchain.pem"
+        obtained_key = config_dir / "live" / "example.com" / "privkey.pem"
+        legacy_dir = tmp_path / ".exphttp" / "letsencrypt" / "live" / "example.com"
+        legacy_cert = legacy_dir / "fullchain.pem"
+        legacy_key = legacy_dir / "privkey.pem"
+        _write_cert_pair(legacy_cert, legacy_key)
+        other_cert = tmp_path / "legacy-other-fullchain.pem"
+        other_key = tmp_path / "legacy-other-privkey.pem"
+        _write_cert_pair(other_cert, other_key, common_name="other.example.com")
+        legacy_key.write_bytes(other_key.read_bytes())
+
+        obtain_calls: list[dict[str, object]] = []
+
+        def fake_obtain(**kwargs):
+            obtain_calls.append(kwargs)
+            _write_cert_pair(obtained_cert, obtained_key)
+            return obtained_cert, obtained_key
+
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        monkeypatch.setattr(
+            "src.security.tls_manager.check_cert_needs_renewal", lambda _path: False
+        )
+        monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fake_obtain)
+
+        m = TLSManager(
+            enabled=True,
+            cert_file=None,
+            key_file=None,
+            letsencrypt=True,
+            domain="example.com",
+            email="ops@example.com",
+            host="example.com",
+        )
+
+        m._try_letsencrypt()
+
+        assert obtain_calls
+        assert m.cert_file == str(obtained_cert)
+        assert m.key_file == str(obtained_key)
+
     def test_setup_propagates_acme_failure(
         self,
+        tmp_path: Path,
         monkeypatch,
     ) -> None:
         def fail_obtain(**_kwargs):
             raise RuntimeError("acme failed")
 
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr("src.security.tls_manager.obtain_letsencrypt_cert", fail_obtain)
 
         m = TLSManager(
@@ -243,9 +495,7 @@ class TestTLSManagerControlFlow:
 
         def fake_obtain(**kwargs):
             assert kwargs["domain"] == "8-8-8-8.sslip.io"
-            obtained_cert.parent.mkdir(parents=True, exist_ok=True)
-            obtained_cert.write_text("cert", encoding="utf-8")
-            obtained_key.write_text("key", encoding="utf-8")
+            _write_cert_pair(obtained_cert, obtained_key, common_name="8-8-8-8.sslip.io")
             return obtained_cert, obtained_key
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

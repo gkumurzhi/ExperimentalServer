@@ -19,11 +19,13 @@ import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from acme import challenges, client, crypto_util, errors, messages, standalone
 from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -38,6 +40,15 @@ DEFAULT_RENEWAL_DAYS = 30
 DEFAULT_PUBLIC_IP_URL = "https://api.ipify.org"
 
 _DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$")
+
+
+@dataclass(frozen=True)
+class CertKeyPairValidation:
+    """Sanitized validation result for a certificate/private-key cache pair."""
+
+    valid: bool
+    reason: str = ""
+    recoverable_by_renewal: bool = False
 
 
 def _default_temp_path(prefix: str) -> Path:
@@ -290,12 +301,120 @@ def check_cert_needs_renewal(cert_path: str | Path, days: int = DEFAULT_RENEWAL_
 
     try:
         cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
-    except ValueError:
+    except (OSError, ValueError):
         return True
 
     expires_at = cert.not_valid_after_utc
     renewal_cutoff = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=days)
     return expires_at <= renewal_cutoff
+
+
+def _public_key_der(public_key: Any) -> bytes:
+    return cast(
+        bytes,
+        public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ),
+    )
+
+
+def _load_private_key_for_validation(
+    key_path: Path,
+) -> tuple[Any, CertKeyPairValidation | None]:
+    if not key_path.exists():
+        return None, CertKeyPairValidation(
+            valid=False,
+            reason=f"private key file is missing: {key_path}",
+            recoverable_by_renewal=True,
+        )
+
+    try:
+        private_key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
+    except OSError:
+        return None, CertKeyPairValidation(
+            valid=False,
+            reason=f"private key file could not be read: {key_path}",
+        )
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        return None, CertKeyPairValidation(
+            valid=False,
+            reason=f"private key file is not a valid unencrypted PEM private key: {key_path}",
+        )
+
+    return private_key, None
+
+
+def validate_private_key_file(key_path: str | Path) -> CertKeyPairValidation:
+    """
+    Validate that a private-key file can be used before ACME attempts to reuse it.
+    """
+    _private_key, validation = _load_private_key_for_validation(Path(key_path))
+    if validation is not None:
+        return validation
+    return CertKeyPairValidation(valid=True)
+
+
+def validate_cert_key_pair(
+    cert_path: str | Path,
+    key_path: str | Path,
+) -> CertKeyPairValidation:
+    """
+    Validate that a PEM certificate and private key are present, parse, and match.
+
+    The returned reason is safe for logs and user-facing errors: it names the
+    broken cache state but never includes PEM contents or raw parser exceptions.
+    """
+    cert_path = Path(cert_path)
+    key_path = Path(key_path)
+
+    if not cert_path.exists():
+        return CertKeyPairValidation(
+            valid=False,
+            reason=f"certificate file is missing: {cert_path}",
+            recoverable_by_renewal=True,
+        )
+    try:
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    except OSError:
+        return CertKeyPairValidation(
+            valid=False,
+            reason=f"certificate file could not be read: {cert_path}",
+        )
+    except ValueError:
+        cert = None
+
+    private_key, key_validation = _load_private_key_for_validation(key_path)
+    if key_validation is not None:
+        return key_validation
+
+    if cert is None:
+        return CertKeyPairValidation(
+            valid=False,
+            reason=f"certificate file is not a valid PEM X.509 certificate: {cert_path}",
+            recoverable_by_renewal=True,
+        )
+
+    try:
+        cert_public_key = _public_key_der(cert.public_key())
+        private_public_key = _public_key_der(private_key.public_key())
+    except (TypeError, ValueError, UnsupportedAlgorithm):
+        return CertKeyPairValidation(
+            valid=False,
+            reason=(
+                "certificate or private key type is unsupported for TLS pair validation: "
+                f"{cert_path} / {key_path}"
+            ),
+        )
+
+    if cert_public_key != private_public_key:
+        return CertKeyPairValidation(
+            valid=False,
+            reason=f"certificate and private key do not match: {cert_path} / {key_path}",
+            recoverable_by_renewal=True,
+        )
+
+    return CertKeyPairValidation(valid=True)
 
 
 def obtain_letsencrypt_cert(

@@ -21,6 +21,8 @@ from .tls import (
     obtain_letsencrypt_cert,
     resolve_public_ipv4,
     sslip_domain_for_ip,
+    validate_cert_key_pair,
+    validate_private_key_file,
     validate_public_ipv4,
 )
 
@@ -106,34 +108,79 @@ class TLSManager:
             Path.home() / ".exphttp" / "letsencrypt" / "live" / self.domain / "privkey.pem"
         )
 
-        if not cert_path.exists() or check_cert_needs_renewal(cert_path):
+        if cert_path.exists() and not check_cert_needs_renewal(cert_path):
+            validation = validate_cert_key_pair(cert_path, key_path)
+            if validation.valid:
+                print(f"[TLS] Using existing Let's Encrypt certificate for {self.domain}")
+            elif validation.recoverable_by_renewal:
+                print(
+                    f"[TLS] Existing Let's Encrypt cache for {self.domain} is unusable "
+                    f"({validation.reason}); renewing..."
+                )
+                cert_path, key_path = self._obtain_valid_letsencrypt_cert(config_dir)
+            else:
+                self._raise_broken_acme_cache(validation.reason)
+        else:
+            if key_path.exists():
+                validation = validate_private_key_file(key_path)
+                if not validation.valid:
+                    self._raise_broken_acme_cache(validation.reason)
+            if cert_path.exists():
+                validation = validate_cert_key_pair(cert_path, key_path)
+                if not validation.valid and not validation.recoverable_by_renewal:
+                    self._raise_broken_acme_cache(validation.reason)
             if (
                 not cert_path.exists()
                 and legacy_cert_path.exists()
-                and legacy_key_path.exists()
                 and not check_cert_needs_renewal(legacy_cert_path)
             ):
-                print(f"[TLS] Using legacy Let's Encrypt certificate for {self.domain}")
-                cert_path = legacy_cert_path
-                key_path = legacy_key_path
+                validation = validate_cert_key_pair(legacy_cert_path, legacy_key_path)
+                if validation.valid:
+                    print(f"[TLS] Using legacy Let's Encrypt certificate for {self.domain}")
+                    cert_path = legacy_cert_path
+                    key_path = legacy_key_path
+                else:
+                    print(
+                        f"[TLS] Legacy Let's Encrypt cache for {self.domain} is unusable "
+                        f"({validation.reason}); obtaining a new certificate..."
+                    )
+                    cert_path, key_path = self._obtain_valid_letsencrypt_cert(config_dir)
             else:
-                print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
-                cert_path, key_path = obtain_letsencrypt_cert(
-                    domain=self.domain,
-                    email=self.email,
-                    config_dir=config_dir,
-                    server_url=self._acme_directory_url(),
-                    http_address=self.acme_http_address,
-                    http_port=self.acme_http_port,
-                    user_agent="exphttp/acme",
-                )
-                print(f"[TLS] Certificate obtained: {cert_path}")
-        else:
-            print(f"[TLS] Using existing Let's Encrypt certificate for {self.domain}")
+                cert_path, key_path = self._obtain_valid_letsencrypt_cert(config_dir)
 
         self.cert_file = str(cert_path)
         self.key_file = str(key_path)
         self._used_letsencrypt = True
+
+    def _obtain_valid_letsencrypt_cert(self, config_dir: Path) -> tuple[Path, Path]:
+        assert self.domain is not None
+        print(f"[TLS] Obtaining Let's Encrypt certificate for {self.domain}...")
+        cert_path, key_path = obtain_letsencrypt_cert(
+            domain=self.domain,
+            email=self.email,
+            config_dir=config_dir,
+            server_url=self._acme_directory_url(),
+            http_address=self.acme_http_address,
+            http_port=self.acme_http_port,
+            user_agent="exphttp/acme",
+        )
+        validation = validate_cert_key_pair(cert_path, key_path)
+        if not validation.valid:
+            raise RuntimeError(
+                f"Obtained Let's Encrypt certificate cache for {self.domain} is unusable: "
+                f"{validation.reason}. Remove the broken ACME cache directory "
+                f"{cert_path.parent} and retry."
+            )
+        print(f"[TLS] Certificate obtained: {cert_path}")
+        return cert_path, key_path
+
+    def _raise_broken_acme_cache(self, reason: str) -> None:
+        assert self.domain is not None
+        cache_dir = Path.home() / ".exphttp" / "acme" / "live" / self.domain
+        raise RuntimeError(
+            f"Cached Let's Encrypt certificate for {self.domain} is unusable: {reason}. "
+            f"Remove the broken ACME cache directory {cache_dir} and retry."
+        )
 
     def _generate_self_signed(self) -> None:
         print("[TLS] Generating self-signed certificate...")

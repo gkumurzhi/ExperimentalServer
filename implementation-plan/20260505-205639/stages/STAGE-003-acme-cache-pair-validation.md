@@ -1,7 +1,7 @@
 # STAGE-003 - Validate ACME cert/key cache pairs before reuse
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -51,11 +51,11 @@ Ensure cached ACME material is reused only when both `fullchain.pem` and `privke
 5. Add focused tests for fresh cert with missing key, invalid key, mismatched key, and happy cached reuse.
 
 ## Acceptance criteria
-- [ ] A fresh `fullchain.pem` without usable `privkey.pem` is not silently reused.
-- [ ] Mismatched or unparsable cert/key cache state fails early or renews according to explicit behavior.
-- [ ] Happy-path cached cert/key reuse remains covered.
-- [ ] Error messages do not include secret key contents.
-- [ ] Tests cover the previously missing cache states.
+- [x] A fresh `fullchain.pem` without usable `privkey.pem` is not silently reused.
+- [x] Mismatched or unparsable cert/key cache state fails early or renews according to explicit behavior.
+- [x] Happy-path cached cert/key reuse remains covered.
+- [x] Error messages do not include secret key contents.
+- [x] Tests cover the previously missing cache states.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -75,4 +75,10 @@ Ensure cached ACME material is reused only when both `fullchain.pem` and `privke
 - Rollback: Revert helper and `_try_letsencrypt()` changes; keep tests as evidence if behavior decision changes.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 22:08:12 MSK.
+
+- Added sanitized ACME cache validation helpers for PEM certificate/private-key presence, parsing, and public-key pairing.
+- Validates primary, legacy, and newly obtained ACME cert/key material before reuse; recoverable missing/mismatched states renew, while unusable key states fail early with repair guidance.
+- Added focused regression coverage for missing key, malformed key, missing cert plus malformed key, mismatched primary/legacy/obtained pairs, and happy cached reuse.
+- Verification passed with targeted TLS tests, mypy, ruff, compileall, CLI import smoke, static secret review, and verifier/security subagents.
+- Report: `stage-reports/STAGE-003-20260505-214641.md`.

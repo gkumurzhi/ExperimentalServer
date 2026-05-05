@@ -23,6 +23,8 @@ from src.security.tls import (
     obtain_letsencrypt_cert,
     resolve_public_ipv4,
     sslip_domain_for_ip,
+    validate_cert_key_pair,
+    validate_private_key_file,
     validate_public_ipv4,
 )
 
@@ -164,6 +166,85 @@ class TestCheckCertNeedsRenewal:
         cert_path.write_text("not a cert", encoding="utf-8")
 
         assert check_cert_needs_renewal(cert_path, days=30) is True
+
+
+class TestValidateCertKeyPair:
+    def test_generated_pair_is_valid(self, tmp_path):
+        cert_path, key_path = generate_self_signed_cert(
+            cert_path=tmp_path / "cert.pem",
+            key_path=tmp_path / "key.pem",
+        )
+
+        result = validate_cert_key_pair(cert_path, key_path)
+
+        assert result.valid is True
+        assert result.reason == ""
+
+    def test_missing_key_is_invalid_and_recoverable(self, tmp_path):
+        cert_path, key_path = generate_self_signed_cert(
+            cert_path=tmp_path / "cert.pem",
+            key_path=tmp_path / "key.pem",
+        )
+        key_path.unlink()
+
+        result = validate_cert_key_pair(cert_path, key_path)
+
+        assert result.valid is False
+        assert result.recoverable_by_renewal is True
+        assert "private key file is missing" in result.reason
+
+    def test_unparsable_key_is_invalid_without_exposing_contents(self, tmp_path):
+        cert_path, key_path = generate_self_signed_cert(
+            cert_path=tmp_path / "cert.pem",
+            key_path=tmp_path / "key.pem",
+        )
+        key_path.write_text("not a private key", encoding="utf-8")
+
+        result = validate_cert_key_pair(cert_path, key_path)
+
+        assert result.valid is False
+        assert result.recoverable_by_renewal is False
+        assert "private key file is not a valid unencrypted PEM private key" in result.reason
+        assert "not a private key" not in result.reason
+
+    def test_mismatched_key_is_invalid_and_recoverable(self, tmp_path):
+        cert_path, key_path = generate_self_signed_cert(
+            cert_path=tmp_path / "cert.pem",
+            key_path=tmp_path / "key.pem",
+        )
+        other_cert = tmp_path / "other-cert.pem"
+        other_key = tmp_path / "other-key.pem"
+        generate_self_signed_cert(cert_path=other_cert, key_path=other_key)
+        key_path.write_bytes(other_key.read_bytes())
+
+        result = validate_cert_key_pair(cert_path, key_path)
+
+        assert result.valid is False
+        assert result.recoverable_by_renewal is True
+        assert "certificate and private key do not match" in result.reason
+
+
+class TestValidatePrivateKeyFile:
+    def test_generated_private_key_is_valid(self, tmp_path):
+        _cert_path, key_path = generate_self_signed_cert(
+            cert_path=tmp_path / "cert.pem",
+            key_path=tmp_path / "key.pem",
+        )
+
+        result = validate_private_key_file(key_path)
+
+        assert result.valid is True
+        assert result.reason == ""
+
+    def test_unparsable_private_key_is_invalid_without_exposing_contents(self, tmp_path):
+        key_path = tmp_path / "key.pem"
+        key_path.write_text("not a private key", encoding="utf-8")
+
+        result = validate_private_key_file(key_path)
+
+        assert result.valid is False
+        assert "private key file is not a valid unencrypted PEM private key" in result.reason
+        assert "not a private key" not in result.reason
 
 
 class TestGetCertInfo:
