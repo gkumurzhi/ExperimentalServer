@@ -2,7 +2,7 @@
 
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
-| STAGE-001 | OPEN | HIGH | Restore release-smoke stale-doc guard | - | - | - |
+| STAGE-001 | CLOSED | HIGH | Restore release-smoke stale-doc guard | 2026-05-05 21:25:59 MSK | Replaced brittle stale-doc grep with active-doc checker; release-smoke sanity block passes locally. | `stage-reports/STAGE-001-20260505-212559.md` |
 | STAGE-002 | OPEN | HIGH | Fix Secure Notepad key contract and example interoperability | - | - | - |
 | STAGE-003 | OPEN | HIGH | Validate ACME cert/key cache pairs before reuse | - | - | - |
 | STAGE-004 | OPEN | HIGH | Normalize CLI TLS source and numeric validation | - | - | - |

@@ -161,10 +161,7 @@ jobs:
           python -m src --help > /dev/null
           bash -n examples/basic_file_server.sh
           python examples/notepad_client.py --help > /dev/null
-          if grep -R -n -E -- '--root|--max-upload|/notes/pubkey|X-Enc-Key|X-HMAC|--no-info|--opsec|--sandbox|advanced upload is enabled by default|ciphertext \+ metadata' README.md API.md docs examples CLAUDE.md; then
-            echo "Found stale documented contract references"
-            exit 1
-          fi
+          python tools/check_stale_docs.py
 
       - name: Browser smoke
         run: |

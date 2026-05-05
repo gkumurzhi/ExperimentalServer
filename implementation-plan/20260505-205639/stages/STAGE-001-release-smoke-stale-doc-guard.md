@@ -1,7 +1,7 @@
 # STAGE-001 - Restore release-smoke stale-doc guard
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -51,10 +51,10 @@ Make the release-smoke stale-reference guard reject only genuinely stale active 
 5. Run the release-smoke sanity command block far enough to prove the stale guard passes and would continue to browser/Docker smoke.
 
 ## Acceptance criteria
-- [ ] The known `advanced upload is enabled by default` changelog/history entry no longer fails release smoke.
-- [ ] Active stale references are still detected in active docs or examples.
-- [ ] The workflow remains readable and fails with an actionable message.
-- [ ] Browser and Docker smoke steps are no longer blocked by the stale-doc guard.
+- [x] The known `advanced upload is enabled by default` changelog/history entry no longer fails release smoke.
+- [x] Active stale references are still detected in active docs or examples.
+- [x] The workflow remains readable and fails with an actionable message.
+- [x] Browser and Docker smoke steps are no longer blocked by the stale-doc guard.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -74,4 +74,7 @@ Make the release-smoke stale-reference guard reject only genuinely stale active 
 - Rollback: Revert this stage's workflow/script changes and restore the previous grep while preserving any captured false-positive evidence.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 21:25:59 MSK. Replaced the broad release-smoke grep with
+`tools/check_stale_docs.py`, which scans active docs/examples while skipping
+historical changelog files. Added focused checker tests and verified the local
+release-smoke sanity block with the project `.venv` interpreter.
