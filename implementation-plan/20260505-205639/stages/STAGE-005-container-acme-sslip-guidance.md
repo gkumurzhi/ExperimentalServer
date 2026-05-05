@@ -1,7 +1,7 @@
 # STAGE-005 - Complete container ACME/sslip operator path
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -53,11 +53,11 @@ Give operators a container ACME/sslip path that is either demonstrably working o
 6. Run Compose config and docs build checks.
 
 ## Acceptance criteria
-- [ ] Operators can identify the exact ports and volume needed for ACME/sslip in containers.
-- [ ] The default plain HTTP container path remains intact.
-- [ ] TLS/auth/ACME healthcheck limitations are called out or handled.
-- [ ] ACME cache repair guidance aligns with STAGE-003 behavior.
-- [ ] Docs do not imply live ACME works behind NAT/private IPv4 without public port 80 reachability.
+- [x] Operators can identify the exact ports and volume needed for ACME/sslip in containers.
+- [x] The default plain HTTP container path remains intact.
+- [x] TLS/auth/ACME healthcheck limitations are called out or handled.
+- [x] ACME cache repair guidance aligns with STAGE-003 behavior.
+- [x] Docs do not imply live ACME works behind NAT/private IPv4 without public port 80 reachability.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,4 +77,17 @@ Give operators a container ACME/sslip path that is either demonstrably working o
 - Rollback: Remove the profile and keep the safer documentation-only guidance with explicit limitations.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 22:41:47 MSK by `close-plan-stage`.
+
+- Added an opt-in `exphttp-acme` Compose profile with host `80` -> container
+  `8080` for HTTP-01, host `443` -> container `8443` for HTTPS, and
+  `exphttp-acme-state:/home/exphttp/.exphttp` for ACME state.
+- Left the default plain HTTP `exphttp` Compose service on `8080:8080`.
+- Pre-created `/home/exphttp/.exphttp` in the Docker image so a named ACME
+  state volume has non-root ownership.
+- Documented Docker/NAT/sslip prerequisites, `api.ipify.org`, global IPv4,
+  HTTP-01-only support, ACME cache repair, and TLS/auth/ACME healthcheck
+  behavior.
+- Verification passed: Compose default/profile config, `.venv/bin/mkdocs build
+  --strict`, docs sync, Dockerfile check, static ops review, diff hygiene,
+  explorer review, docker-expert review, and reviewer review.

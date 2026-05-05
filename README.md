@@ -377,6 +377,54 @@ exphttp --letsencrypt --domain example.com --acme-staging
 
 Если явно запрошен `--letsencrypt` или `--sslip`, ошибка ACME не заменяется самоподписанным сертификатом: запуск завершится ошибкой, чтобы не снижать уровень защиты молча. Wildcard-сертификаты и DNS-01 challenge в этой версии не поддерживаются.
 
+### Docker и sslip/ACME
+
+`examples/docker/docker-compose.yml` по умолчанию оставляет прежний безопасный
+plain HTTP путь: сервис `exphttp` публикует только `8080:8080` и не запускает
+ACME. Для контейнерного HTTPS через `--sslip` используйте отдельный профиль:
+
+```bash
+docker compose -f examples/docker/docker-compose.yml --profile acme up --build exphttp-acme
+```
+
+Профиль `exphttp-acme` публикует host `80` -> container `8080` для HTTP-01
+challenge (`--acme-http-port 8080`) и host `443` -> container `8443` для
+HTTPS (`--port 8443`). Внутри контейнера используются высокие порты, поэтому
+сохраняются non-root запуск и `cap_drop: [ALL]`; снаружи firewall/NAT всё равно
+должен пропускать публичный порт 80 к этому host. Если перед контейнером стоит
+reverse proxy, он должен проксировать `/.well-known/acme-challenge/` на
+challenge listener или временно освободить public port 80.
+
+ACME состояние пишется в домашний каталог пользователя контейнера:
+`/home/exphttp/.exphttp/acme/`. Compose-профиль монтирует named volume
+`exphttp-acme-state:/home/exphttp/.exphttp`; этот volume содержит ACME account
+keys, private keys доменов и `fullchain.pem`, поэтому защищайте и бэкапьте его
+как секретный certificate state. Если cached certificate/key pair отсутствует
+или не совпадает, сервер сначала попытается выпустить сертификат заново; если
+запуск всё равно завершается с unusable cache/private key диагностикой, удалите
+только сломанный каталог `/home/exphttp/.exphttp/acme/live/<domain>/` внутри
+ACME volume и повторите выпуск. Это соответствует fail-closed проверке пары
+`fullchain.pem` / `privkey.pem`: сервер не будет молча переходить на
+самоподписанный сертификат.
+
+`--sslip` без `--public-ip` определяет адрес через `https://api.ipify.org`.
+Нужен глобально маршрутизируемый IPv4: private, loopback, carrier-grade NAT и
+IPv6-only окружения не подходят. За NAT укажите `--public-ip <global-ipv4>`,
+если auto-detection видит не тот адрес, и убедитесь, что public port 80 реально
+доходит до контейнерного challenge listener. Оставляйте `--acme-http-address`
+по умолчанию, чтобы challenge listener слушал все интерфейсы контейнера;
+меняйте его только для явной proxy/topology настройки. Перед production
+выпуском можно включить `--acme-staging` в Compose-команде, чтобы проверить
+route без production rate limits. Для собственного домена замените `--sslip`
+на `--letsencrypt --domain example.com`. ACME реализует только HTTP-01:
+DNS-01, TLS-ALPN-01 и wildcard-сертификаты не поддерживаются.
+
+Встроенный Docker `HEALTHCHECK` проверяет plain HTTP `PING` на
+`http://127.0.0.1:8080/`. Для TLS, Basic Auth, `--letsencrypt` и `--sslip` он
+не отражает реальное состояние сервиса, поэтому ACME-профиль отключает его.
+Используйте внешний HTTPS-probe по публичному имени или переопределите
+healthcheck в Compose так, чтобы он учитывал TLS и credentials.
+
 ### cURL с самоподписным сертификатом
 
 ```bash

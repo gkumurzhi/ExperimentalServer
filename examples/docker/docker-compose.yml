@@ -41,5 +41,63 @@ services:
     # healthcheck:
     #   disable: true
 
+  exphttp-acme:
+    profiles:
+      - acme
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: exphttp:local
+    container_name: exphttp-acme
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      # Public port 80 must reach the HTTP-01 challenge listener.
+      # The container uses high internal ports so the non-root process does not
+      # need privileged bind capabilities.
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - exphttp-data:/data
+      # Contains ACME account keys, domain private keys, and cached certs.
+      # Protect and back up this volume like certificate secret material.
+      - exphttp-acme-state:/home/exphttp/.exphttp
+    # Run with:
+    #   docker compose --profile acme up --build exphttp-acme
+    # Requirements: a globally routable IPv4, outbound access to
+    # https://api.ipify.org unless --public-ip is set, and public port 80
+    # forwarded to this host.
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8443"
+      - --dir
+      - /data
+      - --sslip
+      - --acme-http-port
+      - "8080"
+      # For dry runs before production issuance, uncomment:
+      # - --acme-staging
+      # If auto-detection sees the wrong NAT address, uncomment and set:
+      # - --public-ip
+      # - <global-ipv4>
+      # For a real domain instead of sslip.io, replace --sslip with:
+      # - --letsencrypt
+      # - --domain
+      # - files.example.com
+    # The image healthcheck probes plain HTTP on :8080. ACME/TLS/auth modes
+    # need a protocol-aware external probe or an overridden healthcheck.
+    healthcheck:
+      disable: true
+
 volumes:
   exphttp-data:
+  exphttp-acme-state:

@@ -23,3 +23,9 @@
 - Files changed: `src/cli.py`, `src/server.py`, `tests/test_cli.py`, `implementation-plan/20260505-205639/stages/STAGE-004-cli-tls-and-limit-validation.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-004-20260505-221247.md`
 - Verification: targeted CLI and TLS manager tests, CLI help, safe invalid-argument subprocess checks, ruff, mypy, diff checks, explorer review, correctness review, and final CLI verification review passed.
 - Report: `stage-reports/STAGE-004-20260505-221247.md`
+
+## 2026-05-05 22:41:47 MSK — STAGE-005
+- Status: CLOSED
+- Files changed: `Dockerfile`, `examples/docker/docker-compose.yml`, `README.md`, `docs/architecture.md`, `implementation-plan/20260505-205639/stages/STAGE-005-container-acme-sslip-guidance.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-005-20260505-223234.md`
+- Verification: Docker Compose default/profile config, `.venv/bin/mkdocs build --strict`, docs sync, Dockerfile check, static ops review, diff hygiene, explorer review, docker-expert review, and reviewer review passed.
+- Report: `stage-reports/STAGE-005-20260505-223234.md`

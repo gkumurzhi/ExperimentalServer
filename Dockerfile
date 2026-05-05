@@ -48,9 +48,10 @@ RUN PIP_CONSTRAINT=/tmp/constraints/ci.txt pip install --upgrade pip && \
     PIP_CONSTRAINT=/tmp/constraints/ci.txt pip install "$(ls /tmp/*.whl)" && \
     rm -rf /tmp/*.whl /tmp/constraints
 
-# Prepare a writable data directory.
-RUN mkdir -p /data/uploads && \
-    chown -R ${APP_USER}:${APP_USER} /data
+# Prepare writable data and ACME state mount points. The ACME directory is
+# empty by default, but lets a named volume inherit non-root ownership.
+RUN mkdir -p /data/uploads /home/${APP_USER}/.exphttp && \
+    chown -R ${APP_USER}:${APP_USER} /data /home/${APP_USER}/.exphttp
 
 USER ${APP_USER}
 WORKDIR /data

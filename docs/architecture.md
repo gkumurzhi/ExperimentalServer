@@ -63,6 +63,24 @@ sequenceDiagram
 See [ADR-005](ADR/ADR-005-threadpool-over-asyncio.md). One accept loop,
 `ThreadPoolExecutor` pool (10 workers by default), keep-alive per worker.
 
+## Runtime persistence
+
+Runtime file state is split across a small number of explicit directories:
+
+- `--dir` / `root_dir` is the operator-owned content root. The server creates
+  `uploads/` for user-visible file operations and `notes/` for Secure Notepad
+  ciphertext and plaintext note metadata.
+- Temporary self-signed TLS certificates are created under the platform temp
+  directory and removed on process exit.
+- ACME state is stored under `Path.home() / ".exphttp" / "acme"`, including
+  account keys, domain private keys, and `live/<domain>/fullchain.pem` plus
+  `privkey.pem`. `TLSManager` also reads the legacy
+  `Path.home() / ".exphttp" / "letsencrypt"` cache when the new ACME cache is
+  empty.
+- In the Docker image the runtime user is `exphttp`, so ACME state lives under
+  `/home/exphttp/.exphttp`. The ACME Compose profile mounts that path as a
+  dedicated named volume; treat it as certificate secret material.
+
 ## Security layers
 
 1. **Transport** — TLS 1.2+ via `TLSManager`.
