@@ -328,6 +328,10 @@ upload limit.
 
 Secure Notepad with client-side encrypted note blobs. Clients derive an AES-256-GCM key via ECDH and the server stores only opaque encrypted data plus note metadata. This flow uses the runtime `cryptography` dependency and fails closed with `501` if the crypto backend is unavailable. Notes are stored in the separate top-level `notes/` directory as `<id>.enc` + `<id>.meta.json` pairs, alongside `uploads/` rather than inside it.
 
+The note body field `data` is encrypted client-side and stored as an opaque base64 blob. Note IDs, titles, timestamps, sizes, and the optional session marker are plaintext metadata visible to the server and to any operator who can read `notes/*.meta.json`.
+
+Current note keys are session-bound, not durably recoverable. The browser UI and `examples/notepad_client.py` keep the derived AES key only in process memory. Reloading the page, restarting the client, server restart, idle session expiry, or LRU session eviction can leave previously saved note bodies undecryptable by that client. The server does not persist note encryption keys and exposes no API to decrypt or re-key stored note blobs.
+
 ### NOTE /notes/key
 
 Get the server's ECDH public key.
@@ -352,6 +356,19 @@ If the crypto backend is unavailable, `hasEcdh` is `false` and `publicKey` is ab
 ### NOTE /notes/exchange
 
 Exchange ECDH keys to establish a session. The client sends its ephemeral P-256 public key; the server returns a short-lived `sessionId` and its own public key. Both sides independently derive the same AES-256-GCM session key via HKDF-SHA256.
+
+Exact derivation contract:
+
+| Parameter | Value |
+|---|---|
+| Curve | ECDH P-256 (`secp256r1`) |
+| Public key encoding | 65-byte uncompressed X9.62 point, base64 encoded on the wire |
+| HKDF hash | SHA-256 |
+| HKDF output length | 32 bytes |
+| HKDF salt | 32 zero bytes (`00` repeated 32 times) |
+| HKDF info | UTF-8 bytes for `notepad-e2e-key` |
+| Content cipher | AES-256-GCM |
+| Encrypted blob format | `nonce(12) + ciphertext + tag(16)`, then base64 encoded as `data` |
 
 **Request:**
 ```

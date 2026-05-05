@@ -1,7 +1,7 @@
 # STAGE-002 - Fix Secure Notepad key contract and example interoperability
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -54,11 +54,11 @@ Make the Secure Notepad public contract explicit and interoperable: example, ser
 5. Run docs sync so `API.md` and `docs/api.md` stay consistent.
 
 ## Acceptance criteria
-- [ ] `examples/notepad_client.py` uses the same HKDF salt/info as server and browser.
-- [ ] A regression test fails on the old example constants and passes with the fixed constants.
-- [ ] `API.md` documents the current session-key-bound recoverability limitation without promising durable decryptability.
-- [ ] `API.md` states that note body `data` is encrypted and title metadata is plaintext/server-visible.
-- [ ] `docs/api.md` is synchronized with `API.md`.
+- [x] `examples/notepad_client.py` uses the same HKDF salt/info as server and browser.
+- [x] A regression test fails on the old example constants and passes with the fixed constants.
+- [x] `API.md` documents the current session-key-bound recoverability limitation without promising durable decryptability.
+- [x] `API.md` states that note body `data` is encrypted and title metadata is plaintext/server-visible.
+- [x] `docs/api.md` is synchronized with `API.md`.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -78,4 +78,6 @@ Make the Secure Notepad public contract explicit and interoperable: example, ser
 - Rollback: Revert example/docs/test changes and restore previous docs sync output.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 21:43:24 MSK. Updated `examples/notepad_client.py` to use the canonical Secure Notepad HKDF contract, added a regression test proving the old constants do not interoperate and the fixed example does, documented exact key derivation plus current recovery and plaintext metadata limits in `API.md`, and regenerated `docs/api.md`.
+
+Verification passed with targeted key/NOTE/WebSocket tests, focused regression, example `--help`, docs sync check, ruff on changed Python files, static docs review, diff check, compile check, and explorer/reviewer/security-auditor subagent reviews. Report: `stage-reports/STAGE-002-20260505-213422.md`.

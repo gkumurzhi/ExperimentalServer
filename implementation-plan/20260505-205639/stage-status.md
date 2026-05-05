@@ -3,7 +3,7 @@
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
 | STAGE-001 | CLOSED | HIGH | Restore release-smoke stale-doc guard | 2026-05-05 21:25:59 MSK | Replaced brittle stale-doc grep with active-doc checker; release-smoke sanity block passes locally. | `stage-reports/STAGE-001-20260505-212559.md` |
-| STAGE-002 | OPEN | HIGH | Fix Secure Notepad key contract and example interoperability | - | - | - |
+| STAGE-002 | CLOSED | HIGH | Fix Secure Notepad key contract and example interoperability | 2026-05-05 21:43:24 MSK | Aligned the example HKDF contract with server/browser constants, documented recovery/metadata limits, added interoperability regression, and synced docs. | `stage-reports/STAGE-002-20260505-213422.md` |
 | STAGE-003 | OPEN | HIGH | Validate ACME cert/key cache pairs before reuse | - | - | - |
 | STAGE-004 | OPEN | HIGH | Normalize CLI TLS source and numeric validation | - | - | - |
 | STAGE-005 | OPEN | HIGH | Complete container ACME/sslip operator path | - | - | - |

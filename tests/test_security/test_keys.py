@@ -1,10 +1,23 @@
 """Tests for the ECDH key exchange manager."""
 
+import importlib.util
+from pathlib import Path
+
 import pytest
 
 from src.security.keys import HAS_ECDH, ECDHKeyManager
 
 pytestmark = pytest.mark.skipif(not HAS_ECDH, reason="cryptography not installed")
+
+
+def _load_notepad_client_example():
+    example_path = Path(__file__).resolve().parents[2] / "examples" / "notepad_client.py"
+    spec = importlib.util.spec_from_file_location("notepad_client_example", example_path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class TestECDHKeyManager:
@@ -23,6 +36,37 @@ class TestECDHKeyManager:
 
         assert len(session_id) == 32  # hex(16 bytes)
         assert len(key) == 32  # 256-bit AES key
+
+    def test_notepad_client_example_derives_server_compatible_key(self):
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+        example = _load_notepad_client_example()
+        server = ECDHKeyManager()
+        client_private = ec.generate_private_key(ec.SECP256R1())
+        client_public = client_private.public_key().public_bytes(
+            encoding=serialization.Encoding.X962,
+            format=serialization.PublicFormat.UncompressedPoint,
+        )
+
+        _session_id, server_key = server.derive_session(client_public)
+        example_key = example.derive_shared_key(server.get_public_key_raw(), client_private)
+
+        server_public = ec.EllipticCurvePublicKey.from_encoded_point(
+            ec.SECP256R1(),
+            server.get_public_key_raw(),
+        )
+        shared_secret = client_private.exchange(ec.ECDH(), server_public)
+        old_example_key = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"exphttp-notepad",
+        ).derive(shared_secret)
+
+        assert old_example_key != server_key
+        assert example_key == server_key
 
     def test_get_session_key_returns_key(self):
         mgr = ECDHKeyManager()

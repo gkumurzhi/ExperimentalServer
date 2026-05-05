@@ -33,6 +33,8 @@ except ImportError:
 
 
 _NOTE_ID_RE = re.compile(r"^[a-f0-9]{1,32}$")
+_NOTEPAD_HKDF_SALT = b"\x00" * 32
+_NOTEPAD_HKDF_INFO = b"notepad-e2e-key"
 
 
 def _b64(data: bytes) -> str:
@@ -118,8 +120,8 @@ def derive_shared_key(server_pub_raw: bytes, client_priv: ec.EllipticCurvePrivat
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        salt=None,
-        info=b"exphttp-notepad",
+        salt=_NOTEPAD_HKDF_SALT,
+        info=_NOTEPAD_HKDF_INFO,
     ).derive(shared)
 
 
