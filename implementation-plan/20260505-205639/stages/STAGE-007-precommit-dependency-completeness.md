@@ -1,7 +1,7 @@
 # STAGE-007 - Align pre-commit and dependency completeness checks
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -53,11 +53,11 @@ Make developer and CI dependency checks prove the installed runtime graph is pre
 5. Update contributor docs if local setup commands should change after STAGE-006.
 
 ## Acceptance criteria
-- [ ] Pre-commit mypy installs the packages imported by `src/security/tls.py`.
-- [ ] The pinned `cryptography` version used by the mypy hook matches the declared lower-bound policy and current constraint.
-- [ ] CI catches missing runtime dependencies after package install.
-- [ ] Security/audit workflow either audits installed completeness or documents a clear constraints completeness check.
-- [ ] Local setup guidance does not ask developers to rely on stale optional extras for required runtime dependencies.
+- [x] Pre-commit mypy installs the packages imported by `src/security/tls.py`.
+- [x] The pinned `cryptography` version used by the mypy hook matches the declared lower-bound policy and current constraint.
+- [x] CI catches missing runtime dependencies after package install.
+- [x] Security/audit workflow either audits installed completeness or documents a clear constraints completeness check.
+- [x] Local setup guidance does not ask developers to rely on stale optional extras for required runtime dependencies.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,4 +77,8 @@ Make developer and CI dependency checks prove the installed runtime graph is pre
 - Rollback: Revert hook dependency changes and document using a local/system mypy hook as a future alternative.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-05 23:29:51 MSK. Aligned the pre-commit mypy hook with the
+constrained ACME/crypto import graph, added CI installed dependency smoke
+checks, added a security workflow constraints-vs-installed completeness check
+before strict pinned `pip-audit`, and documented the local checks in
+`CONTRIBUTING.md` plus the generated docs mirror.

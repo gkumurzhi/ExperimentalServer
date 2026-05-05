@@ -95,6 +95,9 @@ together when refreshing the smoke toolchain.
 
 ```bash
 pre-commit run --all-files
+python -m pip check
+python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
+python tools/check_dependency_constraints.py --constraints constraints/ci.txt
 ruff check src tests
 ruff format --check src tests
 mypy src
