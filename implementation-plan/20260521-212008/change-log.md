@@ -11,3 +11,9 @@
 - Files changed: `src/http/io.py`, `src/server.py`, `src/metrics.py`, `src/cli.py`, `tests/test_http/test_io.py`, `tests/test_metrics.py`, `tests/test_server_methods.py`, `tests/test_cli.py`, `README.md`, `docs/api.md`, `docs/threat-model.md`, active plan status/report artifacts.
 - Verification: parser tests, server helper selector, metrics/CLI/docs/integration tests, reviewer subagent re-check, ruff, compileall, and diff whitespace checks passed. Full suite/typecheck had unrelated local dependency gaps documented in the report.
 - Report: `stage-reports/STAGE-002-20260521-223742.md`
+
+## 2026-05-21T23:13:56+03:00 - STAGE-003
+- Status: CLOSED
+- Files changed: `src/server.py`, `src/metrics.py`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_metrics.py`, active plan status/report artifacts.
+- Verification: targeted admission/keep-alive/WebSocket tests, metrics tests, broader touched tests, compile check, static submit review, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-003-20260521-230426.md`

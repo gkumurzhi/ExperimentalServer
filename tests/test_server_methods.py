@@ -488,12 +488,13 @@ class _WebSocketSocketStub(_SendSocketStub):
 
 
 class _ListeningSocketStub:
-    def __init__(self) -> None:
+    def __init__(self, accepted: list[tuple[object, tuple[str, int]]] | None = None) -> None:
         self.options: list[tuple[int, int, int]] = []
         self.bound: tuple[str, int] | None = None
         self.backlog: int | None = None
         self.timeouts: list[float] = []
         self.closed = False
+        self.accepted = list(accepted or [])
 
     def setsockopt(self, level: int, optname: int, value: int) -> None:
         self.options.append((level, optname, value))
@@ -508,6 +509,8 @@ class _ListeningSocketStub:
         self.timeouts.append(value)
 
     def accept(self) -> tuple[object, tuple[str, int]]:
+        if self.accepted:
+            return self.accepted.pop(0)
         raise KeyboardInterrupt
 
     def close(self) -> None:
@@ -609,6 +612,124 @@ class TestServerHelpers:
         assert server.get_metrics()["websocket"] == {
             "active": 0,
             "rejected_admissions": 0,
+        }
+
+    def test_request_admission_rejects_when_worker_budget_is_full(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+
+        assert server._try_acquire_request_admission() is True
+        assert server._try_acquire_request_admission() is False
+
+        assert server.get_metrics()["request_admission"] == {
+            "active": 1,
+            "accepted": 1,
+            "rejected": 1,
+        }
+        server._release_request_admission()
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 1,
+        }
+
+    def test_admitted_client_releases_admission_after_normal_close(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+        calls: list[tuple[object, tuple[str, int]]] = []
+
+        assert server._try_acquire_request_admission() is True
+        monkeypatch.setattr(server, "_handle_client", lambda *args: calls.append(args))
+
+        server._handle_admitted_client(sock, ("127.0.0.1", 43210))
+
+        assert calls == [(sock, ("127.0.0.1", 43210))]
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }
+
+    def test_admitted_client_releases_admission_after_handler_exception(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        def fail_handle(*_args):
+            raise RuntimeError("boom")
+
+        assert server._try_acquire_request_admission() is True
+        monkeypatch.setattr(server, "_handle_client", fail_handle)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            server._handle_admitted_client(sock, ("127.0.0.1", 43210))
+
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }
+
+    def test_admitted_client_releases_admission_when_tls_handshake_fails(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, tls=True)
+        sock = _SendSocketStub()
+
+        class _FailingSSLContext:
+            def wrap_socket(self, _client_socket, server_side):
+                assert server_side is True
+                raise ssl.SSLError("bad handshake")
+
+        server.running = True
+        server._tls.enabled = True
+        server._tls.ssl_context = _FailingSSLContext()  # type: ignore[assignment]
+        assert server._try_acquire_request_admission() is True
+        monkeypatch.setattr(
+            server,
+            "_receive_request",
+            lambda *_args, **_kwargs: pytest.fail("handshake failure should return first"),
+        )
+
+        server._handle_admitted_client(sock, ("127.0.0.1", 43210))
+
+        assert sock.closed is True
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }
+
+    def test_cancelled_worker_future_releases_admission(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        class _CancelledFuture:
+            def cancelled(self) -> bool:
+                return True
+
+        assert server._try_acquire_request_admission() is True
+
+        server._release_cancelled_admission(_CancelledFuture(), sock)
+
+        assert sock.closed is True
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
         }
 
     def test_should_keep_alive_respects_http_version(self, temp_dir):
@@ -1230,3 +1351,178 @@ class TestServerHelpers:
         assert "cleanup" in opened_urls
         assert not stale_temp.exists()
         assert server._temp_smuggle_files == set()
+
+    def test_start_acquires_admission_before_worker_submission(
+        self,
+        temp_dir,
+        monkeypatch,
+        capsys,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+        client = _SendSocketStub()
+        listening_socket = _ListeningSocketStub([(client, ("127.0.0.1", 43210))])
+        submitted: list[tuple[object, tuple[str, int]]] = []
+
+        class _DoneFuture:
+            def add_done_callback(self, callback) -> None:
+                callback(self)
+
+            def cancelled(self) -> bool:
+                return False
+
+        class _ExecutorStub:
+            def __init__(self, max_workers: int) -> None:
+                assert max_workers == 1
+
+            def submit(self, fn, client_socket, client_address):
+                assert server.get_metrics()["request_admission"] == {
+                    "active": 1,
+                    "accepted": 1,
+                    "rejected": 0,
+                }
+                submitted.append((client_socket, client_address))
+                fn(client_socket, client_address)
+                return _DoneFuture()
+
+            def shutdown(self, wait: bool, cancel_futures: bool) -> None:
+                assert wait is True
+                assert cancel_futures is True
+
+        monkeypatch.setattr(server, "_setup_tls", lambda: None)
+        monkeypatch.setattr(server, "_handle_client", lambda *_args: None)
+        monkeypatch.setattr("src.server.socket.socket", lambda *_args, **_kwargs: listening_socket)
+        monkeypatch.setattr("src.server.ThreadPoolExecutor", _ExecutorStub)
+
+        server.start()
+
+        capsys.readouterr()
+        assert submitted == [(client, ("127.0.0.1", 43210))]
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }
+
+    def test_start_rejects_connection_when_admission_budget_is_full(
+        self,
+        temp_dir,
+        monkeypatch,
+        capsys,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+        client = _SendSocketStub()
+        listening_socket = _ListeningSocketStub([(client, ("127.0.0.1", 43210))])
+
+        class _ExecutorStub:
+            def __init__(self, max_workers: int) -> None:
+                assert max_workers == 1
+
+            def submit(self, *_args, **_kwargs) -> None:
+                raise AssertionError("overloaded connection must not be submitted")
+
+            def shutdown(self, wait: bool, cancel_futures: bool) -> None:
+                assert wait is True
+                assert cancel_futures is True
+
+        assert server._try_acquire_request_admission() is True
+        monkeypatch.setattr(server, "_setup_tls", lambda: None)
+        monkeypatch.setattr("src.server.socket.socket", lambda *_args, **_kwargs: listening_socket)
+        monkeypatch.setattr("src.server.ThreadPoolExecutor", _ExecutorStub)
+
+        server.start()
+
+        capsys.readouterr()
+        response_bytes = b"".join(client.sent)
+        assert response_bytes.startswith(b"HTTP/1.1 503 ")
+        assert json.loads(response_bytes.split(b"\r\n\r\n", 1)[1]) == {
+            "error": "Server busy",
+            "status": 503,
+        }
+        assert client.closed is True
+        assert server.get_metrics()["request_admission"] == {
+            "active": 1,
+            "accepted": 1,
+            "rejected": 1,
+        }
+        server._release_request_admission()
+
+    def test_start_releases_admission_when_submit_fails(
+        self,
+        temp_dir,
+        monkeypatch,
+        capsys,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+        client = _SendSocketStub()
+        listening_socket = _ListeningSocketStub([(client, ("127.0.0.1", 43210))])
+
+        class _ExecutorStub:
+            def __init__(self, max_workers: int) -> None:
+                assert max_workers == 1
+
+            def submit(self, *_args, **_kwargs) -> None:
+                raise RuntimeError("executor unavailable")
+
+            def shutdown(self, wait: bool, cancel_futures: bool) -> None:
+                assert wait is True
+                assert cancel_futures is True
+
+        monkeypatch.setattr(server, "_setup_tls", lambda: None)
+        monkeypatch.setattr("src.server.socket.socket", lambda *_args, **_kwargs: listening_socket)
+        monkeypatch.setattr("src.server.ThreadPoolExecutor", _ExecutorStub)
+
+        server.start()
+
+        capsys.readouterr()
+        assert client.closed is True
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }
+
+    def test_start_releases_admission_when_submitted_future_is_cancelled(
+        self,
+        temp_dir,
+        monkeypatch,
+        capsys,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, max_workers=1)
+        client = _SendSocketStub()
+        listening_socket = _ListeningSocketStub([(client, ("127.0.0.1", 43210))])
+
+        class _CancelledFuture:
+            def add_done_callback(self, callback) -> None:
+                callback(self)
+
+            def cancelled(self) -> bool:
+                return True
+
+        class _ExecutorStub:
+            def __init__(self, max_workers: int) -> None:
+                assert max_workers == 1
+
+            def submit(self, *_args, **_kwargs):
+                return _CancelledFuture()
+
+            def shutdown(self, wait: bool, cancel_futures: bool) -> None:
+                assert wait is True
+                assert cancel_futures is True
+
+        monkeypatch.setattr(server, "_setup_tls", lambda: None)
+        monkeypatch.setattr("src.server.socket.socket", lambda *_args, **_kwargs: listening_socket)
+        monkeypatch.setattr("src.server.ThreadPoolExecutor", _ExecutorStub)
+
+        server.start()
+
+        capsys.readouterr()
+        assert client.closed is True
+        assert server.get_metrics()["request_admission"] == {
+            "active": 0,
+            "accepted": 1,
+            "rejected": 0,
+        }

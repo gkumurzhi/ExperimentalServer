@@ -173,6 +173,42 @@ class TestLiveRequestHandling:
                 assert ping2["access_scope"] == "uploads"
                 assert ping2["advanced_upload"] is True
 
+    def test_request_admission_rejects_when_single_worker_is_occupied(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(temp_dir, max_workers=1) as live:
+            first = socket.create_connection(("127.0.0.1", live.port), timeout=2.0)
+            try:
+                first.settimeout(2.0)
+                for _ in range(100):
+                    if live.server.get_metrics()["request_admission"]["active"] == 1:
+                        break
+                    time.sleep(0.02)
+                assert live.server.get_metrics()["request_admission"]["active"] == 1
+
+                with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as second:
+                    second.settimeout(2.0)
+                    second.sendall(
+                        (
+                            f"PING / HTTP/1.1\r\n"
+                            f"Host: 127.0.0.1:{live.port}\r\n"
+                            "Connection: close\r\n"
+                            "\r\n"
+                        ).encode("ascii")
+                    )
+                    status, _headers, body = _recv_http_response(second)
+
+                assert status.startswith("HTTP/1.1 503")
+                assert json.loads(body) == {"error": "Server busy", "status": 503}
+                assert live.server.get_metrics()["request_admission"] == {
+                    "active": 1,
+                    "accepted": 1,
+                    "rejected": 1,
+                }
+            finally:
+                first.close()
+
     def test_basic_auth_rejects_missing_header_and_accepts_valid_credentials(
         self,
         temp_dir: Path,

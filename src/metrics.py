@@ -19,6 +19,9 @@ class MetricsCollector:
         self._bytes_sent: int = 0
         self._status_counts: dict[int, int] = {}
         self._receive_rejections: dict[str, int] = {}
+        self._request_admission_active: int = 0
+        self._request_admission_accepted: int = 0
+        self._request_admission_rejected: int = 0
         self._websocket_active: int = 0
         self._websocket_rejected_admissions: int = 0
 
@@ -62,6 +65,22 @@ class MetricsCollector:
         with self._lock:
             self._receive_rejections[reason] = self._receive_rejections.get(reason, 0) + 1
 
+    def record_request_admission_accepted(self) -> None:
+        """Record a socket admitted before worker submission."""
+        with self._lock:
+            self._request_admission_active += 1
+            self._request_admission_accepted += 1
+
+    def record_request_admission_released(self) -> None:
+        """Record an admitted socket leaving the worker budget."""
+        with self._lock:
+            self._request_admission_active = max(0, self._request_admission_active - 1)
+
+    def record_request_admission_rejected(self) -> None:
+        """Record an accepted socket rejected because the worker budget was full."""
+        with self._lock:
+            self._request_admission_rejected += 1
+
     def snapshot(self) -> dict[str, object]:
         """Return a read-only view of current metrics."""
         with self._lock:
@@ -75,6 +94,11 @@ class MetricsCollector:
                 "bytes_sent": self._bytes_sent,
                 "status_counts": dict(self._status_counts),
                 "receive_rejections": dict(self._receive_rejections),
+                "request_admission": {
+                    "active": self._request_admission_active,
+                    "accepted": self._request_admission_accepted,
+                    "rejected": self._request_admission_rejected,
+                },
                 "websocket": {
                     "active": self._websocket_active,
                     "rejected_admissions": self._websocket_rejected_admissions,

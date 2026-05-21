@@ -124,6 +124,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.max_websocket_connections = max_websocket_connections
         self.websocket_frame_idle_timeout = websocket_frame_idle_timeout
         self._websocket_slots = threading.BoundedSemaphore(max_websocket_connections)
+        self._request_admission_slots = threading.BoundedSemaphore(max_workers)
         self.running = False
         self.debug = debug
         self.open_browser = open_browser
@@ -291,6 +292,62 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Return current server metrics snapshot."""
         return self._metrics.snapshot()
 
+    def _try_acquire_request_admission(self, *, wait_timeout: float = 0.0) -> bool:
+        """Return True when a socket can be submitted to a worker."""
+        if wait_timeout > 0:
+            acquired = self._request_admission_slots.acquire(timeout=wait_timeout)
+        else:
+            acquired = self._request_admission_slots.acquire(blocking=False)
+        if not acquired:
+            self._metrics.record_request_admission_rejected()
+            logger.warning(
+                "Request admission rejected: active worker budget exhausted (max=%d)",
+                self.max_workers,
+            )
+            return False
+        self._metrics.record_request_admission_accepted()
+        return True
+
+    def _release_request_admission(self) -> None:
+        """Release a previously acquired request admission slot."""
+        self._request_admission_slots.release()
+        self._metrics.record_request_admission_released()
+
+    def _reject_overloaded_connection(self, client_socket: socket.socket) -> None:
+        """Reject a connection when no worker admission slot is available."""
+        if self.tls_enabled:
+            client_socket.close()
+            return
+
+        response = self._build_error_response(503, "Server busy")
+        try:
+            client_socket.sendall(response.build(keep_alive=False))
+        except Exception:
+            pass
+        finally:
+            client_socket.close()
+
+    def _handle_admitted_client(
+        self,
+        client_socket: socket.socket,
+        client_address: tuple[str, int],
+    ) -> None:
+        """Handle a client and always release its request admission slot."""
+        try:
+            self._handle_client(client_socket, client_address)
+        finally:
+            self._release_request_admission()
+
+    def _release_cancelled_admission(self, future: object, client_socket: socket.socket) -> None:
+        """Release admission for work canceled before the worker wrapper starts."""
+        cancelled = getattr(future, "cancelled", None)
+        if not callable(cancelled) or not cancelled():
+            return
+        try:
+            client_socket.close()
+        finally:
+            self._release_request_admission()
+
     def _try_acquire_websocket_slot(self) -> bool:
         """Return True if a WebSocket connection can enter the active set."""
         if not self._websocket_slots.acquire(blocking=False):
@@ -410,7 +467,29 @@ class ExperimentalHTTPServer(HandlerMixin):
                 try:
                     sock.settimeout(1.0)  # For graceful shutdown
                     client_socket, client_address = sock.accept()
-                    executor.submit(self._handle_client, client_socket, client_address)
+                    if not self._try_acquire_request_admission(
+                        wait_timeout=self.REQUEST_ADMISSION_WAIT_TIMEOUT
+                    ):
+                        self._reject_overloaded_connection(client_socket)
+                        continue
+                    try:
+                        future = executor.submit(
+                            self._handle_admitted_client,
+                            client_socket,
+                            client_address,
+                        )
+                        add_done_callback = getattr(future, "add_done_callback", None)
+                        if callable(add_done_callback):
+                            add_done_callback(
+                                lambda fut, sock=client_socket: self._release_cancelled_admission(
+                                    fut,
+                                    sock,
+                                )
+                            )
+                    except Exception:
+                        self._release_request_admission()
+                        client_socket.close()
+                        logger.exception("Failed to submit accepted client to worker pool")
                 except TimeoutError:
                     continue
         except KeyboardInterrupt:
@@ -437,6 +516,7 @@ class ExperimentalHTTPServer(HandlerMixin):
     KEEP_ALIVE_TIMEOUT: int = 15  # seconds idle between requests
     KEEP_ALIVE_MAX: int = 100  # max requests per connection
     WEBSOCKET_IDLE_TIMEOUT: float = 60.0  # seconds idle before a keepalive ping
+    REQUEST_ADMISSION_WAIT_TIMEOUT: float = 0.05  # seconds to reuse just-freed capacity
 
     def _should_keep_alive(self, request: HTTPRequest) -> bool:
         """Determine whether to keep the connection alive after this request."""

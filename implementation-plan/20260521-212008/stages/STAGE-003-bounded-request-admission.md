@@ -1,7 +1,7 @@
 # STAGE-003 - Add bounded request admission before worker submission
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -43,10 +43,10 @@ Prevent unbounded socket submission and preserve worker capacity under keep-aliv
 5. Record admission accepted/rejected/active metrics.
 
 ## Acceptance criteria
-- [ ] Accepted sockets cannot grow an unbounded executor queue.
-- [ ] Admission permits are released on every tested exit path.
-- [ ] WebSocket pressure cannot consume all default worker capacity.
-- [ ] Existing keep-alive and WebSocket tests still pass.
+- [x] Accepted sockets cannot grow an unbounded executor queue.
+- [x] Admission permits are released on every tested exit path.
+- [x] WebSocket pressure cannot consume all default worker capacity.
+- [x] Existing keep-alive and WebSocket tests still pass.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -64,4 +64,12 @@ Prevent unbounded socket submission and preserve worker capacity under keep-aliv
 - Rollback: Revert admission primitive and keep receive/header caps from STAGE-002.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T23:13:56+03:00.
+
+- Added bounded request admission before `ThreadPoolExecutor.submit` using a `BoundedSemaphore` sized to `max_workers`.
+- Overloaded cleartext connections receive a simple `503` response; TLS overloads are closed before handshake.
+- The accept loop briefly waits for just-freed admission capacity before declaring overload, preserving HTTP capacity after quick WebSocket rejections.
+- Admission permits are released on normal close, handler exceptions, TLS handshake failures, submit failures, and submitted future cancellation before worker execution.
+- Added `request_admission` metrics with `active`, `accepted`, and `rejected` counters.
+- Verification passed: targeted server admission/keep-alive/WebSocket tests, metrics tests, broader touched tests, compile check, static submit review, and `git diff --check`.
+- Report: `stage-reports/STAGE-003-20260521-230426.md`.
