@@ -65,3 +65,9 @@
 - Files changed: `src/handlers/advanced_upload.py`, `tests/test_handlers/test_handler_integration.py`, `API.md`, `docs/api.md`, `implementation-plan/20260505-205639/stages/STAGE-011-advanced-upload-json-guardrails.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-011-20260521-201720.md`
 - Verification: focused advanced-upload limit tests, handler/server regression suite, docs sync, Python compile, ruff, HMAC/decrypt static order check, diff whitespace check, and explorer review passed.
 - Report: `stage-reports/STAGE-011-20260521-201720.md`
+
+## 2026-05-21 20:39:40 MSK — STAGE-012
+- Status: CLOSED
+- Files changed: `src/http/utils.py`, `src/http/__init__.py`, `src/handlers/files.py`, `src/handlers/advanced_upload.py`, `src/notepad_service.py`, `tests/test_handlers/test_files.py`, `tests/test_handlers/test_notepad.py`, `implementation-plan/20260505-205639/stages/STAGE-012-atomic-user-data-writes.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-012-20260521-202814.md`
+- Verification: concurrent upload regressions, Notepad failure-injection regressions, required upload/live and Notepad/WebSocket suites, ruff, compileall, focused mypy, static same-directory temp review, and explorer review passed.
+- Report: `stage-reports/STAGE-012-20260521-202814.md`

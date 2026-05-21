@@ -1,7 +1,7 @@
 # STAGE-012 - Make user-data writes exclusive and atomic
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -74,4 +74,6 @@ Prevent concurrent upload overwrite/truncation and partial Notepad persistence b
 - Rollback: Revert helper and write-path changes; keep tests as skipped/xfail evidence until cross-platform approach is chosen.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- 2026-05-21 20:39:40 MSK: Added exclusive destination reservation for standard and advanced uploads via `xb` file creation with retrying unique suffixes.
+- 2026-05-21 20:39:40 MSK: Reworked Notepad persistence to write ciphertext and metadata through same-directory temporary files, replace final files atomically, and roll back to the prior pair on failed replacement.
+- 2026-05-21 20:39:40 MSK: Added deterministic concurrent upload regressions and Notepad metadata-failure regressions. Required persistence suites, `ruff`, compile checks, and focused `mypy` passed.

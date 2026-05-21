@@ -10,7 +10,7 @@ import logging
 import secrets
 from typing import Literal, TypedDict
 
-from ..http import HTTPRequest, HTTPResponse
+from ..http import HTTPRequest, HTTPResponse, write_unique_file_exclusive
 from ..security.crypto import decrypt, verify_hmac
 from .base import BaseHandler
 
@@ -382,26 +382,17 @@ class AdvancedUploadHandlersMixin(BaseHandler):
         if not safe_filename:
             safe_filename = f"upload_{secrets.token_hex(6)}"
 
-        file_path = self.upload_dir / safe_filename
-        if file_path.exists():
-            name_parts = safe_filename.rsplit(".", 1)
-            if len(name_parts) == 2:
-                safe_filename = f"{name_parts[0]}_{secrets.token_hex(4)}.{name_parts[1]}"
-            else:
-                safe_filename = f"{safe_filename}_{secrets.token_hex(4)}"
-            file_path = self.upload_dir / safe_filename
-
-        logger.debug(
-            "Advanced upload: %s, encrypted=%s, hmac=%s, transport=%s",
-            safe_filename,
-            bool(encryption),
-            bool(hmac_value),
-            transport,
-        )
-
         try:
-            with file_path.open("wb") as f:
-                f.write(file_data)
+            file_path = write_unique_file_exclusive(self.upload_dir / safe_filename, file_data)
+            safe_filename = file_path.name
+
+            logger.debug(
+                "Advanced upload: %s, encrypted=%s, hmac=%s, transport=%s",
+                safe_filename,
+                bool(encryption),
+                bool(hmac_value),
+                transport,
+            )
 
             response = HTTPResponse(200)
             result = {
@@ -414,7 +405,6 @@ class AdvancedUploadHandlersMixin(BaseHandler):
             return response
 
         except Exception as e:
-            file_path.unlink(missing_ok=True)
             logger.error(f"Advanced upload write failed: {e}")
             response = HTTPResponse(500)
             response.set_body(json.dumps({"ok": False}), "application/json")

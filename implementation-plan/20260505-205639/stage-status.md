@@ -13,5 +13,5 @@
 | STAGE-009 | CLOSED | MEDIUM | Guard Notepad plaintext title and dirty transitions | 2026-05-06 00:24:27 MSK | Added honest title-metadata copy, dirty switch/new guards, async save/load race protection, and browser smoke coverage; verification passed. | `stage-reports/STAGE-009-20260505-234732.md` |
 | STAGE-010 | CLOSED | MEDIUM | Make Notepad WebSocket saves idempotent | 2026-05-21 20:14:58 MSK | Added idempotent WS save acknowledgements, stable first-save note IDs, reconnect retry/fallback handling, docs, and targeted tests; verification passed. | `stage-reports/STAGE-010-20260521-200343.md` |
 | STAGE-011 | CLOSED | MEDIUM | Add advanced-upload JSON body guardrails | 2026-05-21 20:24:32 MSK | Added a pre-parse JSON body size guard, targeted oversized-body regression coverage, and synced API docs; verification passed. | `stage-reports/STAGE-011-20260521-201720.md` |
-| STAGE-012 | OPEN | MEDIUM | Make user-data writes exclusive and atomic | - | - | - |
+| STAGE-012 | CLOSED | MEDIUM | Make user-data writes exclusive and atomic | 2026-05-21 20:39:40 MSK | Added exclusive upload writes, atomic Notepad pair replacement with rollback, and targeted concurrency/failure-injection tests; verification passed. | `stage-reports/STAGE-012-20260521-202814.md` |
 | STAGE-013 | OPEN | MEDIUM | Resolve local-only pytest collection drift | - | - | - |

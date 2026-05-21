@@ -149,6 +149,19 @@ def get_safe_path(url_path: str, base_dir: Path, sandbox_dir: Path | None = None
     return resolve_descendant_path(clean_path, base_dir)
 
 
+def _filename_with_unique_suffix(file_path: Path) -> Path:
+    """Return *file_path* with a random suffix inserted before the extension."""
+    unique_suffix = secrets.token_hex(4)
+    name_parts = file_path.name.rsplit(".", 1)
+
+    if len(name_parts) == 2:
+        new_name = f"{name_parts[0]}_{unique_suffix}.{name_parts[1]}"
+    else:
+        new_name = f"{file_path.name}_{unique_suffix}"
+
+    return file_path.parent / new_name
+
+
 def make_unique_filename(file_path: Path) -> Path:
     """
     Generate unique filename if file already exists.
@@ -162,12 +175,36 @@ def make_unique_filename(file_path: Path) -> Path:
     if not file_path.exists():
         return file_path
 
-    unique_suffix = secrets.token_hex(4)
-    name_parts = file_path.name.rsplit(".", 1)
+    return _filename_with_unique_suffix(file_path)
 
-    if len(name_parts) == 2:
-        new_name = f"{name_parts[0]}_{unique_suffix}.{name_parts[1]}"
-    else:
-        new_name = f"{file_path.name}_{unique_suffix}"
 
-    return file_path.parent / new_name
+def write_unique_file_exclusive(
+    file_path: Path,
+    data: bytes,
+    *,
+    max_attempts: int = 64,
+) -> Path:
+    """Write *data* to a unique destination reserved with exclusive creation.
+
+    The first attempt uses *file_path*. Collisions retry with random suffixes,
+    but every candidate is opened with ``xb`` so concurrent writers cannot both
+    truncate or write the same destination.
+    """
+    candidate = file_path
+    attempts = max(1, max_attempts)
+
+    for _attempt in range(attempts):
+        created = False
+        try:
+            with candidate.open("xb") as output_file:
+                created = True
+                output_file.write(data)
+            return candidate
+        except FileExistsError:
+            candidate = _filename_with_unique_suffix(file_path)
+        except Exception:
+            if created:
+                candidate.unlink(missing_ok=True)
+            raise
+
+    raise FileExistsError(f"Could not reserve a unique filename for {file_path.name!r}")

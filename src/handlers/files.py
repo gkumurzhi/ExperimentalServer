@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
-from ..http import HTTPRequest, HTTPResponse, make_unique_filename, sanitize_filename
+from ..http import HTTPRequest, HTTPResponse, sanitize_filename, write_unique_file_exclusive
 from ..http.cors import resolve_preflight_allow_headers, resolve_preflight_allow_methods
 from .base import BaseHandler, get_package_resource
 
@@ -406,13 +406,9 @@ class FileHandlersMixin(BaseHandler):
             )
             return response
 
-        file_path = self.upload_dir / safe_filename
-        file_path = make_unique_filename(file_path)
-        safe_filename = file_path.name
-
         try:
-            with file_path.open("wb") as f:
-                f.write(request.body)
+            file_path = write_unique_file_exclusive(self.upload_dir / safe_filename, request.body)
+            safe_filename = file_path.name
 
             logger.debug(f"Upload: {safe_filename} ({len(request.body)} bytes)")
             response = HTTPResponse(201)
@@ -435,7 +431,6 @@ class FileHandlersMixin(BaseHandler):
             return response
 
         except Exception as e:
-            file_path.unlink(missing_ok=True)
             logger.error(f"Upload failed: {e}")
             response = HTTPResponse(500)
             response.set_header("X-Upload-Status", "error")

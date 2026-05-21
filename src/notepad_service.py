@@ -155,6 +155,139 @@ class NotepadService:
         self._notes_lock = notes_lock
         self._session_exists = session_exists
 
+    @staticmethod
+    def _write_note_temp_bytes(
+        notes_dir: Path,
+        note_id: str,
+        label: str,
+        data: bytes,
+        *,
+        max_attempts: int = 64,
+    ) -> Path:
+        """Write bytes to an exclusive same-directory temporary note file."""
+        attempts = max(1, max_attempts)
+        for _attempt in range(attempts):
+            temp_path = notes_dir / f".{note_id}.{label}.{secrets.token_hex(8)}.tmp"
+            created = False
+            try:
+                with temp_path.open("xb") as temp_file:
+                    created = True
+                    temp_file.write(data)
+                return temp_path
+            except FileExistsError:
+                continue
+            except Exception:
+                if created:
+                    temp_path.unlink(missing_ok=True)
+                raise
+
+        raise FileExistsError(f"Could not reserve a temporary note file for {note_id!r}")
+
+    @classmethod
+    def _copy_note_backup(
+        cls,
+        source_path: Path,
+        notes_dir: Path,
+        note_id: str,
+        label: str,
+    ) -> Path:
+        """Copy an existing note file to a same-directory backup temp file."""
+        return cls._write_note_temp_bytes(
+            notes_dir,
+            note_id,
+            f"{label}.backup",
+            source_path.read_bytes(),
+        )
+
+    @staticmethod
+    def _cleanup_note_temp_files(*paths: Path | None) -> None:
+        """Remove temporary note files, logging but not masking original failures."""
+        for path in paths:
+            if path is None:
+                continue
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as exc:
+                logger.warning("Failed to clean temporary note file %s: %s", path.name, exc)
+
+    @staticmethod
+    def _restore_note_pair(
+        enc_path: Path,
+        meta_path: Path,
+        enc_backup: Path | None,
+        meta_backup: Path | None,
+    ) -> bool:
+        """Restore or remove final note files after a failed pair replacement."""
+        restore_errors: list[str] = []
+
+        try:
+            if enc_backup is not None and enc_backup.exists():
+                enc_backup.replace(enc_path)
+            elif enc_path.exists():
+                enc_path.unlink()
+        except OSError as exc:
+            restore_errors.append(f"{enc_path.name}: {exc}")
+
+        try:
+            if meta_backup is not None and meta_backup.exists():
+                meta_backup.replace(meta_path)
+            elif meta_path.exists():
+                meta_path.unlink()
+        except OSError as exc:
+            restore_errors.append(f"{meta_path.name}: {exc}")
+
+        if restore_errors:
+            logger.error("Note save rollback incomplete: %s", "; ".join(restore_errors))
+            return False
+
+        return True
+
+    def _write_note_pair_atomic(
+        self,
+        note_id: str,
+        enc_path: Path,
+        meta_path: Path,
+        raw_data: bytes,
+        meta: dict[str, object],
+    ) -> None:
+        """Replace ciphertext and metadata through same-directory temp files."""
+        notes_dir = enc_path.parent
+        meta_data = json.dumps(meta, indent=2).encode("utf-8")
+        enc_tmp: Path | None = None
+        meta_tmp: Path | None = None
+        enc_backup: Path | None = None
+        meta_backup: Path | None = None
+        replacements_started = False
+        rollback_complete = True
+
+        try:
+            enc_tmp = self._write_note_temp_bytes(notes_dir, note_id, "enc", raw_data)
+            meta_tmp = self._write_note_temp_bytes(notes_dir, note_id, "meta", meta_data)
+
+            if enc_path.exists():
+                enc_backup = self._copy_note_backup(enc_path, notes_dir, note_id, "enc")
+            if meta_path.exists():
+                meta_backup = self._copy_note_backup(meta_path, notes_dir, note_id, "meta")
+
+            replacements_started = True
+            enc_tmp.replace(enc_path)
+            enc_tmp = None
+            meta_tmp.replace(meta_path)
+            meta_tmp = None
+        except Exception:
+            if replacements_started:
+                rollback_complete = self._restore_note_pair(
+                    enc_path,
+                    meta_path,
+                    enc_backup,
+                    meta_backup,
+                )
+            raise
+        finally:
+            self._cleanup_note_temp_files(enc_tmp, meta_tmp)
+            if rollback_complete:
+                self._cleanup_note_temp_files(enc_backup, meta_backup)
+
     def save_note(self, request: SaveNoteRequest) -> SaveNoteResult:
         """Create or update a note from normalized transport input."""
         title = request.title.strip()
@@ -207,8 +340,7 @@ class NotepadService:
 
         with self._notes_lock:
             try:
-                enc_path.write_bytes(raw_data)
-                meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+                self._write_note_pair_atomic(note_id, enc_path, meta_path, raw_data, meta)
             except Exception as exc:
                 logger.error("Note save failed: %s", exc)
                 raise NotepadServiceError(500, "Failed to save note") from exc

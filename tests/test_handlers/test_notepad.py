@@ -189,6 +189,64 @@ class TestNotepadSave:
         meta = json.loads(meta_path.read_text())
         assert meta["title"] == "Disk Test"
 
+    def test_failed_update_keeps_existing_ciphertext_metadata_pair(self, server, monkeypatch):
+        body = _make_note_payload("Original", b"old encrypted")
+        resp = server.handle_note(make_request("NOTE", "/notes", body=body))
+        note_id = json.loads(resp.body)["id"]
+        enc_path = server.notes_dir / f"{note_id}.enc"
+        meta_path = server.notes_dir / f"{note_id}.meta.json"
+        original_meta = meta_path.read_text(encoding="utf-8")
+
+        original_replace = Path.replace
+
+        def fail_new_metadata_replace(self: Path, target: Path) -> Path:
+            if Path(target) == meta_path and ".meta." in self.name and ".backup." not in self.name:
+                raise OSError("injected metadata replacement failure")
+            return original_replace(self, target)
+
+        monkeypatch.setattr(Path, "replace", fail_new_metadata_replace)
+
+        update = _make_note_payload("Updated", b"new encrypted", note_id=note_id)
+        failed = server.handle_note(make_request("NOTE", "/notes", body=update))
+
+        assert failed.status_code == 500
+        assert enc_path.read_bytes() == b"old encrypted"
+        assert meta_path.read_text(encoding="utf-8") == original_meta
+        assert sorted(path.name for path in server.notes_dir.iterdir()) == [
+            f"{note_id}.enc",
+            f"{note_id}.meta.json",
+        ]
+
+    def test_failed_create_does_not_leave_ciphertext_without_metadata(
+        self,
+        server,
+        monkeypatch,
+    ):
+        note_id = "d" * 32
+        enc_path = server.notes_dir / f"{note_id}.enc"
+        meta_path = server.notes_dir / f"{note_id}.meta.json"
+        original_replace = Path.replace
+
+        def fail_new_metadata_replace(self: Path, target: Path) -> Path:
+            if Path(target) == meta_path and ".meta." in self.name:
+                raise OSError("injected metadata replacement failure")
+            return original_replace(self, target)
+
+        monkeypatch.setattr(Path, "replace", fail_new_metadata_replace)
+
+        body = _make_note_payload(
+            "New Note",
+            b"new encrypted",
+            note_id=note_id,
+            create_if_missing=True,
+        )
+        failed = server.handle_note(make_request("NOTE", "/notes", body=body))
+
+        assert failed.status_code == 500
+        assert not enc_path.exists()
+        assert not meta_path.exists()
+        assert list(server.notes_dir.iterdir()) == []
+
 
 # ── List tests ─────────────────────────────────────────────────────
 
