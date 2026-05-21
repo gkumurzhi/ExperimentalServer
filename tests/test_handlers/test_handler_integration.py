@@ -15,6 +15,15 @@ from src.http import HTTPRequest
 from tests.conftest import make_request
 
 
+def _parse_csp(header: str) -> dict[str, list[str]]:
+    directives: dict[str, list[str]] = {}
+    for directive in header.split(";"):
+        tokens = directive.strip().split()
+        if tokens:
+            directives[tokens[0]] = tokens[1:]
+    return directives
+
+
 def _has_cryptography() -> bool:
     try:
         from src.security.crypto import HAS_CRYPTOGRAPHY
@@ -144,6 +153,32 @@ class TestHandleGet:
         assert resp.status_code == 200
         assert resp.headers["Content-Type"] == "application/octet-stream"
         assert resp.headers["Content-Disposition"] == 'attachment; filename="evil.html"'
+        assert "Content-Security-Policy" not in resp.headers
+
+    def test_get_index_csp_blocks_inline_script_and_documents_style_allowance(self, server):
+        req = make_request("GET", "/")
+        resp = server.handle_get(req)
+
+        csp = resp.headers["Content-Security-Policy"]
+        directives = _parse_csp(csp)
+
+        assert directives["default-src"] == ["'self'"]
+        assert directives["script-src"] == ["'self'"]
+        assert directives["style-src"] == ["'self'", "'unsafe-inline'"]
+        assert directives["img-src"] == ["'self'", "data:"]
+        assert directives["connect-src"] == ["'self'", "ws:", "wss:"]
+        assert directives["base-uri"] == ["'self'"]
+        assert directives["object-src"] == ["'none'"]
+        assert directives["frame-ancestors"] == ["'none'"]
+        assert directives["form-action"] == ["'self'"]
+        assert "'unsafe-inline'" not in directives["script-src"]
+
+    def test_get_static_ui_script_does_not_emit_html_csp(self, server):
+        req = make_request("GET", "/static/ui/app.js")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.stream_path is not None
         assert "Content-Security-Policy" not in resp.headers
 
     def test_get_upload_in_sandbox(self, sandbox_server, upload_dir):

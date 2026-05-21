@@ -1,7 +1,7 @@
 # STAGE-007 - Harden UI validation and CSP release gates
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -43,10 +43,10 @@ Make UI asset breakage and CSP regressions fail fast before release, then tighte
 5. Tighten CSP only for proven-safe areas; otherwise create explicit follow-up backlog.
 
 ## Acceptance criteria
-- [ ] Broken bundled JavaScript fails a fast local/CI check.
-- [ ] Package-data UI assets are validated outside source-tree-only assumptions.
-- [ ] Browser smoke captures page errors and unexpected console errors.
-- [ ] CSP behavior is tested and documented; any remaining inline allowance has an explicit reason.
+- [x] Broken bundled JavaScript fails a fast local/CI check.
+- [x] Package-data UI assets are validated outside source-tree-only assumptions.
+- [x] Browser smoke captures page errors and unexpected console errors.
+- [x] CSP behavior is tested and documented; any remaining inline allowance has an explicit reason.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,10 @@ Make UI asset breakage and CSP regressions fail fast before release, then tighte
 - Rollback: Start with an allowlist for known benign console output and shrink it over time.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-22T00:11:19+03:00. Added `tools/check_static_ui_assets.py`
+to validate source/importlib/wheel UI package data and run `node --check` over
+bundled JavaScript. Wired the gate into CI release smoke and local pre-commit,
+and made browser smoke install pageerror/console-error capture before initial
+navigation. CSP now blocks inline scripts and documents the remaining
+`style-src 'unsafe-inline'` allowance for current progress widgets. Verification
+passed; see `stage-reports/STAGE-007-20260521-235801.md`.

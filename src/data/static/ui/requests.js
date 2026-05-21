@@ -1574,7 +1574,7 @@ function createRequestPreviewModel(method, path, scenario) {
     return {
         method,
         path,
-        headers: { ...(scenario.headers || {}) },
+        headers: { ...(scenario.previewHeaders || scenario.headers || {}) },
         body: normalizePreviewBody(scenario.body),
         result: null,
     };
@@ -1739,7 +1739,7 @@ async function buildRequestScenario(method, typedPath) {
         case 'OPTIONS':
             return {
                 path: '/',
-                headers: { 'Access-Control-Request-Method': 'GET' },
+                previewHeaders: { 'Access-Control-Request-Method': 'GET' },
                 pathInputBeforeRequest: '/',
             };
         case 'NOTE':

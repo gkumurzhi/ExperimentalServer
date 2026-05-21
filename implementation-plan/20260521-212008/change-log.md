@@ -35,3 +35,9 @@
 - Files changed: `src/metrics.py`, `src/server.py`, `src/request_pipeline.py`, `tests/test_metrics.py`, `tests/test_server_methods.py`, `tests/test_request_pipeline.py`, `tests/test_handlers/test_handler_integration.py`, `tests/test_server_live.py`, `docs/api.md`, active plan status/report artifacts.
 - Verification: metrics `TestMetrics`, server `metrics or worker or handle_client` selector, request pipeline tests, live admission/WebSocket smoke, `py_compile`, Ruff lint/format, and `git diff --check` passed. `mypy` was unavailable in the local environment.
 - Report: `stage-reports/STAGE-006-20260521-234311.md`
+
+## 2026-05-22T00:11:19+03:00 - STAGE-007
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `src/data/static/ui/requests.js`, `src/handlers/files.py`, `tests/test_handlers/test_handler_integration.py`, `tests/test_server_routing.py`, `tools/browser_smoke.playwright.js`, `tools/browser_smoke.py`, `tools/check_static_ui_assets.py`, active plan status/report artifacts.
+- Verification: static UI asset gate, wheel package-data smoke, browser smoke, targeted handler/routing tests, Ruff lint/format, py_compile, pre-commit UI hooks, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-007-20260521-235801.md`

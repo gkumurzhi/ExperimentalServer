@@ -166,6 +166,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev,lint,test]"
 
+      - name: Static UI release gates
+        run: |
+          set -euo pipefail
+          wheel_dir="$(mktemp -d)"
+          python -m pip wheel . --no-deps --wheel-dir "${wheel_dir}"
+          python tools/check_static_ui_assets.py --wheel "${wheel_dir}"/exphttp-*.whl
+          node --check tools/browser_smoke.playwright.js
+
       - name: Install Chromium for browser smoke
         run: |
           npx --yes --package @playwright/cli@0.1.9 playwright-cli install-browser chromium --with-deps

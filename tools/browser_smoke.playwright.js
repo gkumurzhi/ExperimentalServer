@@ -1,10 +1,57 @@
 async (page) => {
+  const baseUrl = __EXPHTTP_BASE_URL__;
   const unavailableUrl = __EXPHTTP_UNAVAILABLE_URL__;
   const uploadFilePath = __EXPHTTP_UPLOAD_FILE__;
   const opsecUploadUrlBoundaryFilePath = __EXPHTTP_OPSEC_UPLOAD_URL_BOUNDARY_FILE__;
   const opsecUploadFilePath = __EXPHTTP_OPSEC_UPLOAD_FILE__;
   const opsecUploadBoundaryFilePath = __EXPHTTP_OPSEC_UPLOAD_BOUNDARY_FILE__;
   const opsecUploadLargeFilePath = __EXPHTTP_OPSEC_UPLOAD_LARGE_FILE__;
+  const browserIssues = [];
+
+  function recordBrowserIssue(kind, message, location = {}) {
+    browserIssues.push({
+      kind,
+      message: String(message || ""),
+      url: location.url || "",
+      lineNumber: location.lineNumber || 0,
+      columnNumber: location.columnNumber || 0,
+    });
+  }
+
+  page.on("pageerror", (error) => {
+    recordBrowserIssue("pageerror", error.message, { url: page.url() });
+  });
+
+  page.on("console", (message) => {
+    if (message.type() !== "error") {
+      return;
+    }
+    recordBrowserIssue("console", message.text(), message.location());
+  });
+
+  function isExpectedConsoleIssue(issue) {
+    if (
+      issue.kind !== "console" ||
+      !issue.message.includes("Failed to load resource: the server responded with a status of 404 (Not Found)")
+    ) {
+      return false;
+    }
+
+    const issueUrl = String(issue.url || "");
+    return (
+      issueUrl.includes("/missing-browser-smoke.txt") ||
+      /\/uploads\/request-panel-[a-z-]+\.txt(?:[?#]|$)/.test(issueUrl)
+    );
+  }
+
+  async function assertNoBrowserIssues(label) {
+    await page.waitForTimeout(100);
+    const unexpectedIssues = browserIssues.filter((issue) => !isExpectedConsoleIssue(issue));
+    if (unexpectedIssues.length === 0) {
+      return;
+    }
+    throw new Error(`${label} browser issues: ${JSON.stringify(unexpectedIssues.slice(0, 10))}`);
+  }
 
   async function waitForSpaReady() {
     await page.waitForLoadState("domcontentloaded");
@@ -2941,10 +2988,12 @@ async (page) => {
     };
   }
 
+  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await waitForSpaReady();
   await installClipboardMock();
   await waitForAdvancedUploadCapability(true);
   const happyPath = await runHappyPath();
+  await assertNoBrowserIssues("happy path");
 
   if (!unavailableUrl) {
     return { happyPath };
@@ -2954,6 +3003,7 @@ async (page) => {
   await waitForSpaReady();
   await waitForAdvancedUploadCapability(true);
   const unavailablePath = await runUnavailablePath();
+  await assertNoBrowserIssues("unavailable path");
 
   return {
     happyPath,

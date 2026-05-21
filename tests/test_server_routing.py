@@ -19,21 +19,25 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 fallback
     import tomli as tomllib
 
 
-class ScriptSrcParser(HTMLParser):
-    """Collect script src attributes from bundled HTML."""
+class LocalStaticAssetParser(HTMLParser):
+    """Collect local static script and stylesheet references from bundled HTML."""
 
     def __init__(self):
         super().__init__()
-        self.script_srcs: list[str] = []
+        self.asset_paths: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag != "script":
-            return
-
         attr_map = dict(attrs)
-        src = attr_map.get("src")
-        if src:
-            self.script_srcs.append(src)
+        url: str | None = None
+        if tag == "script":
+            url = attr_map.get("src")
+        elif tag == "link":
+            rel_tokens = set((attr_map.get("rel") or "").lower().split())
+            if "stylesheet" in rel_tokens:
+                url = attr_map.get("href")
+
+        if url and url.startswith("/") and not url.startswith("//"):
+            self.asset_paths.append(url.lstrip("/"))
 
 
 class StubServer(HandlerMixin):
@@ -77,17 +81,13 @@ def _make_request(
     return HTTPRequest(raw)
 
 
-def _index_local_script_resource_paths() -> list[str]:
+def _index_local_static_resource_paths() -> list[str]:
     index_path = get_package_resource("index.html")
     assert index_path is not None
 
-    parser = ScriptSrcParser()
+    parser = LocalStaticAssetParser()
     parser.feed(index_path.read_text(encoding="utf-8"))
-    return [
-        src.lstrip("/")
-        for src in parser.script_srcs
-        if src.startswith("/") and not src.startswith("//")
-    ]
+    return list(dict.fromkeys(parser.asset_paths))
 
 
 def _src_package_data_patterns() -> list[str]:
@@ -195,7 +195,7 @@ class TestStaticResourceRouting:
     def test_index_local_script_references_resolve(self):
         missing = [
             resource_path
-            for resource_path in _index_local_script_resource_paths()
+            for resource_path in _index_local_static_resource_paths()
             if get_package_resource(resource_path) is None
         ]
 
@@ -205,7 +205,7 @@ class TestStaticResourceRouting:
         patterns = _src_package_data_patterns()
         missing = [
             f"data/{resource_path}"
-            for resource_path in _index_local_script_resource_paths()
+            for resource_path in _index_local_static_resource_paths()
             if not any(
                 fnmatch.fnmatchcase(f"data/{resource_path}", pattern) for pattern in patterns
             )
@@ -219,7 +219,7 @@ class TestStaticResourceRouting:
             pytest.skip("Git tracking check requires a repository checkout")
 
         missing = []
-        for resource_path in _index_local_script_resource_paths():
+        for resource_path in _index_local_static_resource_paths():
             source_path = Path("src/data") / resource_path
             result = subprocess.run(
                 ["git", "ls-files", "--error-unmatch", "--", str(source_path)],
@@ -322,4 +322,12 @@ class TestResponseHeaders:
     def test_csp_on_html(self, server):
         req = _make_request("GET", "/")
         resp = server.handle_get(req)
-        assert "Content-Security-Policy" in resp.headers
+        csp = resp.headers["Content-Security-Policy"]
+
+        assert "script-src 'self'" in csp
+        assert "style-src 'self' 'unsafe-inline'" in csp
+        assert "connect-src 'self' ws: wss:" in csp
+        assert "base-uri 'self'" in csp
+        assert "object-src 'none'" in csp
+        assert "frame-ancestors 'none'" in csp
+        assert "script-src 'self' 'unsafe-inline'" not in csp

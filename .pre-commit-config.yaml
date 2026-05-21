@@ -29,3 +29,18 @@ repos:
           - PyOpenSSL==26.2.0
         files: ^src/
         args: [--strict]
+
+  - repo: local
+    hooks:
+      - id: static-ui-release-gates
+        name: static UI release gates
+        entry: python tools/check_static_ui_assets.py
+        language: system
+        pass_filenames: false
+        files: ^(src/data/index\.html|src/data/static/.*|pyproject\.toml|tools/check_static_ui_assets\.py)$
+      - id: browser-smoke-js-syntax
+        name: browser smoke JS syntax
+        entry: node --check tools/browser_smoke.playwright.js
+        language: system
+        pass_filenames: false
+        files: ^tools/browser_smoke\.playwright\.js$

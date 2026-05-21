@@ -8,5 +8,5 @@
 | STAGE-004 | CLOSED | HIGH | Add Notepad payload size limits | 2026-05-21T23:27:27+03:00 | Shared 1 MiB Notepad encrypted-blob limit added for HTTP and WS saves; targeted tests, docs sync, compiler, Ruff, and diff checks passed. | `stage-reports/STAGE-004-20260521-231952.md` |
 | STAGE-005 | CLOSED | HIGH | Add browser-origin guardrails for mutating HTTP requests | 2026-05-21T23:41:11+03:00 | Browser-origin mutation guard added with same-origin/CORS/non-browser compatibility tests and docs; verification passed. | `stage-reports/STAGE-005-20260521-233008.md` |
 | STAGE-006 | CLOSED | MEDIUM | Expand operational metrics and worker exception visibility | 2026-05-21T23:55:01+03:00 | Additive operational metrics now expose active connections, receive/timeout/latency/WebSocket pressure, and worker exception visibility; targeted verification passed. | `stage-reports/STAGE-006-20260521-234311.md` |
-| STAGE-007 | OPEN | MEDIUM | Harden UI validation and CSP release gates | - | - | - |
+| STAGE-007 | CLOSED | MEDIUM | Harden UI validation and CSP release gates | 2026-05-22T00:11:19+03:00 | Static UI package-data/JS release gates, browser page/console error capture, and tested CSP tightening landed; verification passed. | `stage-reports/STAGE-007-20260521-235801.md` |
 | STAGE-008 | OPEN | MEDIUM | Refresh operator docs and semantic contract guards | - | - | - |

@@ -19,6 +19,20 @@ from .base import BaseHandler, get_package_resource
 
 logger = logging.getLogger("httpserver")
 
+HTML_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    # The current UI still renders upload/download progress with inline style
+    # attributes. Keep this explicit until those widgets are moved to CSS classes.
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "connect-src 'self' ws: wss:; "
+    "base-uri 'self'; "
+    "object-src 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'"
+)
+
 
 class FileHandlersMixin(BaseHandler):
     """Mixin with file operation handlers."""
@@ -118,12 +132,7 @@ class FileHandlersMixin(BaseHandler):
 
         # CSP header for HTML responses
         if content_type.startswith("text/html"):
-            response.set_header(
-                "Content-Security-Policy",
-                "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
-                "connect-src 'self' ws: wss:",
-            )
+            response.set_header("Content-Security-Policy", HTML_CONTENT_SECURITY_POLICY)
 
         return response
 

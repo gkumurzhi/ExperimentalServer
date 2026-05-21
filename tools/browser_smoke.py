@@ -15,7 +15,10 @@ import threading
 import time
 from pathlib import Path
 
-from src.server import ExperimentalHTTPServer
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
+from src.server import ExperimentalHTTPServer  # noqa: E402
 
 PLAYWRIGHT_CLI_PACKAGE = "@playwright/cli@0.1.9"
 
@@ -130,8 +133,7 @@ def _parse_playwright_json(output: str) -> dict[str, object]:
 
 def run_browser_smoke() -> dict[str, object]:
     """Start temporary servers and drive the SPA through browser smoke flows."""
-    repo_root = Path(__file__).resolve().parents[1]
-    smoke_script = repo_root / "tools" / "browser_smoke.playwright.js"
+    smoke_script = REPO_ROOT / "tools" / "browser_smoke.playwright.js"
     playwright = _playwright_command()
     session = f"exphttp-smoke-{os.getpid()}-{int(time.time())}"
 
@@ -167,6 +169,11 @@ def run_browser_smoke() -> dict[str, object]:
             url = f"http://127.0.0.1:{live.port}/"
             unavailable_url = f"http://127.0.0.1:{unavailable_live.port}/"
             smoke_source = smoke_script.read_text(encoding="utf-8").replace(
+                "__EXPHTTP_BASE_URL__",
+                json.dumps(url),
+                1,
+            )
+            smoke_source = smoke_source.replace(
                 "__EXPHTTP_UNAVAILABLE_URL__",
                 json.dumps(unavailable_url),
                 1,
@@ -201,10 +208,10 @@ def run_browser_smoke() -> dict[str, object]:
                 playwright,
                 session,
                 "open",
-                url,
+                "about:blank",
                 "--config",
                 str(config_path),
-                cwd=work_dir,
+                cwd=REPO_ROOT,
             )
             raw_output = _run_playwright(
                 playwright,
@@ -213,12 +220,12 @@ def run_browser_smoke() -> dict[str, object]:
                 "run-code",
                 "--filename",
                 str(local_smoke_script),
-                cwd=work_dir,
+                cwd=REPO_ROOT,
             )
             return _parse_playwright_json(raw_output)
         finally:
             try:
-                _run_playwright(playwright, session, "close", cwd=work_dir)
+                _run_playwright(playwright, session, "close", cwd=REPO_ROOT)
             except Exception:
                 pass
             unavailable_live.stop()
