@@ -265,6 +265,76 @@ class TestWSSave:
         assert msg["success"] is True
         assert len(msg["id"]) == 32
 
+    def test_save_echoes_op_id_and_client_note_id_retry_is_idempotent(
+        self,
+        ws_server,
+        mock_socket,
+    ):
+        note_id = "c" * 32
+        op_id = "save-op-1"
+        data_b64 = base64.b64encode(b"first websocket blob").decode()
+        payload = json.dumps(
+            {
+                "type": "save",
+                "opId": op_id,
+                "noteId": note_id,
+                "createIfMissing": True,
+                "title": "WS Client ID",
+                "data": data_b64,
+            }
+        ).encode()
+
+        ws_server._handle_ws_message(mock_socket, payload)
+        msg = mock_socket.last_json
+        assert msg["type"] == "saved"
+        assert msg["opId"] == op_id
+        assert msg["success"] is True
+        assert msg["id"] == note_id
+
+        retry_payload = json.dumps(
+            {
+                "type": "save",
+                "opId": op_id,
+                "noteId": note_id,
+                "createIfMissing": True,
+                "title": "WS Client ID Retry",
+                "data": base64.b64encode(b"retry websocket blob").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, retry_payload)
+        retry_msg = mock_socket.last_json
+        assert retry_msg["type"] == "saved"
+        assert retry_msg["opId"] == op_id
+        assert retry_msg["success"] is True
+        assert retry_msg["id"] == note_id
+        assert retry_msg["title"] == "WS Client ID Retry"
+
+        enc_files = sorted(path.name for path in ws_server.notes_dir.glob("*.enc"))
+        assert enc_files == [f"{note_id}.enc"]
+        assert (ws_server.notes_dir / f"{note_id}.enc").read_bytes() == b"retry websocket blob"
+
+    def test_save_nonexistent_note_id_without_create_if_missing_returns_404(
+        self,
+        ws_server,
+        mock_socket,
+    ):
+        payload = json.dumps(
+            {
+                "type": "save",
+                "opId": "update-op-1",
+                "noteId": "d" * 32,
+                "title": "Missing",
+                "data": base64.b64encode(b"missing").decode(),
+            }
+        ).encode()
+
+        ws_server._handle_ws_message(mock_socket, payload)
+        msg = mock_socket.last_json
+        assert msg["type"] == "saved"
+        assert msg["opId"] == "update-op-1"
+        assert msg["status"] == 404
+        assert "Note not found" in msg["error"]
+
     def test_save_then_list_shows_note(self, ws_server, mock_socket):
         data_b64 = base64.b64encode(b"data").decode()
         save_payload = json.dumps(

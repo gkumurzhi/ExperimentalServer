@@ -35,6 +35,7 @@ class SaveNoteRequest:
     data_b64: str
     note_id: str = ""
     session_id: str | None = None
+    create_if_missing: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,7 +176,10 @@ class NotepadService:
         if note_id:
             _notes_dir, enc_path, meta_path = self._resolve_note_paths(note_id)
             if not enc_path.exists():
-                raise NotepadServiceError(404, "Note not found for update")
+                if request.create_if_missing:
+                    is_new = True
+                else:
+                    raise NotepadServiceError(404, "Note not found for update")
         else:
             note_id = secrets.token_hex(16)
             is_new = True

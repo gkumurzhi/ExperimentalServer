@@ -418,7 +418,7 @@ NOTE /notes HTTP/1.1
 
 ### NOTE /notes — save note
 
-Send a JSON body to create or update a note. `data` must be a base64-encoded AES-256-GCM ciphertext (encrypted client-side). Include `id` to update an existing note; omit to create a new one. The encrypted blob is the source of truth, so malformed metadata sidecars are ignored or rebuilt as needed.
+Send a JSON body to create or update a note. `data` must be a base64-encoded AES-256-GCM ciphertext (encrypted client-side). Include `id` to update an existing note; omit to create a new one. Clients that need idempotent create/retry behavior can send a valid hex `id` with `createIfMissing: true`; the server creates that note when missing and updates the same note on retry. Without `createIfMissing`, updating a missing `id` still returns `404`. The encrypted blob is the source of truth, so malformed metadata sidecars are ignored or rebuilt as needed.
 
 **Request:**
 ```
@@ -429,7 +429,8 @@ X-Session-Id: <sessionId>   (optional, audit-only; ignored when expired)
 {
   "title": "My Note",
   "data": "<base64-encoded encrypted blob>",
-  "id": "<32-char hex>"   (omit for new note)
+  "id": "<32-char hex>",        (omit for server-generated new note)
+  "createIfMissing": true       (optional; only meaningful with id)
 }
 ```
 
@@ -558,7 +559,7 @@ as wildcard `*`.
 
 | `type` | Fields | Description |
 |--------|--------|-------------|
-| `save` | `title`, `data`, `noteId?`, `sessionId?` | Save a note (`sessionId` is optional audit-only state) |
+| `save` | `title`, `data`, `noteId?`, `createIfMissing?`, `sessionId?`, `opId?` | Save a note (`sessionId` is optional audit-only state; `opId` is echoed for acknowledgement correlation) |
 | `load` | `id` | Load a note by ID |
 | `list` | — | List all notes |
 | `delete` | `id` | Delete a note |
@@ -568,7 +569,7 @@ as wildcard `*`.
 
 | `type` | Fields | Description |
 |--------|--------|-------------|
-| `saved` | `success`, `id`, `title`, ... | Note saved |
+| `saved` | `success`, `id`, `title`, `opId?`, ... | Note saved |
 | `loaded` | `id`, `title`, `data`, ... | Note loaded |
 | `list` | `notes`, `count` | Note list |
 | `deleted` | `success`, `id` | Note deleted |
@@ -579,6 +580,12 @@ Domain errors for `save`, `load`, `delete`, and `clear` can keep the operation
 response type (`saved`, `loaded`, `deleted`, or `cleared`) while adding
 `error` and `status`. Invalid JSON, non-object messages, unknown message types,
 and invalid note IDs use `{"type": "error", "error": "..."}`.
+
+For idempotent WebSocket saves, send `opId` so the client can correlate the
+`saved` acknowledgement and send a stable hex `noteId` with
+`createIfMissing: true` for first saves that may be retried after reconnect or
+HTTP fallback. Retrying the same `noteId` updates the original note instead of
+creating a duplicate.
 
 ---
 

@@ -43,6 +43,7 @@ def _make_note_payload(
     title: str = "Test Note",
     data: bytes = b"encrypted blob",
     note_id: str = "",
+    create_if_missing: bool = False,
 ) -> bytes:
     """Build a NOTE save payload."""
     payload: dict = {
@@ -51,6 +52,8 @@ def _make_note_payload(
     }
     if note_id:
         payload["id"] = note_id
+    if create_if_missing:
+        payload["createIfMissing"] = True
     return json.dumps(payload).encode()
 
 
@@ -89,6 +92,36 @@ class TestNotepadSave:
         req = make_request("NOTE", "/notes", body=body)
         resp = server.handle_note(req)
         assert resp.status_code == 404
+
+    def test_create_if_missing_with_client_note_id_is_idempotent(self, server):
+        note_id = "b" * 32
+        body = _make_note_payload(
+            "Client ID",
+            b"first ciphertext",
+            note_id=note_id,
+            create_if_missing=True,
+        )
+        resp = server.handle_note(make_request("NOTE", "/notes", body=body))
+        assert resp.status_code == 201
+        data = json.loads(resp.body)
+        assert data["success"] is True
+        assert data["id"] == note_id
+
+        retry_body = _make_note_payload(
+            "Client ID Retry",
+            b"retry ciphertext",
+            note_id=note_id,
+            create_if_missing=True,
+        )
+        retry_resp = server.handle_note(make_request("NOTE", "/notes", body=retry_body))
+        assert retry_resp.status_code == 200
+        retry_data = json.loads(retry_resp.body)
+        assert retry_data["id"] == note_id
+        assert retry_data["title"] == "Client ID Retry"
+
+        notes_dir = server.notes_dir
+        assert [path.name for path in notes_dir.glob("*.enc")] == [f"{note_id}.enc"]
+        assert (notes_dir / f"{note_id}.enc").read_bytes() == b"retry ciphertext"
 
     def test_save_empty_body_returns_400(self, server):
         req = make_request("NOTE", "/notes")

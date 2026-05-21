@@ -1,7 +1,7 @@
 # STAGE-010 - Make Notepad WebSocket saves idempotent
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -78,4 +78,4 @@ Make WebSocket Notepad save/reconnect behavior robust against stale close events
 - Rollback: Keep backward-compatible handling for old messages or revert protocol changes and use client-generated note IDs only.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21 20:14:58 MSK. Added idempotent first-save semantics with client-generated note IDs and `createIfMissing`, echoed WS `opId` acknowledgements, generation guards for stale socket handlers, pending-save retry on reconnect, and HTTP fallback for unacknowledged saves. Added WS/HTTP contract tests, browser lost-ack/reconnect smoke coverage, and updated API docs.

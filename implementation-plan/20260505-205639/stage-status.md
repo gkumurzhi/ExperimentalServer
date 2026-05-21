@@ -11,7 +11,7 @@
 | STAGE-007 | CLOSED | MEDIUM | Align pre-commit and dependency completeness checks | 2026-05-05 23:29:51 MSK | Aligned pre-commit mypy deps with constrained ACME/crypto pins, added CI/security installed dependency completeness checks, and verified strict pinned constraints audit. | `stage-reports/STAGE-007-20260505-231228.md` |
 | STAGE-008 | CLOSED | MEDIUM | Add Docker TLS and runtime import smoke | 2026-05-05 23:44:54 MSK | Added built-image dependency import, dynamic-port HTTP/TLS Docker PING smoke, proxy bypass, and TLS healthcheck override; verification passed. | `stage-reports/STAGE-008-20260505-233412.md` |
 | STAGE-009 | CLOSED | MEDIUM | Guard Notepad plaintext title and dirty transitions | 2026-05-06 00:24:27 MSK | Added honest title-metadata copy, dirty switch/new guards, async save/load race protection, and browser smoke coverage; verification passed. | `stage-reports/STAGE-009-20260505-234732.md` |
-| STAGE-010 | OPEN | MEDIUM | Make Notepad WebSocket saves idempotent | - | - | - |
+| STAGE-010 | CLOSED | MEDIUM | Make Notepad WebSocket saves idempotent | 2026-05-21 20:14:58 MSK | Added idempotent WS save acknowledgements, stable first-save note IDs, reconnect retry/fallback handling, docs, and targeted tests; verification passed. | `stage-reports/STAGE-010-20260521-200343.md` |
 | STAGE-011 | OPEN | MEDIUM | Add advanced-upload JSON body guardrails | - | - | - |
 | STAGE-012 | OPEN | MEDIUM | Make user-data writes exclusive and atomic | - | - | - |
 | STAGE-013 | OPEN | MEDIUM | Resolve local-only pytest collection drift | - | - | - |

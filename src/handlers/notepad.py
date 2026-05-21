@@ -218,6 +218,7 @@ class NotepadHandlersMixin(BaseHandler):
         title_value = payload.get("title")
         data_b64 = payload.get("data")
         note_id_value = payload.get("id", "")
+        create_if_missing = payload.get("createIfMissing") is True
         if not isinstance(note_id_value, str):
             return self._bad_request("Invalid note ID format")
         save_request = SaveNoteRequest(
@@ -225,6 +226,7 @@ class NotepadHandlersMixin(BaseHandler):
             data_b64=data_b64 if isinstance(data_b64, str) else "",
             note_id=note_id_value,
             session_id=request.get_header("x-session-id") or None,
+            create_if_missing=create_if_missing,
         )
         try:
             result = self._get_notepad_service().save_note(save_request)
@@ -336,16 +338,20 @@ class NotepadHandlersMixin(BaseHandler):
         data = msg.get("data")
         note_id = msg.get("noteId")
         session_id = msg.get("sessionId")
+        op_id = msg.get("opId")
         save_request = SaveNoteRequest(
             title=title if isinstance(title, str) else "",
             data_b64=data if isinstance(data, str) else "",
             note_id=note_id if isinstance(note_id, str) else "",
             session_id=session_id if isinstance(session_id, str) and session_id else None,
+            create_if_missing=msg.get("createIfMissing") is True,
         )
         result = self._ws_run_note_operation(
             "saved",
             lambda: self._get_notepad_service().save_note(save_request),
         )
+        if isinstance(op_id, str) and op_id:
+            result["opId"] = op_id
         self._ws_send_json(sock, result)
 
     def _ws_handle_load(self, sock: socket.socket, msg: dict[str, object]) -> None:

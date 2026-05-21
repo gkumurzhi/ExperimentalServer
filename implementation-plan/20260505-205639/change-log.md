@@ -53,3 +53,9 @@
 - Files changed: `src/data/static/ui/notepad.js`, `src/data/static/ui/core.js`, `src/data/index.html`, `src/data/static/ui/features.css`, `tools/browser_smoke.playwright.js`, `tests/test_ui_inspector_redaction.py`, `implementation-plan/20260505-205639/stages/STAGE-009-notepad-title-dirty-guard.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-009-20260505-234732.md`
 - Verification: JS syntax, diff whitespace, targeted Notepad/redaction tests, full pytest suite, focused Notepad browser probe, full browser smoke with dirty-transition and stale-load coverage, scoped ruff, explorer review, QA review, frontend review, and correctness review passed.
 - Report: `stage-reports/STAGE-009-20260505-234732.md`
+
+## 2026-05-21 20:14:58 MSK — STAGE-010
+- Status: CLOSED
+- Files changed: `src/data/static/ui/notepad.js`, `src/handlers/notepad.py`, `src/notepad_service.py`, `tests/test_handlers/test_notepad.py`, `tests/test_websocket_handlers.py`, `tools/browser_smoke.playwright.js`, `API.md`, `docs/api.md`, `implementation-plan/20260505-205639/stages/STAGE-010-notepad-ws-idempotent-save.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-010-20260521-200343.md`
+- Verification: targeted WebSocket/NOTE tests, browser smoke with dropped first-save ack retry, docs sync, ruff, Python compile, JS syntax, diff whitespace, and explorer review passed.
+- Report: `stage-reports/STAGE-010-20260521-200343.md`

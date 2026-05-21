@@ -21,12 +21,16 @@ let notepadListMode = 'notes';
 let notepadEditorInstanceId = 0;
 let notepadDirtyVersion = 0;
 let notepadActiveSavePromise = null;
-let notepadPendingWsSaveSnapshots = [];
+let notepadPendingWsSaveOperations = new Map();
+let notepadWsGeneration = 0;
+let notepadOperationCounter = 0;
+let notepadPendingCreateNoteId = null;
 let notepadLoadRequestSeq = 0;
 let notepadActiveLoadRequestId = null;
 
 const NOTEPAD_HTTP_DELAY = 500;
 const NOTEPAD_WS_DELAY = 300;
+const NOTEPAD_WS_ACK_TIMEOUT = 5000;
 
 const notepadTitleInput = document.getElementById('notepadTitleInput');
 const notepadTextarea = document.getElementById('notepadTextarea');
@@ -229,6 +233,7 @@ function notepadMarkClean() {
 function notepadReplaceEditorState() {
     notepadEditorInstanceId++;
     notepadActiveLoadRequestId = null;
+    notepadPendingCreateNoteId = null;
     notepadMarkClean();
     clearTimeout(notepadAutoSaveTimer);
     notepadAutoSaveTimer = null;
@@ -611,6 +616,24 @@ async function notepadDecrypt(encryptedBytes) {
 
 // ── WebSocket client ────────────────────────────────────
 
+function notepadRandomHex(byteCount) {
+    const bytes = crypto.getRandomValues(new Uint8Array(byteCount));
+    return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function notepadGenerateClientNoteId() {
+    return notepadRandomHex(16);
+}
+
+function notepadGenerateOperationId() {
+    notepadOperationCounter++;
+    return [
+        Date.now().toString(36),
+        notepadOperationCounter.toString(36),
+        notepadRandomHex(8),
+    ].join('-');
+}
+
 function scheduleReconnect() {
     if (wsIntentionalClose) return;
     const delay = Math.min(1000 * Math.pow(2, wsReconnectAttempt), 30000);
@@ -628,15 +651,20 @@ function notepadConnectWs() {
     notepadDisconnectWs(true);
     wsIntentionalClose = false;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    notepadWs = new WebSocket(proto + '//' + location.host + '/notes/ws');
+    const wsGeneration = ++notepadWsGeneration;
+    const ws = new WebSocket(proto + '//' + location.host + '/notes/ws');
+    notepadWs = ws;
     notepadSetConnStatus('connecting', t('notepadConnecting'));
 
-    notepadWs.onopen = () => {
+    ws.onopen = () => {
+        if (notepadWs !== ws || wsGeneration !== notepadWsGeneration) return;
         wsReconnectAttempt = 0;
         notepadSetConnStatus('connected', t('notepadConnected'));
+        notepadRetryPendingWsSaves();
     };
 
-    notepadWs.onmessage = (evt) => {
+    ws.onmessage = (evt) => {
+        if (notepadWs !== ws || wsGeneration !== notepadWsGeneration) return;
         try {
             const msg = JSON.parse(evt.data);
             notepadHandleWsMessage(msg, evt.data);
@@ -645,7 +673,8 @@ function notepadConnectWs() {
         }
     };
 
-    notepadWs.onclose = () => {
+    ws.onclose = () => {
+        if (notepadWs !== ws || wsGeneration !== notepadWsGeneration) return;
         notepadWs = null;
         if (!wsIntentionalClose && notepadGetTransport() === 'ws') {
             scheduleReconnect();
@@ -654,7 +683,8 @@ function notepadConnectWs() {
         }
     };
 
-    notepadWs.onerror = () => {
+    ws.onerror = () => {
+        if (notepadWs !== ws || wsGeneration !== notepadWsGeneration) return;
         // onclose will fire after this
     };
 }
@@ -662,11 +692,14 @@ function notepadConnectWs() {
 function notepadDisconnectWs(skipStatus) {
     wsIntentionalClose = true;
     if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
-    if (notepadWs) {
-        notepadWs.close();
-        notepadWs = null;
+    notepadWsGeneration++;
+    const ws = notepadWs;
+    notepadWs = null;
+    if (ws) {
+        ws.close();
     }
     if (!skipStatus) {
+        notepadFallbackPendingWsSaves();
         notepadSetConnStatus('connected', t('notepadConnected'));
     }
 }
@@ -685,16 +718,25 @@ function notepadSendWs(msg) {
             path: '/notes/ws',
             body: createExchangeTextBody(t('statusPending')),
         });
-        notepadWs.send(messageText);
+        try {
+            notepadWs.send(messageText);
+            return true;
+        } catch (error) {
+            console.error('[Notepad WS] Send failed:', error);
+            return false;
+        }
     }
+    return false;
 }
 
 function notepadCaptureSaveSnapshot() {
     const titleRaw = notepadTitleInput.value.trim();
+    const noteId = notepadCurrentId || notepadPendingCreateNoteId || '';
     return {
         editorInstanceId: notepadEditorInstanceId,
         dirtyVersion: notepadDirtyVersion,
-        noteId: notepadCurrentId || '',
+        noteId,
+        createIfMissing: Boolean(!notepadCurrentId && noteId),
         titleRaw,
         title: titleRaw || t('notepadUntitled'),
         text: notepadTextarea.value,
@@ -702,12 +744,128 @@ function notepadCaptureSaveSnapshot() {
     };
 }
 
+function notepadPrepareSaveSnapshot(snapshot) {
+    if (snapshot.noteId) {
+        return {
+            ...snapshot,
+            createIfMissing: Boolean(!notepadCurrentId && snapshot.noteId === notepadPendingCreateNoteId),
+        };
+    }
+
+    const noteId = notepadGenerateClientNoteId();
+    notepadPendingCreateNoteId = noteId;
+    return {
+        ...snapshot,
+        noteId,
+        createIfMissing: true,
+    };
+}
+
+function notepadArmWsSaveTimeout(entry) {
+    if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+    }
+    entry.timeoutId = setTimeout(() => {
+        void notepadFallbackWsSave(entry.opId);
+    }, NOTEPAD_WS_ACK_TIMEOUT);
+}
+
+function notepadRegisterPendingWsSave(opId, snapshot, payload, options) {
+    let resolveSave = () => {};
+    const promise = new Promise(resolve => {
+        resolveSave = resolve;
+    });
+    const entry = {
+        opId,
+        snapshot,
+        payload,
+        options,
+        resolve: resolveSave,
+        timeoutId: null,
+        completed: false,
+        fallbackStarted: false,
+    };
+    notepadPendingWsSaveOperations.set(opId, entry);
+    notepadArmWsSaveTimeout(entry);
+    return promise;
+}
+
+function notepadGetPendingWsSaveEntry(opId) {
+    if (opId && notepadPendingWsSaveOperations.has(opId)) {
+        return notepadPendingWsSaveOperations.get(opId);
+    }
+
+    for (const entry of notepadPendingWsSaveOperations.values()) {
+        if (!entry.completed && !entry.fallbackStarted) {
+            return entry;
+        }
+    }
+    return null;
+}
+
+function notepadCompletePendingWsSave(entry, success) {
+    if (!entry || entry.completed) return;
+    entry.completed = true;
+    if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+        entry.timeoutId = null;
+    }
+    notepadPendingWsSaveOperations.delete(entry.opId);
+    entry.resolve(Boolean(success));
+}
+
+function notepadRetryPendingWsSaves() {
+    for (const entry of Array.from(notepadPendingWsSaveOperations.values())) {
+        if (entry.completed || entry.fallbackStarted) continue;
+        notepadArmWsSaveTimeout(entry);
+        const sent = notepadSendWs(entry.payload);
+        if (!sent) {
+            void notepadFallbackWsSave(entry.opId);
+        }
+    }
+}
+
+function notepadFallbackPendingWsSaves() {
+    for (const opId of Array.from(notepadPendingWsSaveOperations.keys())) {
+        void notepadFallbackWsSave(opId);
+    }
+}
+
+async function notepadFallbackWsSave(opId) {
+    const entry = notepadPendingWsSaveOperations.get(opId);
+    if (!entry || entry.completed || entry.fallbackStarted) return;
+
+    entry.fallbackStarted = true;
+    if (entry.timeoutId) {
+        clearTimeout(entry.timeoutId);
+        entry.timeoutId = null;
+    }
+    notepadPendingWsSaveOperations.delete(opId);
+
+    let success = false;
+    try {
+        success = await notepadSaveSnapshotViaHttp(
+            entry.snapshot,
+            entry.payload.data,
+            entry.options
+        );
+    } catch (error) {
+        console.error('[Notepad] Save fallback error:', error);
+        notepadSetStatus('error');
+    }
+    entry.completed = true;
+    entry.resolve(success);
+}
+
 function notepadApplySaveSuccess(snapshot, result, options = {}) {
     const sameEditor = snapshot && snapshot.editorInstanceId === notepadEditorInstanceId;
 
     if (sameEditor) {
-        if (!snapshot.noteId && !notepadCurrentId && result.id) {
+        if (!notepadCurrentId && result.id) {
             notepadCurrentId = result.id;
+        }
+        if (notepadPendingCreateNoteId && result.id === notepadPendingCreateNoteId) {
+            notepadPendingCreateNoteId = null;
         }
         notepadDeleteBtnEl.disabled = false;
 
@@ -743,12 +901,18 @@ function notepadHandleWsMessage(msg, rawText = '') {
     });
 
     if (msg.type === 'saved') {
+        const entry = notepadGetPendingWsSaveEntry(
+            typeof msg.opId === 'string' ? msg.opId : ''
+        );
         if (msg.success) {
-            const snapshot = notepadPendingWsSaveSnapshots.shift() || null;
-            if (snapshot) {
-                notepadApplySaveSuccess(snapshot, msg);
+            if (entry) {
+                notepadApplySaveSuccess(entry.snapshot, msg, entry.options);
+                notepadCompletePendingWsSave(entry, true);
             }
         } else {
+            if (entry) {
+                notepadCompletePendingWsSave(entry, false);
+            }
             notepadSetStatus('error');
         }
     } else if (msg.type === 'loaded') {
@@ -779,6 +943,30 @@ async function notepadSave(options = {}) {
     }
 }
 
+async function notepadSaveSnapshotViaHttp(snapshot, dataB64, options = {}) {
+    const payload = { title: snapshot.title, data: dataB64 };
+    if (snapshot.noteId) payload.id = snapshot.noteId;
+    if (snapshot.createIfMissing) payload.createIfMissing = true;
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (snapshot.sessionId) headers['X-Session-Id'] = snapshot.sessionId;
+
+    const body = JSON.stringify(payload);
+    const trace = notepadTraceHttpStart('/notes', body, headers);
+    const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', body, headers);
+    const respText = await response.text();
+    notepadTraceHttpComplete(trace, '/notes', response, respText, response.ok ? 'complete' : 'error');
+    const result = JSON.parse(respText);
+
+    if (result.success) {
+        notepadApplySaveSuccess(snapshot, result, options);
+        return true;
+    }
+
+    notepadSetStatus('error');
+    return false;
+}
+
 async function notepadRunSave(options = {}) {
     if (!notepadAvailable || !notepadDerivedKey) {
         notepadSetStatus('sessionFailed');
@@ -796,41 +984,27 @@ async function notepadRunSave(options = {}) {
     try {
         const encrypted = await notepadEncrypt(snapshot.text);
         const dataB64 = uint8ToBase64(encrypted);
+        const preparedSnapshot = notepadPrepareSaveSnapshot(snapshot);
 
         if (!options.forceHttp && notepadGetTransport() === 'ws' && notepadWs && notepadWs.readyState === WebSocket.OPEN) {
-            // WebSocket save
-            notepadPendingWsSaveSnapshots.push(snapshot);
-            notepadSendWs({
+            const opId = notepadGenerateOperationId();
+            const wsPayload = {
                 type: 'save',
-                sessionId: snapshot.sessionId,
-                noteId: snapshot.noteId,
-                title: snapshot.title,
+                opId,
+                sessionId: preparedSnapshot.sessionId,
+                noteId: preparedSnapshot.noteId,
+                createIfMissing: preparedSnapshot.createIfMissing,
+                title: preparedSnapshot.title,
                 data: dataB64,
-            });
-            return true;
-        } else {
-            // HTTP save
-            const payload = { title: snapshot.title, data: dataB64 };
-            if (snapshot.noteId) payload.id = snapshot.noteId;
-
-            const headers = { 'Content-Type': 'application/json' };
-            if (snapshot.sessionId) headers['X-Session-Id'] = snapshot.sessionId;
-
-            const body = JSON.stringify(payload);
-            const trace = notepadTraceHttpStart('/notes', body, headers);
-            const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', body, headers);
-            const respText = await response.text();
-            notepadTraceHttpComplete(trace, '/notes', response, respText, response.ok ? 'complete' : 'error');
-            const result = JSON.parse(respText);
-
-            if (result.success) {
-                notepadApplySaveSuccess(snapshot, result, options);
-                return true;
-            } else {
-                notepadSetStatus('error');
-                return false;
+            };
+            const pendingSave = notepadRegisterPendingWsSave(opId, preparedSnapshot, wsPayload, options);
+            if (!notepadSendWs(wsPayload)) {
+                void notepadFallbackWsSave(opId);
             }
+            return await pendingSave;
         }
+
+        return await notepadSaveSnapshotViaHttp(preparedSnapshot, dataB64, options);
     } catch (e) {
         console.error('[Notepad] Save error:', e);
         notepadSetStatus('error');

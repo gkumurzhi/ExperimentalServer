@@ -2293,6 +2293,123 @@ async (page) => {
     };
   }
 
+  async function assertWsLostAckRetryIsIdempotent() {
+    const title = "Browser Smoke WS Lost Ack";
+    const text = "websocket first save retry body";
+
+    await page.locator('input[name="notepadTransport"][value="http"]').check();
+    await waitForConnectionStatus("connected", "http", 15000);
+    await page.locator("#notepadNewBtn").click();
+    await waitForValue("#notepadTitleInput", "", 15000);
+
+    await page.evaluate(() => {
+      if (typeof window.__exphttpRestoreNotepadWebSocket === "function") {
+        window.__exphttpRestoreNotepadWebSocket();
+      }
+
+      const NativeWebSocket = window.WebSocket;
+      window.__exphttpDroppedFirstWsSaveAck = 0;
+
+      function DroppingWebSocket(...args) {
+        const socket = new NativeWebSocket(...args);
+        let onmessageHandler = null;
+
+        socket.addEventListener("message", (event) => {
+          let shouldDrop = false;
+          try {
+            const msg = JSON.parse(event.data);
+            shouldDrop = Boolean(
+              msg &&
+              msg.type === "saved" &&
+              msg.success &&
+              msg.opId &&
+              window.__exphttpDroppedFirstWsSaveAck === 0
+            );
+          } catch (error) {
+            shouldDrop = false;
+          }
+
+          if (shouldDrop) {
+            window.__exphttpDroppedFirstWsSaveAck = 1;
+            setTimeout(() => socket.close(), 0);
+            return;
+          }
+
+          if (typeof onmessageHandler === "function") {
+            onmessageHandler.call(socket, event);
+          }
+        });
+
+        return new Proxy(socket, {
+          get(target, prop) {
+            if (prop === "onmessage") {
+              return onmessageHandler;
+            }
+            const value = target[prop];
+            return typeof value === "function" ? value.bind(target) : value;
+          },
+          set(target, prop, value) {
+            if (prop === "onmessage") {
+              onmessageHandler = value;
+              return true;
+            }
+            target[prop] = value;
+            return true;
+          },
+        });
+      }
+
+      Object.defineProperties(DroppingWebSocket, {
+        CONNECTING: { value: NativeWebSocket.CONNECTING },
+        OPEN: { value: NativeWebSocket.OPEN },
+        CLOSING: { value: NativeWebSocket.CLOSING },
+        CLOSED: { value: NativeWebSocket.CLOSED },
+      });
+
+      window.WebSocket = DroppingWebSocket;
+      window.__exphttpRestoreNotepadWebSocket = () => {
+        window.WebSocket = NativeWebSocket;
+        delete window.__exphttpRestoreNotepadWebSocket;
+      };
+    });
+
+    try {
+      await page.locator('input[name="notepadTransport"][value="ws"]').check();
+      await waitForConnectionStatus("connected", "ws", 15000);
+      await page.locator("#notepadTitleInput").fill(title);
+      await page.locator("#notepadTextarea").fill(text);
+      await waitForText(page.locator("#notepadSaveIndicator"), /Сохранено|Saved/, 20000);
+      await waitForText(page.locator("#notepadNoteList"), title, 20000);
+      await waitForConnectionStatus("connected", "ws", 20000);
+      await waitForPageCondition(
+        "ws lost ack retry is idempotent",
+        ([targetTitle]) => {
+          const titles = Array.from(document.querySelectorAll(".note-item-title"))
+            .map((element) => element.textContent.trim())
+            .filter((value) => value === targetTitle);
+          const indicator = document.getElementById("notepadSaveIndicator");
+          return Boolean(
+            window.__exphttpDroppedFirstWsSaveAck === 1 &&
+            titles.length === 1 &&
+            indicator &&
+            /Сохранено|Saved/.test(indicator.innerText) &&
+            !document.body.classList.contains("notepad-dirty")
+          );
+        },
+        [title],
+        20000
+      );
+    } finally {
+      await page.evaluate(() => {
+        if (typeof window.__exphttpRestoreNotepadWebSocket === "function") {
+          window.__exphttpRestoreNotepadWebSocket();
+        }
+      });
+    }
+
+    return { title };
+  }
+
   async function clearNotesViaUiAndAssert(uploadPathToPreserve) {
     const uploadNameToPreserve = uploadPathToPreserve.split("/").pop();
 
@@ -2675,6 +2792,8 @@ async (page) => {
     await page.locator('input[name="notepadTransport"][value="ws"]').check();
     await waitForConnectionStatus("connected", "ws", 15000);
 
+    const wsLostAckRetry = await assertWsLostAckRetryIsIdempotent();
+
     const wsNoteTitle = "Browser Smoke WS Note";
     const wsNoteText = "browser smoke websocket note body";
     await createAutosavedNote(wsNoteTitle, wsNoteText);
@@ -2727,6 +2846,7 @@ async (page) => {
       wsConnState,
       wsConnTransport,
       wsConnClass,
+      wsLostAckRetry,
       notesClearPreservedUpload,
       selectedUploadDeleted: requestPanelFetchPath,
       selectedNoteDeleted: selectiveDeleteTitle,
