@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin
+from src.notepad_service import max_note_data_b64_chars
 from src.security.keys import HAS_ECDH, ECDHKeyManager
 from tests.conftest import make_request
 
@@ -162,6 +163,78 @@ class TestNotepadSave:
         req = make_request("NOTE", "/notes", body=payload)
         resp = server.handle_note(req)
         assert resp.status_code == 400
+
+    def test_save_rejects_oversized_encoded_data_before_decode(self, server, monkeypatch):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        encoded_limit = max_note_data_b64_chars()
+
+        def fail_decode(*_args, **_kwargs):
+            pytest.fail("encoded note limit should run before base64 decode")
+
+        monkeypatch.setattr("src.notepad_service.base64.b64decode", fail_decode)
+        payload = json.dumps(
+            {
+                "title": "Too Large",
+                "data": "A" * (encoded_limit + 4),
+            }
+        ).encode()
+
+        resp = server.handle_note(make_request("NOTE", "/notes", body=payload))
+
+        assert resp.status_code == 413
+        data = json.loads(resp.body)
+        assert data["status"] == 413
+        assert "Encrypted note data exceeds" in data["error"]
+        assert list(server.notes_dir.iterdir()) == []
+
+    def test_save_rejects_oversized_decoded_data_without_writing(self, server, monkeypatch):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        body = _make_note_payload("Too Large", b"12345")
+
+        resp = server.handle_note(make_request("NOTE", "/notes", body=body))
+
+        assert resp.status_code == 413
+        data = json.loads(resp.body)
+        assert data["status"] == 413
+        assert "4 bytes" in data["error"]
+        assert list(server.notes_dir.iterdir()) == []
+
+    def test_update_rejects_oversized_decoded_data_without_replacing_existing_note(
+        self,
+        server,
+        monkeypatch,
+    ):
+        create = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("Original", b"old"))
+        )
+        note_id = json.loads(create.body)["id"]
+        enc_path = server.notes_dir / f"{note_id}.enc"
+        meta_path = server.notes_dir / f"{note_id}.meta.json"
+        original_meta = meta_path.read_text(encoding="utf-8")
+
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        update = _make_note_payload("Too Large", b"12345", note_id=note_id)
+
+        resp = server.handle_note(make_request("NOTE", "/notes", body=update))
+
+        assert resp.status_code == 413
+        assert enc_path.read_bytes() == b"old"
+        assert meta_path.read_text(encoding="utf-8") == original_meta
+
+    def test_save_boundary_payload_can_load(self, server, monkeypatch):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        body = _make_note_payload("Boundary", b"1234")
+
+        save_resp = server.handle_note(make_request("NOTE", "/notes", body=body))
+
+        assert save_resp.status_code == 201
+        saved = json.loads(save_resp.body)
+        assert saved["size"] == 4
+
+        load_resp = server.handle_note(make_request("NOTE", f"/notes/{saved['id']}"))
+        loaded = json.loads(load_resp.body)
+        assert loaded["size"] == 4
+        assert base64.b64decode(loaded["data"]) == b"1234"
 
     def test_title_truncated_to_200(self, server):
         long_title = "x" * 300

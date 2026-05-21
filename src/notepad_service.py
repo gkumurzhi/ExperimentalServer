@@ -18,6 +18,20 @@ logger = logging.getLogger("httpserver")
 
 
 NOTE_ID_LENGTH = 32
+MAX_NOTE_ENCRYPTED_BLOB_BYTES = 1024 * 1024
+
+
+def max_note_data_b64_chars() -> int:
+    """Return the longest valid base64 payload for one encrypted note blob."""
+    return ((MAX_NOTE_ENCRYPTED_BLOB_BYTES + 2) // 3) * 4
+
+
+def _note_blob_limit_label() -> str:
+    """Return a human-readable label for the current note blob limit."""
+    mebibyte = 1024 * 1024
+    if MAX_NOTE_ENCRYPTED_BLOB_BYTES % mebibyte == 0:
+        return f"{MAX_NOTE_ENCRYPTED_BLOB_BYTES // mebibyte} MiB"
+    return f"{MAX_NOTE_ENCRYPTED_BLOB_BYTES} bytes"
 
 
 def is_valid_note_id(note_id: str) -> bool:
@@ -296,6 +310,16 @@ class NotepadService:
         if not request.data_b64:
             raise NotepadServiceError(400, "Missing 'data' (base64-encoded encrypted blob)")
 
+        encoded_limit = max_note_data_b64_chars()
+        if len(request.data_b64) > encoded_limit:
+            raise NotepadServiceError(
+                413,
+                (
+                    f"Encrypted note data exceeds {_note_blob_limit_label()} decoded limit "
+                    f"({encoded_limit} base64 characters max)"
+                ),
+            )
+
         try:
             raw_data = base64.b64decode(request.data_b64, validate=True)
         except (ValueError, binascii.Error) as exc:
@@ -303,6 +327,14 @@ class NotepadService:
 
         if len(raw_data) == 0:
             raise NotepadServiceError(400, "Empty encrypted data")
+        if len(raw_data) > MAX_NOTE_ENCRYPTED_BLOB_BYTES:
+            raise NotepadServiceError(
+                413,
+                (
+                    f"Encrypted note data exceeds {_note_blob_limit_label()} decoded limit "
+                    f"({MAX_NOTE_ENCRYPTED_BLOB_BYTES} bytes max)"
+                ),
+            )
 
         note_id = request.note_id
         is_new = False
@@ -532,10 +564,12 @@ __all__ = [
     "DeleteNoteResult",
     "ListNotesResult",
     "LoadNoteResult",
+    "MAX_NOTE_ENCRYPTED_BLOB_BYTES",
     "NotepadService",
     "NotepadServiceError",
     "NoteSummary",
     "SaveNoteRequest",
     "SaveNoteResult",
     "is_valid_note_id",
+    "max_note_data_b64_chars",
 ]

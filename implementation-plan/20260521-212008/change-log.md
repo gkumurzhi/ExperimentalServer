@@ -17,3 +17,9 @@
 - Files changed: `src/server.py`, `src/metrics.py`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_metrics.py`, active plan status/report artifacts.
 - Verification: targeted admission/keep-alive/WebSocket tests, metrics tests, broader touched tests, compile check, static submit review, and `git diff --check` passed.
 - Report: `stage-reports/STAGE-003-20260521-230426.md`
+
+## 2026-05-21T23:27:27+03:00 - STAGE-004
+- Status: CLOSED
+- Files changed: `src/notepad_service.py`, `tests/test_handlers/test_notepad.py`, `tests/test_websocket_handlers.py`, `API.md`, `docs/api.md`, active plan status/report artifacts.
+- Verification: Notepad HTTP/WS targeted tests, docs sync, compile check, Ruff, and `git diff --check` passed. `mypy` was unavailable in the local environment; `compileall` covered syntax/compiler verification.
+- Report: `stage-reports/STAGE-004-20260521-231952.md`

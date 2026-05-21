@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin, NotepadHandlersMixin
+from src.notepad_service import max_note_data_b64_chars
 from src.security.keys import HAS_ECDH
 from src.server import ExperimentalHTTPServer
 from src.websocket import _MAX_FRAME_SIZE, WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
@@ -334,6 +335,80 @@ class TestWSSave:
         assert msg["opId"] == "update-op-1"
         assert msg["status"] == 404
         assert "Note not found" in msg["error"]
+
+    def test_save_oversized_encoded_data_returns_saved_error(
+        self,
+        ws_server,
+        mock_socket,
+        monkeypatch,
+    ):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        payload = json.dumps(
+            {
+                "type": "save",
+                "opId": "too-large-encoded",
+                "title": "Too Large",
+                "data": "A" * (max_note_data_b64_chars() + 4),
+            }
+        ).encode()
+
+        ws_server._handle_ws_message(mock_socket, payload)
+
+        msg = mock_socket.last_json
+        assert msg["type"] == "saved"
+        assert msg["opId"] == "too-large-encoded"
+        assert msg["status"] == 413
+        assert "Encrypted note data exceeds" in msg["error"]
+        assert list(ws_server.notes_dir.iterdir()) == []
+
+    def test_save_oversized_decoded_data_returns_saved_error(
+        self,
+        ws_server,
+        mock_socket,
+        monkeypatch,
+    ):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        payload = json.dumps(
+            {
+                "type": "save",
+                "opId": "too-large-decoded",
+                "title": "Too Large",
+                "data": base64.b64encode(b"12345").decode(),
+            }
+        ).encode()
+
+        ws_server._handle_ws_message(mock_socket, payload)
+
+        msg = mock_socket.last_json
+        assert msg["type"] == "saved"
+        assert msg["opId"] == "too-large-decoded"
+        assert msg["status"] == 413
+        assert "4 bytes" in msg["error"]
+        assert list(ws_server.notes_dir.iterdir()) == []
+
+    def test_save_boundary_payload_can_load(self, ws_server, mock_socket, monkeypatch):
+        monkeypatch.setattr("src.notepad_service.MAX_NOTE_ENCRYPTED_BLOB_BYTES", 4)
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Boundary",
+                "data": base64.b64encode(b"1234").decode(),
+            }
+        ).encode()
+        assert len(save_payload) < _MAX_FRAME_SIZE
+
+        ws_server._handle_ws_message(mock_socket, save_payload)
+        save_msg = mock_socket.last_json
+        assert save_msg["type"] == "saved"
+        assert save_msg["success"] is True
+        assert save_msg["size"] == 4
+
+        load_payload = json.dumps({"type": "load", "id": save_msg["id"]}).encode()
+        ws_server._handle_ws_message(mock_socket, load_payload)
+        load_msg = mock_socket.last_json
+        assert load_msg["type"] == "loaded"
+        assert load_msg["size"] == 4
+        assert base64.b64decode(load_msg["data"]) == b"1234"
 
     def test_save_then_list_shows_note(self, ws_server, mock_socket):
         data_b64 = base64.b64encode(b"data").decode()

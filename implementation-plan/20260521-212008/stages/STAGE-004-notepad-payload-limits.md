@@ -1,7 +1,7 @@
 # STAGE-004 - Add Notepad payload size limits
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -44,10 +44,10 @@ Add explicit, documented Notepad encrypted-blob size limits for HTTP and WebSock
 5. Update API docs and sync mirrors.
 
 ## Acceptance criteria
-- [ ] Oversized Notepad HTTP saves return a deterministic error before writing.
-- [ ] Oversized Notepad WS saves return a deterministic `saved` error payload with status.
-- [ ] Boundary payloads still save/load successfully.
-- [ ] API docs describe the limit and relation to generic caps.
+- [x] Oversized Notepad HTTP saves return a deterministic error before writing.
+- [x] Oversized Notepad WS saves return a deterministic `saved` error payload with status.
+- [x] Boundary payloads still save/load successfully.
+- [x] API docs describe the limit and relation to generic caps.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,12 @@ Add explicit, documented Notepad encrypted-blob size limits for HTTP and WebSock
 - Rollback: Raise default, make configurable, or document migration guidance.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T23:27:27+03:00. Added a shared 1 MiB decoded encrypted-blob
+limit in `src/notepad_service.py` with pre-decode base64 length validation and
+post-decode byte validation. HTTP oversized saves return `413` JSON errors
+without writing or replacing note files; WebSocket oversized saves return
+operation-shaped `saved` errors with `status: 413` and preserve `opId`.
+Boundary payloads save/load successfully over both transports. `API.md` and
+the generated `docs/api.md` mirror document the limit and its relationship to
+generic HTTP/WebSocket caps. Report:
+`stage-reports/STAGE-004-20260521-231952.md`.

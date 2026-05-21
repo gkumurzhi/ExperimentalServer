@@ -337,6 +337,15 @@ The note body field `data` is encrypted client-side and stored as an opaque base
 
 Current note keys are session-bound, not durably recoverable. The browser UI and `examples/notepad_client.py` keep the derived AES key only in process memory. Reloading the page, restarting the client, server restart, idle session expiry, or LRU session eviction can leave previously saved note bodies undecryptable by that client. The server does not persist note encryption keys and exposes no API to decrypt or re-key stored note blobs.
 
+Notepad save requests have a Notepad-specific encrypted blob limit: `data`
+must decode to at most 1 MiB (1,048,576 bytes), which is at most 1,398,104
+base64 characters. This application limit is enforced for both `NOTE /notes`
+and WebSocket `save` messages, independent of generic transport caps such as
+HTTP `--max-size` and the WebSocket frame limit. A lower transport cap can
+still reject the request before Notepad validation runs. Notepad over-limit
+saves return `413` HTTP JSON errors or WebSocket `saved` operation errors with
+`status: 413`; they do not write note files.
+
 ### NOTE /notes/key
 
 Get the server's ECDH public key.
@@ -453,7 +462,7 @@ X-Session-Id: <sessionId>   (optional, audit-only; ignored when expired)
 }
 ```
 
-**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `501` Secure Notepad crypto backend unavailable
+**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `413` Encrypted note data too large, `501` Secure Notepad crypto backend unavailable
 
 ---
 
