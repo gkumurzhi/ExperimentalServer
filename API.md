@@ -623,10 +623,12 @@ headers, or query parameters. Common fields are:
 
 Header transport also supports chunked payload headers `X-D-0`, `X-D-1`, ... for long values.
 
-Advanced upload applies explicit memory caps before decoding or writing:
+Advanced upload applies explicit caps before payload decoding or writing. The
+HTTP receive layer still buffers accepted request bodies and enforces the
+global `--max-size` cap before dispatch.
 
 - Decoded advanced-upload payloads are limited to 16 MB by default and never exceed `--max-size`.
-- JSON body `d` / `data` base64 strings are limited to the encoded size required for that decoded cap.
+- JSON body requests larger than the encoded payload cap plus a 4 KB JSON envelope allowance are rejected before UTF-8 decoding or JSON parsing. JSON bodies inside that envelope are parsed, then `d` / `data` base64 strings are checked against the exact encoded-size cap before base64 decoding.
 - Header transport `X-D` and combined `X-D-0`, `X-D-1`, ... data are limited to 64 KB of encoded data by default.
 - URL query transport `?d=` is limited to 16 KB of encoded data by default.
 

@@ -605,6 +605,53 @@ class TestHandleOpsecUpload:
         assert "Advanced upload decoded payload too large" in json.loads(resp.body)["error"]
         assert list(upload_dir.iterdir()) == []
 
+    def test_opsec_oversized_json_body_returns_413_before_json_parse(
+        self,
+        temp_dir,
+        upload_dir,
+        monkeypatch,
+    ):
+        from types import SimpleNamespace
+
+        from src.handlers import advanced_upload as advanced_upload_module
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        srv.advanced_upload_decoded_size_limit = 3
+
+        def fail_loads(_body):
+            raise AssertionError("json.loads should not be called for oversized JSON bodies")
+
+        monkeypatch.setattr(
+            advanced_upload_module,
+            "json",
+            SimpleNamespace(
+                JSONDecodeError=json.JSONDecodeError,
+                dumps=json.dumps,
+                loads=fail_loads,
+            ),
+        )
+        body = b'{"d":"' + (b"A" * 10_000) + b'"}'
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", "/", body=body))
+
+        assert resp.status_code == 413
+        assert "Advanced upload JSON body too large" in json.loads(resp.body)["error"]
+        assert list(upload_dir.iterdir()) == []
+
+    def test_opsec_json_payload_at_explicit_limits_still_uploads(self, temp_dir, upload_dir):
+        import base64
+
+        srv = StubServer(temp_dir, upload_dir, opsec=True)
+        raw = b"fits body cap"
+        srv.advanced_upload_decoded_size_limit = len(raw)
+        b64 = base64.b64encode(raw).decode()
+        payload = json.dumps({"d": b64, "n": "fits-body.bin"}).encode()
+
+        resp = srv.handle_advanced_upload(make_request("XUPLOAD", "/", body=payload))
+
+        assert resp.status_code == 200
+        assert (upload_dir / "fits-body.bin").read_bytes() == raw
+
     def test_opsec_payload_at_explicit_limits_still_uploads(self, temp_dir, upload_dir):
         import base64
 

@@ -59,3 +59,9 @@
 - Files changed: `src/data/static/ui/notepad.js`, `src/handlers/notepad.py`, `src/notepad_service.py`, `tests/test_handlers/test_notepad.py`, `tests/test_websocket_handlers.py`, `tools/browser_smoke.playwright.js`, `API.md`, `docs/api.md`, `implementation-plan/20260505-205639/stages/STAGE-010-notepad-ws-idempotent-save.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-010-20260521-200343.md`
 - Verification: targeted WebSocket/NOTE tests, browser smoke with dropped first-save ack retry, docs sync, ruff, Python compile, JS syntax, diff whitespace, and explorer review passed.
 - Report: `stage-reports/STAGE-010-20260521-200343.md`
+
+## 2026-05-21 20:24:32 MSK — STAGE-011
+- Status: CLOSED
+- Files changed: `src/handlers/advanced_upload.py`, `tests/test_handlers/test_handler_integration.py`, `API.md`, `docs/api.md`, `implementation-plan/20260505-205639/stages/STAGE-011-advanced-upload-json-guardrails.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-011-20260521-201720.md`
+- Verification: focused advanced-upload limit tests, handler/server regression suite, docs sync, Python compile, ruff, HMAC/decrypt static order check, diff whitespace check, and explorer review passed.
+- Report: `stage-reports/STAGE-011-20260521-201720.md`

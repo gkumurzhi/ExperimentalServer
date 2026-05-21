@@ -1,7 +1,7 @@
 # STAGE-011 - Add advanced-upload JSON body guardrails
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -50,11 +50,11 @@ Reject oversized advanced-upload JSON body transport before expensive JSON decod
 5. Update API wording if it currently promises stronger early rejection than the implementation can provide.
 
 ## Acceptance criteria
-- [ ] Oversized advanced-upload JSON bodies are rejected before JSON parsing.
-- [ ] Header and URL transports keep their existing limits and behavior.
-- [ ] HMAC-before-decrypt ordering remains unchanged.
-- [ ] Tests cover the oversized JSON body transport path.
-- [ ] Docs accurately describe advanced-upload cap timing.
+- [x] Oversized advanced-upload JSON bodies are rejected before JSON parsing.
+- [x] Header and URL transports keep their existing limits and behavior.
+- [x] HMAC-before-decrypt ordering remains unchanged.
+- [x] Tests cover the oversized JSON body transport path.
+- [x] Docs accurately describe advanced-upload cap timing.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -74,4 +74,4 @@ Reject oversized advanced-upload JSON body transport before expensive JSON decod
 - Rollback: Increase the documented envelope allowance or revert to previous behavior with docs warning.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21 20:24:32 MSK. Added a pre-parse JSON body size guard using the advanced-upload encoded payload cap plus a 4 KB JSON envelope allowance, leaving header and URL transport limits unchanged and preserving HMAC-before-decrypt ordering. Added regression coverage proving oversized JSON body transport returns 413 before `json.loads`, plus a valid JSON-at-limit case. Updated API docs and synced `docs/api.md`; targeted handler/server tests, docs sync, compile, ruff, whitespace diff, and static order checks passed.

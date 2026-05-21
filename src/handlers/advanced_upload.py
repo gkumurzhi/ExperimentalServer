@@ -21,6 +21,7 @@ Transport = Literal["body", "headers", "url"]
 ADVANCED_UPLOAD_DECODED_SIZE_LIMIT = 16 * 1024 * 1024
 ADVANCED_UPLOAD_HEADER_DATA_LIMIT = 64 * 1024
 ADVANCED_UPLOAD_URL_DATA_LIMIT = 16 * 1024
+ADVANCED_UPLOAD_JSON_BODY_ENVELOPE_LIMIT = 4 * 1024
 
 
 class AdvancedUploadPayload(TypedDict, total=False):
@@ -99,6 +100,17 @@ class AdvancedUploadHandlersMixin(BaseHandler):
             return min(configured_limit, base64_limit)
         return base64_limit
 
+    def _advanced_upload_json_body_size_limit(self) -> int:
+        envelope_limit = _non_negative_int(
+            getattr(
+                self,
+                "advanced_upload_json_body_envelope_limit",
+                ADVANCED_UPLOAD_JSON_BODY_ENVELOPE_LIMIT,
+            ),
+            ADVANCED_UPLOAD_JSON_BODY_ENVELOPE_LIMIT,
+        )
+        return self._advanced_upload_encoded_size_limit("body") + envelope_limit
+
     def _advanced_upload_too_large(self, subject: str, limit: int) -> HTTPResponse:
         return self._error_response(
             413,
@@ -140,6 +152,12 @@ class AdvancedUploadHandlersMixin(BaseHandler):
 
         # 1. Try JSON body.
         if request.body:
+            body_limit = self._advanced_upload_json_body_size_limit()
+            if len(request.body) > body_limit:
+                return None, self._advanced_upload_too_large(
+                    "Advanced upload JSON body",
+                    body_limit,
+                )
             try:
                 payload = json.loads(request.body.decode("utf-8"))
             except (json.JSONDecodeError, UnicodeDecodeError):
