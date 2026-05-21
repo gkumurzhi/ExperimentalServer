@@ -29,3 +29,9 @@
 - Files changed: `src/request_pipeline.py`, `src/server.py`, `tests/test_request_pipeline.py`, `tests/test_server_methods.py`, `README.md`, `API.md`, `docs/api.md`, active plan status/report artifacts.
 - Verification: targeted Origin/CORS/mutation tests, broader touched request/server tests, handler smoke, WebSocket origin regression, stale-doc guard, Ruff, compileall, browser smoke with `PYTHONPATH=.`, security-auditor review, and `git diff --check` passed. `mypy` was unavailable in the local environment; `compileall` covered syntax/compiler verification.
 - Report: `stage-reports/STAGE-005-20260521-233008.md`
+
+## 2026-05-21T23:55:01+03:00 - STAGE-006
+- Status: CLOSED
+- Files changed: `src/metrics.py`, `src/server.py`, `src/request_pipeline.py`, `tests/test_metrics.py`, `tests/test_server_methods.py`, `tests/test_request_pipeline.py`, `tests/test_handlers/test_handler_integration.py`, `tests/test_server_live.py`, `docs/api.md`, active plan status/report artifacts.
+- Verification: metrics `TestMetrics`, server `metrics or worker or handle_client` selector, request pipeline tests, live admission/WebSocket smoke, `py_compile`, Ruff lint/format, and `git diff --check` passed. `mypy` was unavailable in the local environment.
+- Report: `stage-reports/STAGE-006-20260521-234311.md`

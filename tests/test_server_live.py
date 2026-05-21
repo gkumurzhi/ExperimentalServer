@@ -388,7 +388,8 @@ class TestLiveWebSocketNotes:
                     }
 
                 metrics = live.server.get_metrics()
-                assert metrics["websocket"] == {"active": 1, "rejected_admissions": 1}
+                assert metrics["websocket"]["active"] == 1
+                assert metrics["websocket"]["rejected_admissions"] == 1
 
                 with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as http_sock:
                     http_sock.settimeout(2.0)

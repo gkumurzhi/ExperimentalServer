@@ -66,6 +66,7 @@ class _PipelineServerStub:
         self.post_process_calls: list[tuple[str, int, str]] = []
         self.send_calls: list[dict[str, object]] = []
         self.record_calls: list[tuple[int, int, bool]] = []
+        self.latency_calls: list[float] = []
         self.handled_websocket_paths: list[str] = []
         self.websocket_acquire_calls = 0
         self.websocket_release_calls = 0
@@ -146,6 +147,9 @@ class _PipelineServerStub:
         error: bool = False,
     ) -> None:
         self.record_calls.append((status_code, response_size, error))
+
+    def _record_request_latency(self, duration_ms: float) -> None:
+        self.latency_calls.append(duration_ms)
 
 
 class TestRequestPipeline:

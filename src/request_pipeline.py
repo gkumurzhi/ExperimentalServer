@@ -80,6 +80,8 @@ class RequestPipelineServer(Protocol):
         error: bool = False,
     ) -> None: ...
 
+    def _record_request_latency(self, duration_ms: float) -> None: ...
+
 
 class RequestPipeline:
     """Coordinate request parsing, auth, dispatch, and response emission."""
@@ -179,6 +181,8 @@ class RequestPipeline:
             except Exception:
                 pass
             return False
+        finally:
+            self._server._record_request_latency((time.monotonic() - start_time) * 1000)
 
     def _send_direct_response(
         self,

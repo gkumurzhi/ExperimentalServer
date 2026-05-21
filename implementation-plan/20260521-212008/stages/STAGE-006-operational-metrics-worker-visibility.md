@@ -1,7 +1,7 @@
 # STAGE-006 - Expand operational metrics and worker exception visibility
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -43,10 +43,10 @@ Expose enough metrics and logs to distinguish overload, slow clients, receive re
 5. Update `/metrics` docs and examples.
 
 ## Acceptance criteria
-- [ ] `/metrics` exposes active/admission/receive/timeout/error signals.
-- [ ] Worker exceptions are visible in logs or metrics.
-- [ ] Existing request/status/bytes metrics remain backward compatible or documented.
-- [ ] Metrics tests cover concurrent updates.
+- [x] `/metrics` exposes active/admission/receive/timeout/error signals.
+- [x] Worker exceptions are visible in logs or metrics.
+- [x] Existing request/status/bytes metrics remain backward compatible or documented.
+- [x] Metrics tests cover concurrent updates.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -64,4 +64,9 @@ Expose enough metrics and logs to distinguish overload, slow clients, receive re
 - Rollback: Keep old fields and add new fields under nested keys.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T23:55:01+03:00.
+
+- Added additive `/metrics` fields for active worker connections, receive bytes/rejections, timeout buckets, request latency aggregates, expanded WebSocket pressure/error counters, and worker exception visibility while preserving existing top-level request/status/error/bytes fields.
+- Worker failures are now logged and counted from `_handle_client`, worker future completion, and worker submission failure paths.
+- Updated metrics/server/request-pipeline tests, live admission/WebSocket smoke assertions, and `/metrics` API documentation.
+- Verification passed: metrics `TestMetrics`, server `metrics or worker or handle_client` selector, request pipeline tests, live admission/WebSocket smoke, `py_compile`, Ruff lint/format, and `git diff --check`. Local `mypy` could not run because the `mypy` package is not installed.

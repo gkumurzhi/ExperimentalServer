@@ -50,7 +50,38 @@ class StubServer(HandlerMixin):
             "client_errors": 0,
             "server_errors": 1,
             "bytes_sent": 5000,
+            "bytes_received": 900,
             "status_counts": {200: 9, 500: 1},
+            "receive_rejections": {"header_too_large": 1},
+            "connections": {"active": 1, "accepted": 3, "closed": 2},
+            "receive": {
+                "bytes": 900,
+                "rejections": 1,
+                "rejection_reasons": {"header_too_large": 1},
+            },
+            "timeouts": {"websocket_incomplete_frame": 1},
+            "request_latency_ms": {
+                "count": 10,
+                "total": 125.0,
+                "avg": 12.5,
+                "max": 50.0,
+            },
+            "request_admission": {"active": 1, "accepted": 3, "rejected": 1},
+            "websocket": {
+                "active": 0,
+                "rejected_admissions": 1,
+                "closed": 2,
+                "protocol_errors": 0,
+                "message_too_big": 0,
+                "incomplete_frame_timeouts": 1,
+                "idle_pings": 4,
+                "errors": 0,
+            },
+            "worker": {
+                "exceptions": 1,
+                "exception_sources": {"handle_client": 1},
+                "last_exception_type": "RuntimeError",
+            },
         }
 
 
@@ -1158,7 +1189,15 @@ class TestMetrics:
         assert "client_errors" in data
         assert "server_errors" in data
         assert "bytes_sent" in data
+        assert "bytes_received" in data
         assert "status_counts" in data
+        assert "connections" in data
+        assert "receive" in data
+        assert "timeouts" in data
+        assert "request_admission" in data
+        assert "request_latency_ms" in data
+        assert "websocket" in data
+        assert "worker" in data
 
     def test_metrics_available(self, temp_dir, upload_dir):
         srv = StubServer(temp_dir, upload_dir)

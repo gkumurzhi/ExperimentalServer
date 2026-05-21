@@ -298,9 +298,25 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Record request metrics (thread-safe)."""
         self._metrics.record(status_code, response_size, error=error)
 
+    def _record_bytes_received(self, byte_count: int) -> None:
+        """Record client request bytes received by the server."""
+        self._metrics.record_bytes_received(byte_count)
+
+    def _record_request_latency(self, duration_ms: float) -> None:
+        """Record elapsed request processing time."""
+        self._metrics.record_request_latency(duration_ms)
+
     def _record_receive_rejection(self, reason: str) -> None:
         """Record a receive-layer rejection reason."""
         self._metrics.record_receive_rejection(reason)
+
+    def _record_timeout(self, reason: str) -> None:
+        """Record a timeout signal."""
+        self._metrics.record_timeout(reason)
+
+    def _record_worker_exception(self, source: str, exc: BaseException) -> None:
+        """Record an exception that happened in worker-owned execution."""
+        self._metrics.record_worker_exception(source, exc)
 
     def get_metrics(self) -> dict[str, object]:
         """Return current server metrics snapshot."""
@@ -347,9 +363,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         client_address: tuple[str, int],
     ) -> None:
         """Handle a client and always release its request admission slot."""
+        self._metrics.record_connection_opened()
         try:
             self._handle_client(client_socket, client_address)
         finally:
+            self._metrics.record_connection_closed()
             self._release_request_admission()
 
     def _release_cancelled_admission(self, future: object, client_socket: socket.socket) -> None:
@@ -361,6 +379,40 @@ class ExperimentalHTTPServer(HandlerMixin):
             client_socket.close()
         finally:
             self._release_request_admission()
+
+    def _finalize_worker_future(
+        self,
+        future: object,
+        client_socket: socket.socket,
+        client_address: tuple[str, int],
+    ) -> None:
+        """Observe worker completion so cancellations and exceptions are visible."""
+        cancelled = getattr(future, "cancelled", None)
+        if callable(cancelled) and cancelled():
+            self._release_cancelled_admission(future, client_socket)
+            return
+
+        exception = getattr(future, "exception", None)
+        if not callable(exception):
+            return
+
+        try:
+            exc = exception()
+        except Exception as callback_exc:
+            self._record_worker_exception("worker_future_callback", callback_exc)
+            logger.exception("Failed to observe worker future completion")
+            return
+
+        if exc is None:
+            return
+
+        self._record_worker_exception("worker_future", exc)
+        logger.error(
+            "Worker future failed while handling %s:%d",
+            client_address[0],
+            client_address[1],
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
 
     def _try_acquire_websocket_slot(self) -> bool:
         """Return True if a WebSocket connection can enter the active set."""
@@ -495,14 +547,14 @@ class ExperimentalHTTPServer(HandlerMixin):
                         add_done_callback = getattr(future, "add_done_callback", None)
                         if callable(add_done_callback):
                             add_done_callback(
-                                lambda fut, sock=client_socket: self._release_cancelled_admission(
-                                    fut,
-                                    sock,
+                                lambda fut, sock=client_socket, addr=client_address: (
+                                    self._finalize_worker_future(fut, sock, addr)
                                 )
                             )
-                    except Exception:
+                    except Exception as exc:
                         self._release_request_admission()
                         client_socket.close()
+                        self._record_worker_exception("worker_submit", exc)
                         logger.exception("Failed to submit accepted client to worker pool")
                 except TimeoutError:
                     continue
@@ -565,6 +617,7 @@ class ExperimentalHTTPServer(HandlerMixin):
                 data = self._receive_request(client_socket, idle_timeout=idle_timeout)
                 if not data:
                     break
+                self._record_bytes_received(len(data))
 
                 requests_on_conn += 1
                 keep_alive = self._process_request(
@@ -575,8 +628,9 @@ class ExperimentalHTTPServer(HandlerMixin):
                 )
                 if not keep_alive:
                     break
-        except Exception:
-            pass
+        except Exception as exc:
+            self._record_worker_exception("handle_client", exc)
+            logger.exception("Client worker failed for %s:%d", client_address[0], client_address[1])
         finally:
             client_socket.close()
 
@@ -893,12 +947,15 @@ class ExperimentalHTTPServer(HandlerMixin):
                         and time.monotonic() - incomplete_since >= self.websocket_frame_idle_timeout
                     ):
                         logger.warning("WS incomplete frame timed out")
+                        self._metrics.record_websocket_incomplete_frame_timeout()
+                        self._record_timeout("websocket_incomplete_frame")
                         send_close(1002, "Incomplete frame timeout")
                         return
                     if buf:
                         continue
                     # Send ping to keep alive when the connection is otherwise idle.
                     try:
+                        self._metrics.record_websocket_idle_ping()
                         sock.sendall(build_ws_frame(b"", opcode=WS_PING))
                     except Exception:
                         break
@@ -909,9 +966,11 @@ class ExperimentalHTTPServer(HandlerMixin):
                     try:
                         frame = parse_ws_frame(buf, require_mask=True)
                     except WebSocketProtocolError as e:
+                        self._metrics.record_websocket_protocol_error()
                         send_close(e.close_code, e.close_reason)
                         return
                     except ValueError:
+                        self._metrics.record_websocket_message_too_big()
                         send_close(1009, "Message too big")
                         return
                     if frame is None:
@@ -946,6 +1005,7 @@ class ExperimentalHTTPServer(HandlerMixin):
                         self._handle_ws_message(sock, payload)
 
         except Exception as e:
+            self._metrics.record_websocket_error()
             logger.debug("WS connection error: %s", e)
         finally:
             send_close()

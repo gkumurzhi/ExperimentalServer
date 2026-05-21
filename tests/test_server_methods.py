@@ -3,6 +3,7 @@
 import base64
 import gzip
 import json
+import logging
 import ssl
 import struct
 import threading
@@ -892,10 +893,9 @@ class TestServerHelpers:
 
         assert server.max_websocket_connections == 0
         assert server._try_acquire_websocket_slot() is False
-        assert server.get_metrics()["websocket"] == {
-            "active": 0,
-            "rejected_admissions": 1,
-        }
+        ws_metrics = server.get_metrics()["websocket"]
+        assert ws_metrics["active"] == 0
+        assert ws_metrics["rejected_admissions"] == 1
 
     def test_explicit_single_websocket_budget_can_admit_connection(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -907,15 +907,14 @@ class TestServerHelpers:
         )
 
         assert server._try_acquire_websocket_slot() is True
-        assert server.get_metrics()["websocket"] == {
-            "active": 1,
-            "rejected_admissions": 0,
-        }
+        ws_metrics = server.get_metrics()["websocket"]
+        assert ws_metrics["active"] == 1
+        assert ws_metrics["rejected_admissions"] == 0
         server._release_websocket_slot()
-        assert server.get_metrics()["websocket"] == {
-            "active": 0,
-            "rejected_admissions": 0,
-        }
+        ws_metrics = server.get_metrics()["websocket"]
+        assert ws_metrics["active"] == 0
+        assert ws_metrics["rejected_admissions"] == 0
+        assert ws_metrics["closed"] == 1
 
     def test_request_admission_rejects_when_worker_budget_is_full(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -957,6 +956,11 @@ class TestServerHelpers:
             "accepted": 1,
             "rejected": 0,
         }
+        assert server.get_metrics()["connections"] == {
+            "active": 0,
+            "accepted": 1,
+            "closed": 1,
+        }
 
     def test_admitted_client_releases_admission_after_handler_exception(
         self,
@@ -981,6 +985,38 @@ class TestServerHelpers:
             "accepted": 1,
             "rejected": 0,
         }
+        assert server.get_metrics()["connections"] == {
+            "active": 0,
+            "accepted": 1,
+            "closed": 1,
+        }
+
+    def test_handle_client_records_unexpected_worker_exception(
+        self,
+        temp_dir,
+        monkeypatch,
+        caplog,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        def fail_receive(*_args, **_kwargs):
+            raise RuntimeError("receive failed")
+
+        caplog.set_level(logging.ERROR, logger="httpserver")
+        monkeypatch.setattr(server, "_receive_request", fail_receive)
+        server.running = True
+
+        server._handle_client(sock, ("127.0.0.1", 43210))
+
+        assert sock.closed is True
+        assert server.get_metrics()["worker"] == {
+            "exceptions": 1,
+            "exception_sources": {"handle_client": 1},
+            "last_exception_type": "RuntimeError",
+        }
+        assert "Client worker failed for 127.0.0.1:43210" in caplog.text
 
     def test_admitted_client_releases_admission_when_tls_handshake_fails(
         self,
@@ -1034,6 +1070,34 @@ class TestServerHelpers:
             "accepted": 1,
             "rejected": 0,
         }
+
+    def test_worker_future_exception_is_logged_and_metriced(
+        self,
+        temp_dir,
+        caplog,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        class _FailedFuture:
+            def cancelled(self) -> bool:
+                return False
+
+            def exception(self):
+                return RuntimeError("worker exploded")
+
+        caplog.set_level(logging.ERROR, logger="httpserver")
+
+        server._finalize_worker_future(_FailedFuture(), sock, ("127.0.0.1", 43210))
+
+        assert sock.closed is False
+        assert server.get_metrics()["worker"] == {
+            "exceptions": 1,
+            "exception_sources": {"worker_future": 1},
+            "last_exception_type": "RuntimeError",
+        }
+        assert "Worker future failed while handling 127.0.0.1:43210" in caplog.text
 
     def test_should_keep_alive_respects_http_version(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -1463,6 +1527,7 @@ class TestServerHelpers:
 
         assert idle_timeouts == [None, server.KEEP_ALIVE_TIMEOUT]
         assert processed == [(b"first", 1), (b"second", 2)]
+        assert server.get_metrics()["bytes_received"] == len(b"first") + len(b"second")
         assert sock.closed is True
 
     def test_handle_notepad_ws_sends_ping_on_timeout_then_closes(self, temp_dir):
@@ -1486,6 +1551,38 @@ class TestServerHelpers:
         assert close_frame is not None
         assert close_frame[0] == WS_CLOSE
         assert sock.timeouts == [60.0]
+        assert server.get_metrics()["websocket"]["idle_pings"] == 1
+
+    def test_handle_notepad_ws_records_incomplete_frame_timeout(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            websocket_frame_idle_timeout=0.5,
+        )
+        server.running = True
+        times = iter([100.0, 101.0])
+        monkeypatch.setattr("src.server.time.monotonic", lambda: next(times, 101.0))
+        sock = _WebSocketSocketStub([b"\x81\x85", TimeoutError()])
+        request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+        )
+
+        server._handle_notepad_ws(sock, request)
+
+        close_frame = parse_ws_frame(sock.sent[-1])
+        assert close_frame is not None
+        assert close_frame[0] == WS_CLOSE
+        assert struct.unpack("!H", close_frame[1][:2])[0] == 1002
+        metrics = server.get_metrics()
+        assert metrics["websocket"]["incomplete_frame_timeouts"] == 1
+        assert metrics["timeouts"] == {"websocket_incomplete_frame": 1}
 
     def test_handle_notepad_ws_handles_ping_pong_and_text_frames(self, temp_dir, monkeypatch):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -1599,6 +1696,7 @@ class TestServerHelpers:
         assert struct.unpack("!H", too_big_close[1][:2])[0] == 1009
         assert too_big_close[1][2:] == b"Message too big"
         assert len(sock.sent) == 2
+        assert server.get_metrics()["websocket"]["message_too_big"] == 1
 
     def test_start_opens_browser_and_cleans_up_resources(self, temp_dir, monkeypatch, capsys):
         (temp_dir / "index.html").write_text("<html>ok</html>")
