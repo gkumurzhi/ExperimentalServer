@@ -1,7 +1,7 @@
 # STAGE-002 - Add receive-layer header caps and parser telemetry
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -44,10 +44,10 @@ Enforce a hard, configurable HTTP header size cap before body buffering and reco
 5. Update API/operator docs only for observable behavior.
 
 ## Acceptance criteria
-- [ ] Headers over the cap are rejected before body buffering.
-- [ ] Body upload cap and header cap are independent.
-- [ ] Existing duplicate/conflicting `Content-Length` tests still pass.
-- [ ] Receive rejection reasons can be observed or tested.
+- [x] Headers over the cap are rejected before body buffering.
+- [x] Body upload cap and header cap are independent.
+- [x] Existing duplicate/conflicting `Content-Length` tests still pass.
+- [x] Receive rejection reasons can be observed or tested.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,4 @@ Enforce a hard, configurable HTTP header size cap before body buffering and reco
 - Rollback: Raise cap default or keep cap configurable while preserving tests.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T23:01:52+03:00. Added a configurable receive-layer HTTP header cap (`--max-header-size`, default 64 KiB), parser rejection callbacks, metrics `receive_rejections` counters, and focused parser/server/CLI/docs coverage. A reviewer subagent found and re-checked a body/header boundary fix; targeted verification passed. Broad suite/typecheck failures were unrelated local dependency gaps (`hypothesis`, `acme`, `mypy`, older `cryptography`).

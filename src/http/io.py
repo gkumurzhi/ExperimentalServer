@@ -9,13 +9,39 @@ from __future__ import annotations
 import logging
 import socket
 import time
+from collections.abc import Callable
+from typing import Literal
 
 logger = logging.getLogger("httpserver")
 
 HEADER_TIMEOUT = 30.0
 BODY_TIMEOUT = 300.0
 DEFAULT_IDLE_TIMEOUT = 5.0
+DEFAULT_MAX_HEADER_SIZE = 64 * 1024
 RECV_CHUNK = 65536
+HEADER_TERMINATOR = b"\r\n\r\n"
+
+ReceiveRejectionReason = Literal[
+    "header_too_large",
+    "body_too_large",
+    "header_timeout",
+    "body_timeout",
+    "unsupported_transfer_encoding",
+    "invalid_content_length",
+]
+ReceiveRejectCallback = Callable[[ReceiveRejectionReason], None]
+
+
+def _record_rejection(
+    on_reject: ReceiveRejectCallback | None,
+    reason: ReceiveRejectionReason,
+) -> None:
+    if on_reject is None:
+        return
+    try:
+        on_reject(reason)
+    except Exception:
+        logger.exception("Receive rejection callback failed")
 
 
 def _parse_content_length(headers_part: str) -> int | None:
@@ -49,21 +75,30 @@ def receive_request(
     client_socket: socket.socket,
     *,
     max_upload_size: int,
+    max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
     idle_timeout: float | None = None,
+    on_reject: ReceiveRejectCallback | None = None,
 ) -> bytes:
     """Read one complete HTTP request from ``client_socket``.
 
     Returns the raw request bytes or an empty ``bytes`` on any framing error
-    (timeout, oversized body, conflicting Content-Length). The caller is
+    (timeout, oversized headers/body, conflicting Content-Length). The caller is
     responsible for closing the socket when empty is returned.
 
     Args:
         client_socket: Accepted (and optionally TLS-wrapped) client socket.
-        max_upload_size: Hard cap on total request bytes.
+        max_upload_size: Hard cap on request body bytes.
+        max_header_size: Hard cap on request header bytes before ``\\r\\n\\r\\n``.
         idle_timeout: Initial timeout for the first ``recv`` (used by
             keep-alive loops waiting for the next request). ``None`` uses the
             default 5 s.
+        on_reject: Optional callback invoked with the receive-layer rejection reason.
     """
+    if max_upload_size <= 0:
+        raise ValueError("max_upload_size must be greater than 0")
+    if max_header_size <= 0:
+        raise ValueError("max_header_size must be greater than 0")
+
     chunks: list[bytes] = []
     total_size = 0
     start_time = time.monotonic()
@@ -79,14 +114,21 @@ def receive_request(
     while True:
         elapsed = time.monotonic() - start_time
         if not headers_received and elapsed > HEADER_TIMEOUT:
+            _record_rejection(on_reject, "header_timeout")
             logger.warning("Header receive timeout (%.0fs)", elapsed)
             return b""
         if headers_received and elapsed > HEADER_TIMEOUT + BODY_TIMEOUT:
+            _record_rejection(on_reject, "body_timeout")
             logger.warning("Body receive timeout (%.0fs)", elapsed)
             return b""
 
         try:
-            chunk = client_socket.recv(RECV_CHUNK)
+            recv_size = RECV_CHUNK
+            if not headers_received:
+                header_probe_limit = max_header_size + len(HEADER_TERMINATOR)
+                recv_size = min(RECV_CHUNK, max(1, header_probe_limit - total_size))
+
+            chunk = client_socket.recv(recv_size)
             if not chunk:
                 break
 
@@ -97,23 +139,30 @@ def receive_request(
             chunks.append(chunk)
             total_size += len(chunk)
 
-            if total_size > max_upload_size + RECV_CHUNK:
-                logger.warning("Request too large (%d bytes), dropping", total_size)
-                return b""
-
             if not headers_received:
                 data = b"".join(chunks)
-                if b"\r\n\r\n" in data:
-                    header_end_pos = data.find(b"\r\n\r\n")
+                header_end_pos = data.find(HEADER_TERMINATOR)
+                if header_end_pos >= 0:
+                    if header_end_pos > max_header_size:
+                        _record_rejection(on_reject, "header_too_large")
+                        logger.warning(
+                            "Request headers too large (%d bytes > %d bytes), dropping",
+                            header_end_pos,
+                            max_header_size,
+                        )
+                        return b""
                     headers_part = data[:header_end_pos].decode("utf-8", errors="replace")
                     if _has_transfer_encoding(headers_part):
+                        _record_rejection(on_reject, "unsupported_transfer_encoding")
                         logger.warning("Transfer-Encoding is not supported; dropping request")
                         return b""
                     parsed = _parse_content_length(headers_part)
                     if parsed is None:
+                        _record_rejection(on_reject, "invalid_content_length")
                         return b""
                     content_length = parsed
                     if content_length > max_upload_size:
+                        _record_rejection(on_reject, "body_too_large")
                         logger.warning(
                             "Declared Content-Length too large (%d bytes > %d bytes), dropping",
                             content_length,
@@ -121,11 +170,26 @@ def receive_request(
                         )
                         return b""
                     headers_received = True
-                    body_received = total_size - header_end_pos - 4
+                    body_received = total_size - header_end_pos - len(HEADER_TERMINATOR)
+                    if body_received > max_upload_size:
+                        _record_rejection(on_reject, "body_too_large")
+                        logger.warning("Request body too large (%d bytes), dropping", body_received)
+                        return b""
                     if body_received >= content_length:
                         break
+                elif len(data) > max_header_size + len(HEADER_TERMINATOR) - 1:
+                    _record_rejection(on_reject, "header_too_large")
+                    logger.warning(
+                        "Request headers too large (>%d bytes), dropping",
+                        max_header_size,
+                    )
+                    return b""
             else:
-                body_received = total_size - header_end_pos - 4
+                body_received = total_size - header_end_pos - len(HEADER_TERMINATOR)
+                if body_received > max_upload_size:
+                    _record_rejection(on_reject, "body_too_large")
+                    logger.warning("Request body too large (%d bytes), dropping", body_received)
+                    return b""
                 if body_received >= content_length:
                     break
 

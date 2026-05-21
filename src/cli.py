@@ -11,6 +11,7 @@ from types import FrameType
 from typing import Any
 
 from . import ExperimentalHTTPServer, __version__
+from .http.io import DEFAULT_MAX_HEADER_SIZE
 
 
 def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Callable[[str], int]:
@@ -100,6 +101,13 @@ Custom HTTP methods:
         default=100,
         metavar="MB",
         help="Max upload size in MB (default: 100)",
+    )
+    limits.add_argument(
+        "--max-header-size",
+        type=_bounded_int("max header size", minimum=1),
+        default=DEFAULT_MAX_HEADER_SIZE // 1024,
+        metavar="KB",
+        help="Max HTTP request header size in KiB (default: 64)",
     )
     limits.add_argument(
         "-w",
@@ -237,6 +245,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "port": args.port,
         "root_dir": args.dir,
         "max_upload_size": args.max_size * 1024 * 1024,
+        "max_header_size": args.max_header_size * 1024,
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,

@@ -18,6 +18,7 @@ class MetricsCollector:
         self._server_error_count: int = 0
         self._bytes_sent: int = 0
         self._status_counts: dict[int, int] = {}
+        self._receive_rejections: dict[str, int] = {}
         self._websocket_active: int = 0
         self._websocket_rejected_admissions: int = 0
 
@@ -56,6 +57,11 @@ class MetricsCollector:
         with self._lock:
             self._websocket_rejected_admissions += 1
 
+    def record_receive_rejection(self, reason: str) -> None:
+        """Record a receive-layer request rejection reason."""
+        with self._lock:
+            self._receive_rejections[reason] = self._receive_rejections.get(reason, 0) + 1
+
     def snapshot(self) -> dict[str, object]:
         """Return a read-only view of current metrics."""
         with self._lock:
@@ -68,6 +74,7 @@ class MetricsCollector:
                 "server_errors": self._server_error_count,
                 "bytes_sent": self._bytes_sent,
                 "status_counts": dict(self._status_counts),
+                "receive_rejections": dict(self._receive_rejections),
                 "websocket": {
                     "active": self._websocket_active,
                     "rejected_admissions": self._websocket_rejected_admissions,

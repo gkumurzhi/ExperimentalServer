@@ -8,7 +8,12 @@ import time
 
 import pytest
 
-from src.http.io import _has_transfer_encoding, _parse_content_length, receive_request
+from src.http.io import (
+    DEFAULT_MAX_HEADER_SIZE,
+    _has_transfer_encoding,
+    _parse_content_length,
+    receive_request,
+)
 
 
 class TestParseContentLength:
@@ -59,6 +64,26 @@ def socket_pair() -> tuple[socket.socket, socket.socket]:
     client.close()
 
 
+class SizeRespectingSocket:
+    def __init__(self, data: bytes) -> None:
+        self._data = bytearray(data)
+        self.recv_calls = 0
+        self.recv_sizes: list[int] = []
+        self.timeouts: list[float | None] = []
+
+    def settimeout(self, timeout: float | None) -> None:
+        self.timeouts.append(timeout)
+
+    def recv(self, size: int) -> bytes:
+        self.recv_calls += 1
+        self.recv_sizes.append(size)
+        if not self._data:
+            return b""
+        chunk = bytes(self._data[:size])
+        del self._data[:size]
+        return chunk
+
+
 class TestReceiveRequest:
     def test_reads_simple_get_request(
         self,
@@ -84,6 +109,98 @@ class TestReceiveRequest:
 
         result = receive_request(server, max_upload_size=1024 * 1024)
         assert result == request
+
+    def test_rejects_header_over_configured_limit_before_body_recv(self) -> None:
+        max_header_size = 32
+        request = (
+            b"GET / HTTP/1.1\r\nX-Pad: "
+            + (b"A" * 128)
+            + b"\r\n\r\n"
+            + b"body-that-must-not-be-read"
+        )
+        sock = SizeRespectingSocket(request)
+        reasons: list[str] = []
+
+        result = receive_request(
+            sock,
+            max_upload_size=1024 * 1024,
+            max_header_size=max_header_size,
+            on_reject=reasons.append,
+        )
+
+        assert result == b""
+        assert sock.recv_calls == 1
+        assert sock.recv_sizes == [max_header_size + len(b"\r\n\r\n")]
+        assert reasons == ["header_too_large"]
+
+    def test_accepts_header_at_configured_limit(self) -> None:
+        max_header_size = 48
+        prefix = b"GET / HTTP/1.1\r\nX-Pad: "
+        suffix = b"\r\n"
+        padding = b"A" * (max_header_size - len(prefix) - len(suffix))
+        request = prefix + padding + suffix + b"\r\n"
+        sock = SizeRespectingSocket(request)
+
+        result = receive_request(
+            sock,
+            max_upload_size=1024 * 1024,
+            max_header_size=max_header_size,
+        )
+
+        assert result == request
+
+    def test_accepts_max_header_with_body_at_upload_cap(self) -> None:
+        body = b"A" * 32
+        prefix = f"POST / HTTP/1.1\r\nContent-Length: {len(body)}\r\nX-Pad: ".encode()
+        suffix = b"\r\n"
+        padding = b"A" * (DEFAULT_MAX_HEADER_SIZE - len(prefix) - len(suffix))
+        request = prefix + padding + suffix + b"\r\n" + body
+        sock = SizeRespectingSocket(request)
+        reasons: list[str] = []
+
+        result = receive_request(
+            sock,
+            max_upload_size=len(body),
+            max_header_size=DEFAULT_MAX_HEADER_SIZE,
+            on_reject=reasons.append,
+        )
+
+        assert result == request
+        assert reasons == []
+
+    def test_header_cap_does_not_limit_body_size(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        body = b"A" * 128
+        header = f"POST / HTTP/1.1\r\nContent-Length: {len(body)}\r\n\r\n".encode()
+        request = header + body
+        client.sendall(request)
+
+        result = receive_request(
+            server,
+            max_upload_size=256,
+            max_header_size=len(header) + 8,
+        )
+
+        assert result == request
+
+    def test_declared_body_cap_is_independent_from_header_cap(self) -> None:
+        request = b"POST / HTTP/1.1\r\nContent-Length: 9\r\n\r\n"
+        sock = SizeRespectingSocket(request)
+        reasons: list[str] = []
+
+        result = receive_request(
+            sock,
+            max_upload_size=8,
+            max_header_size=1024,
+            on_reject=reasons.append,
+        )
+
+        assert result == b""
+        assert sock.recv_calls == 1
+        assert reasons == ["body_too_large"]
 
     def test_rejects_request_exceeding_size_limit(
         self,

@@ -20,6 +20,7 @@ class TestMetricsCollector:
         assert snap["server_errors"] == 0
         assert snap["bytes_sent"] == 0
         assert snap["status_counts"] == {}
+        assert snap["receive_rejections"] == {}
         assert snap["websocket"] == {"active": 0, "rejected_admissions": 0}
         assert snap["uptime_seconds"] == 0
 
@@ -58,6 +59,18 @@ class TestMetricsCollector:
         # Original state must not be affected
         snap2 = m.snapshot()
         assert snap2["status_counts"] == {200: 1}
+
+    def test_receive_rejection_counts_are_isolated(self) -> None:
+        m = MetricsCollector()
+        m.record_receive_rejection("header_too_large")
+        m.record_receive_rejection("header_too_large")
+        m.record_receive_rejection("body_too_large")
+
+        snap = m.snapshot()
+        assert snap["receive_rejections"] == {
+            "header_too_large": 2,
+            "body_too_large": 1,
+        }
 
     def test_error_counters_are_status_based(self) -> None:
         m = MetricsCollector()

@@ -19,6 +19,7 @@ from .config import HIDDEN_FILES, __version__
 from .handlers import HandlerMixin
 from .http import HTTPRequest, HTTPResponse
 from .http.cors import parse_cors_origins, resolve_cors_origin
+from .http.io import DEFAULT_MAX_HEADER_SIZE
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
 from .request_pipeline import RequestPipeline, ResponseBuildArgs
@@ -67,6 +68,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         port: int = 8080,
         root_dir: str = ".",
         max_upload_size: int = 100 * 1024 * 1024,  # 100 MB
+        max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
         max_workers: int = 10,
         quiet: bool = False,
         # TLS options
@@ -101,6 +103,8 @@ class ExperimentalHTTPServer(HandlerMixin):
             raise ValueError("port must be between 1 and 65535")
         if max_upload_size <= 0:
             raise ValueError("max_upload_size must be greater than 0")
+        if max_header_size <= 0:
+            raise ValueError("max_header_size must be greater than 0")
         if max_workers <= 0:
             raise ValueError("max_workers must be greater than 0")
 
@@ -109,6 +113,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.root_dir = Path(root_dir).resolve()
         self.socket: socket.socket | None = None
         self.max_upload_size = max_upload_size
+        self.max_header_size = max_header_size
         self.max_workers = max_workers
         if max_websocket_connections is None:
             max_websocket_connections = max(0, max_workers // 2)
@@ -278,6 +283,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         """Record request metrics (thread-safe)."""
         self._metrics.record(status_code, response_size, error=error)
 
+    def _record_receive_rejection(self, reason: str) -> None:
+        """Record a receive-layer rejection reason."""
+        self._metrics.record_receive_rejection(reason)
+
     def get_metrics(self) -> dict[str, object]:
         """Return current server metrics snapshot."""
         return self._metrics.snapshot()
@@ -377,6 +386,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  File access: uploads/ only ({self.upload_dir})")
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload: {self.max_upload_size // (1024 * 1024)} MB")
+        print(f"  Max headers: {self.max_header_size // 1024} KiB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
         print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")
 
@@ -677,7 +687,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         return _receive_request_io(
             client_socket,
             max_upload_size=self.max_upload_size,
+            max_header_size=self.max_header_size,
             idle_timeout=idle_timeout,
+            on_reject=self._record_receive_rejection,
         )
 
     def _handle_notepad_ws(

@@ -656,6 +656,20 @@ class TestServerHelpers:
         assert response.status_code == 413
         assert "Max size: 2 MB" in json.loads(response.body)["error"]
 
+    def test_receive_request_records_rejection_metrics(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            max_header_size=16,
+        )
+        sock = _WebSocketSocketStub([b"GET / HTTP/1.1\r\nX-Pad: oversized"])
+
+        result = server._receive_request(sock)
+
+        assert result == b""
+        assert server.get_metrics()["receive_rejections"] == {"header_too_large": 1}
+
     def test_smuggle_rejects_over_source_limit_without_temp_artifact(self, server, upload_dir):
         server.smuggle_source_size_limit = 4
         source_path = upload_dir / "large.bin"
@@ -1203,6 +1217,7 @@ class TestServerHelpers:
         assert "[TLS]     certificate: self-signed" in output
         assert "[AUTH]    Basic Auth enabled" in output
         assert "File access: uploads/ only" in output
+        assert "Max headers: 64 KiB" in output
         assert "Advanced upload: enabled" in output
         assert "Shutting down..." in output
         assert "Server stopped" in output

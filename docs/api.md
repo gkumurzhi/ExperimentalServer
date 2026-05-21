@@ -247,6 +247,10 @@ PING / HTTP/1.1
       "404": 4,
       "500": 2
     },
+    "receive_rejections": {
+      "header_too_large": 1,
+      "body_too_large": 1
+    },
     "websocket": {
       "active": 0,
       "rejected_admissions": 1
@@ -262,9 +266,10 @@ metrics object is available as JSON from `GET /metrics`.
 `client_errors` counts recorded 4xx responses. `server_errors` counts recorded
 5xx responses and exceptional request failures. Handler-returned responses and
 direct error responses are included in `status_counts` and the matching error
-bucket. Accepted WebSocket upgrades are tracked through the `websocket`
-resource counters rather than `total_requests`, `status_counts`, or
-`bytes_sent`.
+bucket. Receive-layer drops before request dispatch are tracked by
+`receive_rejections` reason. Accepted WebSocket upgrades are tracked through
+the `websocket` resource counters rather than `total_requests`,
+`status_counts`, or `bytes_sent`.
 
 ---
 

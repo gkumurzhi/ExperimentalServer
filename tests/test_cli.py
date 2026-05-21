@@ -58,6 +58,7 @@ class TestCLIParser:
         assert args.tls is False
         assert args.auth is None
         assert args.max_size == 100
+        assert args.max_header_size == 64
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
@@ -81,6 +82,8 @@ class TestCLIParser:
             ["--port", "65536"],
             ["--max-size", "0"],
             ["--max-size", "-1"],
+            ["--max-header-size", "0"],
+            ["--max-header-size", "-1"],
             ["--workers", "0"],
             ["--workers", "-1"],
             ["--acme-http-port", "0"],
@@ -225,6 +228,8 @@ class TestCLIMain:
                 "--advanced-upload",
                 "-m",
                 "250",
+                "--max-header-size",
+                "128",
                 "-w",
                 "20",
                 "--auth",
@@ -238,6 +243,7 @@ class TestCLIMain:
             "port": 9090,
             "root_dir": "/srv/data",
             "max_upload_size": 250 * 1024 * 1024,
+            "max_header_size": 128 * 1024,
             "max_workers": 20,
             "quiet": True,
             "debug": True,
@@ -449,6 +455,8 @@ class TestServerConstructorValidation:
             ({"port": 65536}, "port must be between 1 and 65535"),
             ({"max_upload_size": 0}, "max_upload_size must be greater than 0"),
             ({"max_upload_size": -1}, "max_upload_size must be greater than 0"),
+            ({"max_header_size": 0}, "max_header_size must be greater than 0"),
+            ({"max_header_size": -1}, "max_header_size must be greater than 0"),
             ({"max_workers": 0}, "max_workers must be greater than 0"),
             ({"max_workers": -1}, "max_workers must be greater than 0"),
         ],

@@ -58,7 +58,7 @@ trusted *after* it is validated at the boundary.
 
 | Threat | Mitigation |
 |--------|------------|
-| Slowloris (headers never end) | 30-second header read timeout |
+| Slowloris / oversized headers | 30-second header read timeout and `--max-header-size KB` cap |
 | Large upload fills disk | `--max-size MB` enforced before and during read |
 | Infinite keep-alive | `KEEP_ALIVE_MAX = 100` requests per connection, 15 s idle timeout |
 | WebSocket flood | Frame size limit; notepad writes behind `self._notes_lock`; ECDH sessions use TTL + LRU cleanup |
