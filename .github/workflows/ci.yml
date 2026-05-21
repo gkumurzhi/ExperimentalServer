@@ -46,6 +46,9 @@ jobs:
           python -m src --help > /dev/null
           python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
 
+      - name: Pytest collection policy
+        run: python tools/check_pytest_collection_policy.py
+
       - name: Lint (ruff)
         run: ruff check src tests
 

@@ -71,3 +71,9 @@
 - Files changed: `src/http/utils.py`, `src/http/__init__.py`, `src/handlers/files.py`, `src/handlers/advanced_upload.py`, `src/notepad_service.py`, `tests/test_handlers/test_files.py`, `tests/test_handlers/test_notepad.py`, `implementation-plan/20260505-205639/stages/STAGE-012-atomic-user-data-writes.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-012-20260521-202814.md`
 - Verification: concurrent upload regressions, Notepad failure-injection regressions, required upload/live and Notepad/WebSocket suites, ruff, compileall, focused mypy, static same-directory temp review, and explorer review passed.
 - Report: `stage-reports/STAGE-012-20260521-202814.md`
+
+## 2026-05-21 20:52:31 MSK — STAGE-013
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `.gitignore`, `tests/conftest.py`, `tools/check_pytest_collection_policy.py`, `tests/test_pytest_collection_policy.py`, `implementation-plan/20260505-205639/stages/STAGE-013-ci-local-collection-drift.md`, `implementation-plan/20260505-205639/stage-status.md`, `implementation-plan/20260505-205639/change-log.md`, `implementation-plan/20260505-205639/stage-reports/STAGE-013-20260521-204722.md`
+- Verification: collect-only in project `.venv`, ignored-test absence check, ignored pytest file inventory, policy helper, guard tests, `tests/test_cli.py`, ruff, diff whitespace, Context7 pytest docs check, and explorer review passed.
+- Report: `stage-reports/STAGE-013-20260521-204722.md`

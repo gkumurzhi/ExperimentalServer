@@ -8,6 +8,10 @@ import pytest
 
 from src.http import HTTPRequest
 
+# Local Codex stage-runner tests are intentionally ignored by Git and are not part
+# of the project/CI test contract.
+collect_ignore = [Path(__file__).with_name("test_close_plan_stages.py")]
+
 
 @pytest.fixture
 def temp_dir():

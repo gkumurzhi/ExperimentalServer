@@ -60,5 +60,6 @@ Thumbs.db
 agents_review/
 
 # Local Codex stage runner
+# These files are operator-local and intentionally excluded from project pytest collection.
 tools/close_plan_stages.py
 tests/test_close_plan_stages.py

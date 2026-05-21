@@ -1,7 +1,7 @@
 # STAGE-013 - Resolve local-only pytest collection drift
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -50,11 +50,11 @@ Make local pytest collection match tracked CI checkout behavior by either tracki
 5. Add a lightweight guard that detects ignored `tests/test_*.py` files under the repo.
 
 ## Acceptance criteria
-- [ ] `pytest --collect-only` no longer collects tests that are ignored and absent from CI checkout.
-- [ ] The repo has an explicit policy for local Codex runner files.
-- [ ] CI/local confidence drift from ignored test collection is prevented.
-- [ ] No local-only files are deleted or moved without a clear decision.
-- [ ] Full project test collection still includes all intended tracked tests.
+- [x] `pytest --collect-only` no longer collects tests that are ignored and absent from CI checkout.
+- [x] The repo has an explicit policy for local Codex runner files.
+- [x] CI/local confidence drift from ignored test collection is prevented.
+- [x] No local-only files are deleted or moved without a clear decision.
+- [x] Full project test collection still includes all intended tracked tests.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -74,4 +74,10 @@ Make local pytest collection match tracked CI checkout behavior by either tracki
 - Rollback: Move files outside repo-level pytest collection and keep `.gitignore` policy explicit.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21 20:52:31 MSK. Treated `tools/close_plan_stages.py` and
+`tests/test_close_plan_stages.py` as operator-local Codex runner files, kept them
+ignored, excluded the known local runner test from project pytest collection, and
+added a tracked guard plus CI step to detect unapproved ignored pytest-style tests.
+Verification passed in the project `.venv`: collect-only reported 671 tests and
+did not include `test_close_plan_stages`, the policy helper and guard tests passed,
+`tests/test_cli.py` passed, ruff checks passed, and `git diff --check` passed.
