@@ -1,7 +1,7 @@
 # STAGE-008 - Refresh operator docs and semantic contract guards
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -42,11 +42,11 @@ Align README, SECURITY, API, threat model, and stale-doc guards with implemented
 5. Sync docs mirrors and update contributor/release check instructions.
 
 ## Acceptance criteria
-- [ ] README quick-start does not imply safe internet exposure without prerequisites.
-- [ ] SECURITY and threat model match implemented controls.
-- [ ] API docs describe finalized Notepad, request-cap, origin, metrics, and CSP behavior.
-- [ ] Semantic docs guards fail on stale protocol/exposure wording.
-- [ ] Docs mirrors are in sync.
+- [x] README quick-start does not imply safe internet exposure without prerequisites.
+- [x] SECURITY and threat model match implemented controls.
+- [x] API docs describe finalized Notepad, request-cap, origin, metrics, and CSP behavior.
+- [x] Semantic docs guards fail on stale protocol/exposure wording.
+- [x] Docs mirrors are in sync.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,11 @@ Align README, SECURITY, API, threat model, and stale-doc guards with implemented
 - Rollback: Revert docs claims to conservative experimental/trusted-local wording.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-22T00:23:17+03:00. README now separates localhost,
+trusted-lab, and external-exposure modes and the quick-start no longer labels a
+bare `0.0.0.0` bind as public access. SECURITY and the threat model now document
+external-exposure prerequisites and the implemented Content-Length behavior.
+API docs describe request framing caps, Notepad blob limits, browser-origin
+mutation policy, operational metrics, and the current CSP contract. Semantic
+stale-doc guards and tests cover exposure wording, Content-Length wording, and
+required API/security contract sections; generated docs mirrors are in sync.

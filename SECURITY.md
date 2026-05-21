@@ -7,6 +7,16 @@ intended for learning, CTF practice, and controlled red/blue team exercises —
 not for untrusted internet exposure. Nothing in this document promises
 production-grade assurances.
 
+## Operating Modes
+
+- **Localhost:** the default bind address is `127.0.0.1`; use this for
+  single-machine experiments.
+- **Trusted lab:** binding to `0.0.0.0` is appropriate only on a controlled
+  network with TLS, authentication, and firewall/NAT restrictions.
+- **External exposure:** do not treat `--tls`, `--auth`, or a public bind as a
+  complete internet hardening story. Use the baseline below and review the
+  threat model before exposing the service outside a trusted lab.
+
 ## Supported Versions
 
 | Version | Security fixes |
@@ -84,6 +94,16 @@ When running the server outside a trusted lab:
 - Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.
+- Configure an exact `--cors-origin` for a trusted browser UI; avoid
+  `--cors-origin *` on internet-facing deployments.
+
+### External exposure baseline
+
+Before exposing the service to untrusted networks, require all of: real TLS,
+strong Basic Auth credentials, a dedicated data directory, firewall allowlists
+where possible, reverse-proxy rate limiting, reverse-proxy request/header/body
+size caps, monitoring of `/metrics`, and an exact browser-origin policy for any
+separate UI origin.
 
 ## Known Limitations
 

@@ -89,6 +89,46 @@ def test_active_package_crypto_extra_variant_is_reported(tmp_path: Path) -> None
     assert "stale crypto extra remediation" in findings[0].message
 
 
+def test_public_exposure_quick_start_wording_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "exphttp -H 0.0.0.0 -p 443     # Публичный доступ\n",
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert findings
+    assert {finding.path for finding in findings} == {Path("README.md")}
+    assert any("public-exposure quick-start" in finding.message for finding in findings)
+
+
+def test_threat_model_duplicate_content_length_wording_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "docs" / "threat-model.md").write_text(
+        "| Content-Length smuggling (duplicate/negative CL) | Rejected |\n",
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert len(findings) == 1
+    assert findings[0].path == Path("docs/threat-model.md")
+    assert "identical duplicates are accepted" in findings[0].message
+
+
+def test_semantic_contract_requires_final_api_metrics(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "API.md").write_text(
+        '  "metrics": {"websocket": {"active": 0}}\n',
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_semantic_contract_issues(tmp_path, ("API.md",))
+
+    assert any("operational metrics" in finding.message for finding in findings)
+
+
 def test_main_returns_failure_with_actionable_output(
     tmp_path: Path,
     monkeypatch,

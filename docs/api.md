@@ -29,6 +29,24 @@ below.
 
 ---
 
+## Request Framing and Caps
+
+The receive layer enforces protocol framing before handler dispatch:
+
+- Request headers are capped by `--max-header-size KB` (`64` KiB by default)
+  before the terminating blank line.
+- Request bodies are capped by `--max-size MB` (`100` MiB by default) using the
+  declared `Content-Length` and the bytes actually read.
+- `Transfer-Encoding` is unsupported and rejected at the receive layer because
+  the server does not decode chunked request bodies.
+- Invalid, negative, or conflicting duplicate `Content-Length` values are
+  rejected. Duplicate identical `Content-Length` values are accepted.
+- Receive-layer framing failures may close the connection before an HTTP error
+  response is built. Rejections are counted in `metrics.receive_rejections` and
+  summarized under `metrics.receive`.
+
+---
+
 ## GET
 
 Serve the bundled web UI, bundled static assets, and user files from `uploads/`.
@@ -45,6 +63,12 @@ the built-in UI assets. Other file paths are resolved inside `uploads/`;
 **Response:** File contents with appropriate `Content-Type`. Bundled HTML files
 include `Content-Security-Policy`; uploaded HTML/SVG files are forced to
 download as attachments.
+
+The bundled UI CSP currently includes `default-src 'self'`, `script-src
+'self'`, `style-src 'self' 'unsafe-inline'`, `img-src 'self' data:`,
+`connect-src 'self' ws: wss:`, `base-uri 'self'`, `object-src 'none'`,
+`frame-ancestors 'none'`, and `form-action 'self'`. Inline scripts are blocked.
+The remaining inline style allowance is limited to current UI progress widgets.
 
 **Status codes:** `200` OK, `304` Not Modified (if ETag matches), `404` Not Found
 

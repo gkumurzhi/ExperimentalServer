@@ -101,6 +101,7 @@ ruff format --check src tests
 mypy src
 pytest --cov=src --cov-report=term-missing
 python tools/sync_docs.py --check
+python tools/check_stale_docs.py
 # optional when docs extras are installed
 mkdocs build --strict
 ```
@@ -131,6 +132,8 @@ restates this):
       `Deprecated`, `Removed`).
 - [ ] Root-canonical docs regenerated with `python tools/sync_docs.py --write`
       and verified with `python tools/sync_docs.py --check`.
+- [ ] Stale contract and semantic docs guards pass with
+      `python tools/check_stale_docs.py`.
 - [ ] Documentation updated when behavior changes:
       `README.md`, `API.md`, or a new `docs/ADR/` entry.
 - [ ] Security impact statement in the PR body (say "none" explicitly if

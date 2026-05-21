@@ -89,11 +89,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[docs,lint]"
 
-      - name: Check generated docs mirrors
+      - name: Check generated docs and semantic guards
         run: |
           set -euo pipefail
-          ruff check tools/sync_docs.py
+          ruff check tools/sync_docs.py tools/check_stale_docs.py
           python tools/sync_docs.py --check
+          python tools/check_stale_docs.py
 
       - name: Build docs
         run: |

@@ -33,7 +33,7 @@ trusted *after* it is validated at the boundary.
 | Threat | Mitigation |
 |--------|------------|
 | Path traversal in upload/download | `Path.resolve().relative_to(base)` — see ADR-004 |
-| Content-Length smuggling (duplicate/negative CL) | Rejected in `src/http/io.py:_parse_content_length` |
+| Content-Length smuggling (conflicting duplicate, negative, or invalid CL) | Conflicting Content-Length values are rejected; duplicate identical Content-Length values are accepted in `src/http/io.py:_parse_content_length` |
 | Transfer-Encoding smuggling | Requests advertising `Transfer-Encoding` are rejected at the receive layer because the backend does not decode chunked bodies |
 | Advanced upload payload modification | Optional HMAC-SHA256 tag over the encoded/ciphertext payload bytes; filename and transport metadata are not covered |
 | WebSocket frame injection | Frame size capped at 10 MB in `src/websocket.py` |
@@ -58,8 +58,9 @@ trusted *after* it is validated at the boundary.
 
 | Threat | Mitigation |
 |--------|------------|
-| Slowloris / oversized headers | 30-second header read timeout and `--max-header-size KB` cap |
+| Slowloris / oversized headers | 30-second header read timeout, `--max-header-size KB` cap, and receive rejection metrics |
 | Large upload fills disk | `--max-size MB` enforced before and during read |
+| Worker pool exhaustion | Socket admission is bounded before worker submission; rejected admissions are reported in metrics |
 | Infinite keep-alive | `KEEP_ALIVE_MAX = 100` requests per connection, 15 s idle timeout |
 | WebSocket flood | Frame size limit; notepad writes behind `self._notes_lock`; ECDH sessions use TTL + LRU cleanup |
 | Auth brute force | `AuthRateLimiter` blocks IPs after repeated failures |
@@ -89,4 +90,4 @@ a reverse proxy / CDN if that is a concern.
 
 ## Versioned
 
-This document is reviewed on every major release. Last review: 2026-04-14.
+This document is reviewed on every major release. Last review: 2026-05-22.

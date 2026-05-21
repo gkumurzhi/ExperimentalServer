@@ -70,7 +70,7 @@ exphttp --open
 ```bash
 exphttp --tls --auth random    # HTTPS + авто-пароль
 exphttp -d ./data -m 500       # Рабочая папка ./data/uploads, лимит 500 MB
-exphttp -H 0.0.0.0 -p 443     # Публичный доступ
+exphttp -H 0.0.0.0 -p 8443 --tls --auth random  # Только trusted lab; см. режимы ниже
 ```
 
 ## Структура проекта
@@ -195,12 +195,26 @@ exphttp --tls --auth admin:secretpassword
 # HTTPS с готовыми сертификатами
 exphttp --tls --cert cert.pem --key key.pem
 
-# Публичный доступ на порту 443
+# Внешний доступ для доверенной сети: минимум TLS + Auth
 exphttp -H 0.0.0.0 -p 443 --tls --auth admin:pass
 
 # Комбинированный режим
 exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth random -m 200
 ```
+
+### Режимы эксплуатации
+
+- **Localhost** — режим по умолчанию: `exphttp` слушает `127.0.0.1:8080` и
+  подходит для локальных экспериментов без внешнего доступа.
+- **Trusted lab** — для контролируемой лабораторной сети можно явно указать
+  `-H 0.0.0.0`, но включайте TLS и Basic Auth, используйте отдельный `--dir`
+  и ограничивайте доступ firewall/NAT.
+- **External exposure** — привязка к `0.0.0.0`, TLS и Auth не делает сервис
+  безопасным для произвольного интернета. Для такого режима нужны как минимум
+  реальный сертификат, сильные credentials из secret-хранилища, reverse proxy
+  с rate limiting и request-size limits, мониторинг, firewall allowlist и
+  точный `--cors-origin` для доверенного браузерного UI. Не используйте
+  `--cors-origin *` для публичного браузерного интерфейса.
 
 ## HTTP-методы
 
@@ -719,9 +733,12 @@ print(response.json())
 - **Browser-origin guard** — cross-origin браузерные мутации отклоняются, кроме явно разрешённых `--cors-origin`
 - **Доступ только к uploads/** — ограничение пользовательских файловых операций
 - **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
-- **Лимит размера** — ограничение размера загружаемых файлов (413 Payload Too Large)
+- **Лимиты запросов** — `--max-header-size` для заголовков, `--max-size` для
+  тела, отдельный 1 MiB decoded limit для Secure Notepad blobs
 - **Скрытые файлы** — любые path-сегменты с leading dot, включая dotfiles в `uploads/`, недоступны через GET и INFO
 - **User content hardening** — загруженные HTML/SVG отдаются как attachment, а ответы получают `X-Content-Type-Options: nosniff`
+- **CSP для UI** — встроенный HTML ограничивает scripts до `'self'`; inline
+  styles временно разрешены только для текущих UI progress widgets
 - **HMAC** — опциональная проверка целостности данных в продвинутой загрузке
 
 ### Ограничения XOR-шифрования
@@ -737,6 +754,7 @@ XOR-шифрование используется для **обфускации*
 ## Технические детали
 
 - **Socket timeout**: 5 секунд (per-recv), 30s headers, 300s body
+- **Max headers**: 64 KiB по умолчанию (`--max-header-size`)
 - **Chunk size**: 65536 байт (64 KB) для приёма и стриминга файлов
 - **Backlog**: 128 соединений
 - **HTTP версия**: 1.1
@@ -850,6 +868,9 @@ mypy src
 
 # Проверка зеркальных Markdown-файлов
 python tools/sync_docs.py --check
+
+# Семантическая проверка устаревших docs/API/security claims
+python tools/check_stale_docs.py
 
 # Пересборка docs/ из root-canonical файлов
 python tools/sync_docs.py --write

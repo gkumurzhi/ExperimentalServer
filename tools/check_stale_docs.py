@@ -17,6 +17,7 @@ DEFAULT_TARGETS: tuple[str, ...] = (
     "API.md",
     "CLAUDE.md",
     "CONTRIBUTING.md",
+    "SECURITY.md",
     "mkdocs.yml",
     "docs",
     "examples",
@@ -42,6 +43,15 @@ SKIPPED_DIRS: frozenset[str] = frozenset({"__pycache__"})
 class StalePattern:
     """One stale public contract reference to reject in active documentation."""
 
+    regex: re.Pattern[str]
+    message: str
+
+
+@dataclass(frozen=True)
+class SemanticRequirement:
+    """One required active documentation contract."""
+
+    path: Path
     regex: re.Pattern[str]
     message: str
 
@@ -96,6 +106,83 @@ STALE_PATTERNS: tuple[StalePattern, ...] = (
     StalePattern(
         re.compile(r"Optional cryptography", re.IGNORECASE),
         "stale optional-cryptography wording; crypto is a default runtime dependency",
+    ),
+    StalePattern(
+        re.compile(r"Публичный доступ(?:\s+на порту 443)?", re.IGNORECASE),
+        "stale public-exposure quick-start wording; document external prerequisites",
+    ),
+    StalePattern(
+        re.compile(r"Public access(?:\s+on port 443)?", re.IGNORECASE),
+        "stale public-exposure quick-start wording; document external prerequisites",
+    ),
+    StalePattern(
+        re.compile(r"exphttp[^\n]*-H\s+0\.0\.0\.0[^\n]*#\s*(?:Публичный доступ|public access)"),
+        "stale public-exposure bind example; document trusted-lab/external prerequisites",
+    ),
+    StalePattern(
+        re.compile(r"Content-Length smuggling \(duplicate/negative CL\)", re.IGNORECASE),
+        (
+            "stale Content-Length wording; identical duplicates are accepted, "
+            "conflicting values are rejected"
+        ),
+    ),
+)
+
+SEMANTIC_REQUIREMENTS: tuple[SemanticRequirement, ...] = (
+    SemanticRequirement(
+        Path("README.md"),
+        re.compile(r"Режимы эксплуатации", re.IGNORECASE),
+        "README must separate localhost, trusted-lab, and external-exposure modes",
+    ),
+    SemanticRequirement(
+        Path("README.md"),
+        re.compile(r"не делает сервис\s+безопасным для произвольного интернета", re.IGNORECASE),
+        "README must not imply binding/TLS/Auth alone make arbitrary internet exposure safe",
+    ),
+    SemanticRequirement(
+        Path("SECURITY.md"),
+        re.compile(r"External exposure baseline", re.IGNORECASE),
+        "SECURITY must define a minimum external-exposure hardening baseline",
+    ),
+    SemanticRequirement(
+        Path("API.md"),
+        re.compile(r"Request Framing and Caps", re.IGNORECASE),
+        "API docs must describe receive-layer header/body caps and framing behavior",
+    ),
+    SemanticRequirement(
+        Path("API.md"),
+        re.compile(
+            r"bytes_received[\s\S]+request_latency_ms[\s\S]+worker",
+            re.IGNORECASE,
+        ),
+        "API docs must include finalized operational metrics fields",
+    ),
+    SemanticRequirement(
+        Path("API.md"),
+        re.compile(r"Notepad-specific encrypted blob limit", re.IGNORECASE),
+        "API docs must describe the finalized Notepad encrypted-blob limit",
+    ),
+    SemanticRequirement(
+        Path("API.md"),
+        re.compile(r"Sec-Fetch-Site: cross-site", re.IGNORECASE),
+        "API docs must describe the browser-origin mutation policy",
+    ),
+    SemanticRequirement(
+        Path("API.md"),
+        re.compile(
+            r"script-src\s+'self'[\s\S]+style-src\s+'self'\s+'unsafe-inline'",
+            re.IGNORECASE,
+        ),
+        "API docs must describe the current HTML CSP contract",
+    ),
+    SemanticRequirement(
+        Path("docs/threat-model.md"),
+        re.compile(
+            r"Conflicting Content-Length values are rejected; duplicate identical "
+            r"Content-Length values are accepted",
+            re.IGNORECASE,
+        ),
+        "threat model must distinguish conflicting from identical duplicate Content-Length",
     ),
 )
 
@@ -170,6 +257,40 @@ def find_stale_references(
     ]
 
 
+def find_semantic_contract_issues(
+    repo_root: Path = REPO_ROOT,
+    targets: Sequence[str] = DEFAULT_TARGETS,
+) -> list[Finding]:
+    """Return missing semantic documentation contracts for active targets."""
+    covered_paths = {
+        relative_to_root(path, repo_root) for path in iter_check_paths(repo_root, targets)
+    }
+    findings: list[Finding] = []
+
+    for requirement in SEMANTIC_REQUIREMENTS:
+        if requirement.path not in covered_paths:
+            continue
+        path = repo_root / requirement.path
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+
+        if requirement.regex.search(text):
+            continue
+
+        findings.append(
+            Finding(
+                path=requirement.path,
+                line_number=1,
+                line="<missing required semantic documentation>",
+                message=requirement.message,
+            )
+        )
+
+    return findings
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     """Parse command-line arguments."""
     parser = argparse.ArgumentParser(
@@ -191,6 +312,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     targets = tuple(args.targets) if args.targets else DEFAULT_TARGETS
     findings = find_stale_references(REPO_ROOT, targets)
+    findings.extend(find_semantic_contract_issues(REPO_ROOT, targets))
 
     if not findings:
         print("No stale documented contract references found.")

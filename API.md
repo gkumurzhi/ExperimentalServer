@@ -27,6 +27,24 @@ below.
 
 ---
 
+## Request Framing and Caps
+
+The receive layer enforces protocol framing before handler dispatch:
+
+- Request headers are capped by `--max-header-size KB` (`64` KiB by default)
+  before the terminating blank line.
+- Request bodies are capped by `--max-size MB` (`100` MiB by default) using the
+  declared `Content-Length` and the bytes actually read.
+- `Transfer-Encoding` is unsupported and rejected at the receive layer because
+  the server does not decode chunked request bodies.
+- Invalid, negative, or conflicting duplicate `Content-Length` values are
+  rejected. Duplicate identical `Content-Length` values are accepted.
+- Receive-layer framing failures may close the connection before an HTTP error
+  response is built. Rejections are counted in `metrics.receive_rejections` and
+  summarized under `metrics.receive`.
+
+---
+
 ## GET
 
 Serve the bundled web UI, bundled static assets, and user files from `uploads/`.
@@ -43,6 +61,12 @@ the built-in UI assets. Other file paths are resolved inside `uploads/`;
 **Response:** File contents with appropriate `Content-Type`. Bundled HTML files
 include `Content-Security-Policy`; uploaded HTML/SVG files are forced to
 download as attachments.
+
+The bundled UI CSP currently includes `default-src 'self'`, `script-src
+'self'`, `style-src 'self' 'unsafe-inline'`, `img-src 'self' data:`,
+`connect-src 'self' ws: wss:`, `base-uri 'self'`, `object-src 'none'`,
+`frame-ancestors 'none'`, and `form-action 'self'`. Inline scripts are blocked.
+The remaining inline style allowance is limited to current UI progress widgets.
 
 **Status codes:** `200` OK, `304` Not Modified (if ETag matches), `404` Not Found
 
@@ -240,6 +264,7 @@ PING / HTTP/1.1
     "client_errors": 4,
     "server_errors": 2,
     "bytes_sent": 524288,
+    "bytes_received": 1048576,
     "status_counts": {
       "200": 144,
       "404": 4,
@@ -249,9 +274,47 @@ PING / HTTP/1.1
       "header_too_large": 1,
       "body_too_large": 1
     },
+    "connections": {
+      "active": 3,
+      "accepted": 150,
+      "closed": 147
+    },
+    "receive": {
+      "bytes": 1048576,
+      "rejections": 2,
+      "rejection_reasons": {
+        "header_too_large": 1,
+        "body_too_large": 1
+      }
+    },
+    "timeouts": {
+      "websocket_incomplete_frame": 1
+    },
+    "request_admission": {
+      "active": 2,
+      "accepted": 150,
+      "rejected": 1
+    },
+    "request_latency_ms": {
+      "count": 150,
+      "total": 2450.75,
+      "avg": 16.338,
+      "max": 180.25
+    },
     "websocket": {
       "active": 0,
-      "rejected_admissions": 1
+      "rejected_admissions": 1,
+      "closed": 4,
+      "protocol_errors": 0,
+      "message_too_big": 0,
+      "incomplete_frame_timeouts": 1,
+      "idle_pings": 3,
+      "errors": 0
+    },
+    "worker": {
+      "exceptions": 0,
+      "exception_sources": {},
+      "last_exception_type": null
     }
   }
 }
@@ -265,9 +328,15 @@ metrics object is available as JSON from `GET /metrics`.
 5xx responses and exceptional request failures. Handler-returned responses and
 direct error responses are included in `status_counts` and the matching error
 bucket. Receive-layer drops before request dispatch are tracked by
-`receive_rejections` reason. Accepted WebSocket upgrades are tracked through
-the `websocket` resource counters rather than `total_requests`,
-`status_counts`, or `bytes_sent`.
+`receive_rejections` reason and summarized under `receive.rejections`.
+`connections` tracks worker-owned accepted sockets. `request_admission`
+tracks the bounded worker budget before submission. `request_latency_ms`
+contains in-process timing aggregates for processed request pipeline entries.
+`timeouts` uses low-cardinality names for receive and WebSocket timeout
+signals. Accepted WebSocket upgrades are tracked through the `websocket`
+resource counters rather than `total_requests`, `status_counts`, or
+`bytes_sent`. Worker failures that escape normal request handling are logged
+and summarized under `worker`.
 
 ---
 

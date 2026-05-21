@@ -41,3 +41,9 @@
 - Files changed: `.github/workflows/ci.yml`, `.pre-commit-config.yaml`, `src/data/static/ui/requests.js`, `src/handlers/files.py`, `tests/test_handlers/test_handler_integration.py`, `tests/test_server_routing.py`, `tools/browser_smoke.playwright.js`, `tools/browser_smoke.py`, `tools/check_static_ui_assets.py`, active plan status/report artifacts.
 - Verification: static UI asset gate, wheel package-data smoke, browser smoke, targeted handler/routing tests, Ruff lint/format, py_compile, pre-commit UI hooks, and `git diff --check` passed.
 - Report: `stage-reports/STAGE-007-20260521-235801.md`
+
+## 2026-05-22T00:23:17+03:00 - STAGE-008
+- Status: CLOSED
+- Files changed: `README.md`, `SECURITY.md`, `API.md`, `CONTRIBUTING.md`, `.github/workflows/ci.yml`, `docs/api.md`, `docs/security.md`, `docs/contributing.md`, `docs/threat-model.md`, `tools/check_stale_docs.py`, `tests/test_check_stale_docs.py`, active plan status/report artifacts.
+- Verification: docs sync, stale-doc semantic guard, targeted guard tests, Ruff lint/format, py_compile, diff whitespace, static diff review, and documentation-engineer subagent review passed. `mkdocs` was unavailable in the local environment.
+- Report: `stage-reports/STAGE-008-20260522-001356.md`
