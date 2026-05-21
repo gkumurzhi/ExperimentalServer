@@ -41,6 +41,20 @@ from .websocket import (
 # Logging setup
 logger = logging.getLogger("httpserver")
 
+_BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
+    {
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "NONE",
+        "NOTE",
+        "SMUGGLE",
+    }
+)
+_BROWSER_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "FETCH", "INFO", "PING"})
+_FETCH_METADATA_SAME_ORIGIN_VALUES = frozenset({"same-origin", "none"})
+
 
 class _JSONLogFormatter(logging.Formatter):
     """Structured JSON log formatter."""
@@ -695,6 +709,65 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not request_origin:
             return None
         return resolve_cors_origin(self.cors_origin, request_origin)
+
+    def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
+        """Allow only same-origin or explicitly configured browser mutations.
+
+        Non-browser clients normally omit both Origin and Sec-Fetch-Site, so
+        they keep the documented API behavior.
+        """
+        if not self._is_browser_protected_mutation(request):
+            return True
+
+        origin = request.headers.get("origin")
+        if origin:
+            if (
+                fetch_site := request.headers.get("sec-fetch-site", "").strip().lower()
+            ) and fetch_site not in _FETCH_METADATA_SAME_ORIGIN_VALUES:
+                return origin in self.cors_origins or self.cors_origins == ("*",)
+            return self._is_browser_origin_allowed_for_mutation(request, origin)
+
+        fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+        if not fetch_site:
+            return True
+        return fetch_site in _FETCH_METADATA_SAME_ORIGIN_VALUES
+
+    def _is_browser_protected_mutation(self, request: HTTPRequest) -> bool:
+        """Return True when an HTTP request can change server-side state."""
+        method = request.method.upper()
+        if method in _BROWSER_PROTECTED_MUTATION_METHODS:
+            return True
+        if method in _BROWSER_READ_ONLY_METHODS:
+            return False
+        return self._has_advanced_upload_payload(request)
+
+    def _is_browser_origin_allowed_for_mutation(
+        self,
+        request: HTTPRequest,
+        origin: str,
+    ) -> bool:
+        """Return True when Origin is same-origin or explicitly CORS-allowed."""
+        if self.cors_origins == ("*",):
+            return True
+        if origin in self.cors_origins:
+            return True
+        return self._is_same_http_origin(request, origin)
+
+    def _is_same_http_origin(self, request: HTTPRequest, origin: str) -> bool:
+        """Compare Origin against the request Host and effective server scheme."""
+        host = request.headers.get("host", "")
+        if not host:
+            return False
+
+        expected_scheme = "https" if self.tls_enabled else "http"
+        parsed = urlsplit(origin)
+        expected_origin = f"{expected_scheme}://{host}"
+        return (
+            parsed.scheme.lower() == expected_scheme
+            and parsed.netloc.lower() == host.lower()
+            and parsed.path in ("", "/")
+            and origin.rstrip("/").lower() == expected_origin.lower()
+        )
 
     def _build_error_response(self, status: int, message: str) -> HTTPResponse:
         response = HTTPResponse(status)

@@ -23,3 +23,9 @@
 - Files changed: `src/notepad_service.py`, `tests/test_handlers/test_notepad.py`, `tests/test_websocket_handlers.py`, `API.md`, `docs/api.md`, active plan status/report artifacts.
 - Verification: Notepad HTTP/WS targeted tests, docs sync, compile check, Ruff, and `git diff --check` passed. `mypy` was unavailable in the local environment; `compileall` covered syntax/compiler verification.
 - Report: `stage-reports/STAGE-004-20260521-231952.md`
+
+## 2026-05-21T23:41:11+03:00 - STAGE-005
+- Status: CLOSED
+- Files changed: `src/request_pipeline.py`, `src/server.py`, `tests/test_request_pipeline.py`, `tests/test_server_methods.py`, `README.md`, `API.md`, `docs/api.md`, active plan status/report artifacts.
+- Verification: targeted Origin/CORS/mutation tests, broader touched request/server tests, handler smoke, WebSocket origin regression, stale-doc guard, Ruff, compileall, browser smoke with `PYTHONPATH=.`, security-auditor review, and `git diff --check` passed. `mypy` was unavailable in the local environment; `compileall` covered syntax/compiler verification.
+- Report: `stage-reports/STAGE-005-20260521-233008.md`

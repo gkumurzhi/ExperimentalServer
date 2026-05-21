@@ -54,6 +54,8 @@ class RequestPipelineServer(Protocol):
 
     def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None: ...
 
+    def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool: ...
+
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse: ...
 
     def _post_process_response(
@@ -124,6 +126,14 @@ class RequestPipeline:
 
             if self._server._is_websocket_upgrade_attempt(request):
                 return self._process_websocket_upgrade(request, client_socket, build_args)
+
+            if not self._server._is_browser_mutation_allowed(request):
+                response = self._server._build_error_response(
+                    403,
+                    "Forbidden cross-origin browser mutation",
+                )
+                self._send_direct_response(response, client_socket, build_args)
+                return False
 
             size_error = self._server._check_payload_size(request)
             if size_error is not None:

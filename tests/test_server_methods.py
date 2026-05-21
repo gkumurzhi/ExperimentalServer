@@ -457,6 +457,309 @@ class TestCorsContract:
         assert "X-Unknown" not in allowed_headers
 
 
+class TestBrowserMutationGuard:
+    @staticmethod
+    def _raw_request(
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str] | None = None,
+        body: bytes = b"",
+    ) -> bytes:
+        header_lines = [f"{method} {path} HTTP/1.1"]
+        for key, value in (headers or {}).items():
+            header_lines.append(f"{key}: {value}")
+        if body:
+            header_lines.append(f"Content-Length: {len(body)}")
+        return "\r\n".join(header_lines).encode("ascii") + b"\r\n\r\n" + body
+
+    def test_cross_origin_mutation_rejected_by_default(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://evil.example",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_same_origin_mutation_allowed_by_default(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "http://127.0.0.1:8080",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_cross_origin_mutation_with_wildcard_cors_is_allowed(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://app.example",
+            },
+            body=b"x",
+        )
+
+        assert server._resolve_cors_origin(req) == "*"
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_configured_cors_origin_allows_browser_mutation(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+        )
+        req = make_request(
+            "DELETE",
+            "/uploads/file.txt",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://app.example",
+            },
+        )
+
+        assert server._resolve_cors_origin(req) == "https://app.example"
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_non_browser_mutation_without_browser_headers_allowed(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={"Host": "127.0.0.1:8080"},
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_fetch_metadata_cross_site_mutation_without_origin_rejected(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Sec-Fetch-Site": "cross-site",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_fetch_metadata_same_site_mutation_without_origin_rejected(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Sec-Fetch-Site": "same-site",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_fetch_metadata_same_origin_mutation_without_origin_allowed(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Sec-Fetch-Site": "same-origin",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_conflicting_cross_site_fetch_metadata_rejects_default_same_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "http://127.0.0.1:8080",
+                "Sec-Fetch-Site": "cross-site",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_cross_site_fetch_metadata_allows_configured_cors_origin(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+        )
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://app.example",
+                "Sec-Fetch-Site": "cross-site",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_null_origin_mutation_rejected_by_default(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "null",
+            },
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_origin_with_missing_host_is_rejected_for_mutation(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={"Origin": "http://127.0.0.1:8080"},
+            body=b"x",
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_cross_origin_read_only_request_not_guarded(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "GET",
+            "/",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://evil.example",
+            },
+        )
+
+        assert server._is_browser_mutation_allowed(req) is True
+
+    def test_unknown_advanced_upload_payload_is_guarded(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        req = make_request(
+            "XUPLOAD",
+            "/",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://evil.example",
+                "X-D": "eA==",
+            },
+        )
+
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_real_pipeline_rejects_cross_origin_mutation_without_write(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        keep_alive = server._process_request(
+            self._raw_request(
+                "POST",
+                "/blocked.txt",
+                headers={
+                    "Host": "127.0.0.1:8080",
+                    "Origin": "https://evil.example",
+                },
+                body=b"blocked",
+            ),
+            sock,
+            ADDR,
+            1,
+        )
+
+        assert keep_alive is False
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 403 Forbidden" in sock.sent[0]
+        assert not (server.upload_dir / "blocked.txt").exists()
+
+    def test_real_pipeline_allows_same_origin_mutation(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        keep_alive = server._process_request(
+            self._raw_request(
+                "POST",
+                "/same-origin.txt",
+                headers={
+                    "Host": "127.0.0.1:8080",
+                    "Origin": "http://127.0.0.1:8080",
+                },
+                body=b"same-origin",
+            ),
+            sock,
+            ADDR,
+            1,
+        )
+
+        assert keep_alive is True
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 201 Created" in sock.sent[0]
+        assert (server.upload_dir / "same-origin.txt").read_bytes() == b"same-origin"
+
+    def test_real_pipeline_allows_non_browser_mutation(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+
+        keep_alive = server._process_request(
+            self._raw_request(
+                "POST",
+                "/api-client.txt",
+                headers={"Host": "127.0.0.1:8080"},
+                body=b"api-client",
+            ),
+            sock,
+            ADDR,
+            1,
+        )
+
+        assert keep_alive is True
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 201 Created" in sock.sent[0]
+        assert (server.upload_dir / "api-client.txt").read_bytes() == b"api-client"
+
+
 class _SendSocketStub:
     def __init__(self) -> None:
         self.sent: list[bytes] = []

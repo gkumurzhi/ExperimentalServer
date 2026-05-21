@@ -55,11 +55,13 @@ class _PipelineServerStub:
         self.websocket_attempt = False
         self.websocket_origin_allowed = True
         self.websocket_slot_available = True
+        self.browser_mutation_allowed = True
         self.raise_on_dispatch = False
         self.resolve_calls: list[tuple[str, int]] = []
         self.cors_resolve_calls: list[str | None] = []
         self.auth_calls: list[tuple[str, tuple[str, int]]] = []
         self.size_calls: list[str] = []
+        self.browser_mutation_calls: list[tuple[str, str]] = []
         self.dispatch_calls: list[str] = []
         self.post_process_calls: list[tuple[str, int, str]] = []
         self.send_calls: list[dict[str, object]] = []
@@ -108,6 +110,10 @@ class _PipelineServerStub:
     def _check_payload_size(self, request: HTTPRequest) -> HTTPResponse | None:
         self.size_calls.append(request.path)
         return self.size_error
+
+    def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
+        self.browser_mutation_calls.append((request.method, request.path))
+        return self.browser_mutation_allowed
 
     def _dispatch_handler(self, request: HTTPRequest) -> HTTPResponse:
         self.dispatch_calls.append(request.path)
@@ -232,6 +238,37 @@ class TestRequestPipeline:
         assert b"HTTP/1.1 413" in sock.sent[0]
         assert server.dispatch_calls == []
         assert server.record_calls == [(413, len(sock.sent[0]), False)]
+
+    def test_browser_mutation_guard_short_circuits_before_size_and_dispatch(self) -> None:
+        server = _PipelineServerStub()
+        server.browser_mutation_allowed = False
+        pipeline = RequestPipeline(server)
+        sock = _SocketStub()
+
+        result = pipeline.process(
+            _make_raw_request(
+                "POST",
+                "/upload",
+                {
+                    "Host": "example.test",
+                    "Origin": "https://evil.example",
+                },
+                b"x",
+            ),
+            sock,
+            ("127.0.0.1", 12345),
+            1,
+        )
+
+        assert result is False
+        assert len(sock.sent) == 1
+        assert b"HTTP/1.1 403" in sock.sent[0]
+        assert b"Forbidden cross-origin browser mutation" in sock.sent[0]
+        assert server.auth_calls == [("/upload", ("127.0.0.1", 12345))]
+        assert server.browser_mutation_calls == [("POST", "/upload")]
+        assert server.size_calls == []
+        assert server.dispatch_calls == []
+        assert server.record_calls == [(403, len(sock.sent[0]), False)]
 
     def test_success_path_records_metric_and_returns_keep_alive(self) -> None:
         server = _PipelineServerStub()

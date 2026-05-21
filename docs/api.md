@@ -705,6 +705,28 @@ Failed auth returns `401` with `WWW-Authenticate` header. Rate limiting applies 
 
 ---
 
+## Browser-Origin Mutation Guard
+
+State-changing HTTP requests from browsers are accepted only when they are
+same-origin or explicitly allowed by `--cors-origin`. Protected methods are
+`POST`, `PUT`, `PATCH`, `DELETE`, `NONE`, `NOTE`, `SMUGGLE`, plus unknown
+methods that carry advanced-upload data.
+
+Requests with an `Origin` header must match the request host/scheme or a
+configured CORS origin. `Sec-Fetch-Site: cross-site` and `same-site` requests
+without `Origin` are rejected; with `Origin`, they require a configured CORS
+origin. Non-browser API clients that omit both `Origin` and `Sec-Fetch-Site`
+keep the existing behavior. Setting `--cors-origin *` explicitly opts into
+browser mutations from any origin.
+
+Rejected browser-origin mutations return `403` JSON:
+
+```json
+{"error": "Forbidden cross-origin browser mutation", "status": 403}
+```
+
+---
+
 ## Common Headers
 
 | Header | Description |

@@ -1,7 +1,7 @@
 # STAGE-005 - Add browser-origin guardrails for mutating HTTP requests
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -44,10 +44,10 @@ Centralize browser-origin guardrails for state-changing HTTP requests so cached 
 5. Document the policy and migration knobs.
 
 ## Acceptance criteria
-- [ ] Cross-site browser-origin mutating requests are rejected by default.
-- [ ] Same-origin UI mutations continue to work.
-- [ ] Non-browser clients have documented behavior and tests.
-- [ ] CORS response policy and mutation protection do not contradict each other.
+- [x] Cross-site browser-origin mutating requests are rejected by default.
+- [x] Same-origin UI mutations continue to work.
+- [x] Non-browser clients have documented behavior and tests.
+- [x] CORS response policy and mutation protection do not contradict each other.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -65,4 +65,10 @@ Centralize browser-origin guardrails for state-changing HTTP requests so cached 
 - Rollback: Add compatibility flag while keeping secure default and docs.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T23:41:11+03:00. Centralized browser-origin mutation guard
+now rejects cross-origin browser-signaled state changes before handler dispatch,
+allows same-origin UI and configured CORS origins, preserves non-browser clients
+that omit browser metadata, and documents the policy in README/API docs.
+Verification passed: targeted Origin/CORS/mutation tests, broader touched tests,
+handler smoke, WebSocket origin regression, stale-doc guard, Ruff, compileall,
+browser smoke with `PYTHONPATH=.`, and diff whitespace check.
