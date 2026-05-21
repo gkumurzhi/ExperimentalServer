@@ -21,16 +21,17 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from acme import challenges, client, crypto_util, errors, messages, standalone
 from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
-from josepy.jwk import JWKRSA
+
+if TYPE_CHECKING:
+    from acme import client, messages, standalone
 
 LE_PRODUCTION_DIRECTORY = "https://acme-v02.api.letsencrypt.org/directory"
 LE_STAGING_DIRECTORY = "https://acme-staging-v02.api.letsencrypt.org/directory"
@@ -136,6 +137,9 @@ def _acme_client_for_key(
     user_agent: str,
     timeout: int,
 ) -> client.ClientV2:
+    from acme import client
+    from josepy.jwk import JWKRSA
+
     jwk = JWKRSA(key=account_key)
     net = client.ClientNetwork(jwk, user_agent=user_agent, timeout=timeout)
     directory = client.ClientV2.get_directory(directory_url, net)
@@ -147,6 +151,8 @@ def _ensure_account(
     *,
     email: str | None,
 ) -> messages.RegistrationResource:
+    from acme import errors, messages
+
     registration = messages.NewRegistration.from_data(
         email=email,
         terms_of_service_agreed=True,
@@ -165,6 +171,8 @@ def _http01_challenges(
     acme_client: client.ClientV2,
     order: messages.OrderResource,
 ) -> tuple[set[standalone.HTTP01RequestHandler.HTTP01Resource], list[tuple[Any, Any]]]:
+    from acme import challenges, standalone
+
     resources: set[standalone.HTTP01RequestHandler.HTTP01Resource] = set()
     answers: list[tuple[Any, Any]] = []
 
@@ -195,6 +203,8 @@ def _challenge_server(
     port: int,
     timeout: int,
 ) -> Iterator[standalone.HTTP01DualNetworkedServers]:
+    from acme import standalone
+
     servers = standalone.HTTP01DualNetworkedServers((address, port), resources, timeout=timeout)
     servers.serve_forever()
     try:
@@ -436,6 +446,8 @@ def obtain_letsencrypt_cert(
     Returns:
         Tuple (path to fullchain.pem, path to privkey.pem).
     """
+    from acme import crypto_util
+
     domain = _normalize_domain(domain)
     if config_dir is None:
         config_dir = Path.home() / ".exphttp" / "acme"

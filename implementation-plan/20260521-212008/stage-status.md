@@ -2,7 +2,7 @@
 
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
-| STAGE-001 | OPEN | HIGH | Untangle package import and ACME dependency boundaries | - | - | - |
+| STAGE-001 | CLOSED | HIGH | Untangle package import and ACME dependency boundaries | 2026-05-21T22:35:20+03:00 | Lazy package/security exports keep HTTP imports independent from TLS/ACME; targeted verification passed. | `stage-reports/STAGE-001-20260521-222446.md` |
 | STAGE-002 | OPEN | HIGH | Add receive-layer header caps and parser telemetry | - | - | - |
 | STAGE-003 | OPEN | HIGH | Add bounded request admission before worker submission | - | - | - |
 | STAGE-004 | OPEN | HIGH | Add Notepad payload size limits | - | - | - |

@@ -1,7 +1,7 @@
 # STAGE-001 - Untangle package import and ACME dependency boundaries
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -45,10 +45,10 @@ Make lightweight imports such as `import src.http` and HTTP parser tests indepen
 5. Preserve existing public import compatibility or document intentional changes.
 
 ## Acceptance criteria
-- [ ] `import src.http` does not import TLS/ACME modules.
-- [ ] HTTP parser tests can collect without TLS/ACME side effects.
-- [ ] Direct runtime dependency usage is declared or removed.
-- [ ] Existing package-level imports covered by tests still work or have documented compatibility notes.
+- [x] `import src.http` does not import TLS/ACME modules.
+- [x] HTTP parser tests can collect without TLS/ACME side effects.
+- [x] Direct runtime dependency usage is declared or removed.
+- [x] Existing package-level imports covered by tests still work or have documented compatibility notes.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,11 @@ Make lightweight imports such as `import src.http` and HTTP parser tests indepen
 - Rollback: Restore eager exports and instead add explicit dependency declarations; keep import-boundary limitation documented.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-21T22:35:20+03:00.
+
+- Package root exports now resolve lazily, so `import src.http` no longer traverses server/security/TLS imports.
+- `src.security` keeps TLS re-exports compatible through lazy attribute resolution, and ACME/josepy imports in `src.security.tls` are limited to ACME code paths.
+- `josepy` is declared as a direct runtime dependency while the existing CI constraint pin remains in place.
+- Added `tests/test_import_boundaries.py` coverage for HTTP-only import boundaries and public import compatibility with ACME/josepy blocked.
+- Verification passed: import probes, targeted HTTP parser tests, HTTP parser collect-only, ruff, py_compile, targeted dependency declaration/pin audit, and subagent review.
+- Environment-limited checks: the full installed dependency constraint guard reports unrelated globally installed packages in this shared interpreter; `mypy` is not importable from the local launcher; property parser collection needs `hypothesis`, which is not installed here.

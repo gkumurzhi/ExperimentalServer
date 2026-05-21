@@ -37,6 +37,7 @@ classifiers = [
 dependencies = [
     "acme>=5.5,<6",
     "cryptography>=48.0",
+    "josepy>=2.2,<3",
 ]
 
 [project.urls]

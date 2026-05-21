@@ -2,6 +2,9 @@
 Security module — authentication, encryption, TLS.
 """
 
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
 from .auth import (
     BasicAuthenticator,
     generate_random_credentials,
@@ -26,12 +29,14 @@ from .crypto import (
     xor_encrypt_with_hmac,
     xor_file,
 )
-from .tls import (
-    check_openssl_available,
-    generate_cert_in_memory,
-    generate_self_signed_cert,
-    get_cert_info,
-)
+
+if TYPE_CHECKING:
+    from .tls import (
+        check_openssl_available,
+        generate_cert_in_memory,
+        generate_self_signed_cert,
+        get_cert_info,
+    )
 
 __all__ = [
     # Auth
@@ -62,3 +67,24 @@ __all__ = [
     "check_openssl_available",
     "get_cert_info",
 ]
+
+_LAZY_EXPORTS = {
+    "generate_self_signed_cert": ("src.security.tls", "generate_self_signed_cert"),
+    "generate_cert_in_memory": ("src.security.tls", "generate_cert_in_memory"),
+    "check_openssl_available": ("src.security.tls", "check_openssl_available"),
+    "get_cert_info": ("src.security.tls", "get_cert_info"),
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name not in _LAZY_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module_name, attr_name = _LAZY_EXPORTS[name]
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__))
