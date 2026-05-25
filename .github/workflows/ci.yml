@@ -198,6 +198,7 @@ jobs:
           set -euo pipefail
           http_cid=""
           tls_cid=""
+          auth_secret=""
           cleanup() {
             if [ -n "${http_cid}" ]; then
               docker rm -f "${http_cid}" >/dev/null 2>&1 || true
@@ -205,6 +206,29 @@ jobs:
             if [ -n "${tls_cid}" ]; then
               docker rm -f "${tls_cid}" >/dev/null 2>&1 || true
             fi
+            if [ -n "${auth_secret}" ]; then
+              rm -f "${auth_secret}"
+            fi
+          }
+          wait_health() {
+            local cid="$1"
+            local status=""
+            for _ in {1..30}; do
+              status="$(
+                docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "${cid}"
+              )"
+              if [ "${status}" = "healthy" ]; then
+                return 0
+              fi
+              if [ "${status}" = "unhealthy" ]; then
+                docker inspect "${cid}"
+                return 1
+              fi
+              sleep 1
+            done
+            echo "container ${cid} did not become healthy; last status=${status}" >&2
+            docker inspect "${cid}"
+            return 1
           }
           probe_ping() {
             local url="$1"
@@ -227,20 +251,32 @@ jobs:
           docker run --rm exphttp:ci --version
           http_cid="$(docker run -d -p 127.0.0.1::8080 exphttp:ci)"
           http_port="$(docker port "${http_cid}" 8080/tcp | awk -F: '{print $NF}')"
+          wait_health "${http_cid}"
           if ! probe_ping "http://127.0.0.1:${http_port}/" /tmp/ping.json; then
             docker logs "${http_cid}"
             exit 1
           fi
 
+          auth_secret="$(mktemp)"
+          printf 'ci:docker-smoke-password\n' > "${auth_secret}"
+          chmod 644 "${auth_secret}"
           tls_cid="$(
-            docker run -d --no-healthcheck -p 127.0.0.1::8080 exphttp:ci \
+            docker run -d --no-healthcheck \
+              -p 127.0.0.1::8443 \
+              -v "${auth_secret}:/run/secrets/exphttp_auth:ro" \
+              exphttp:ci \
               --host 0.0.0.0 \
-              --port 8080 \
+              --port 8443 \
               --dir /data \
-              --tls
+              --tls \
+              --auth-file /run/secrets/exphttp_auth
           )"
-          tls_port="$(docker port "${tls_cid}" 8080/tcp | awk -F: '{print $NF}')"
-          if ! probe_ping "https://127.0.0.1:${tls_port}/" /tmp/tls-ping.json -k; then
+          if [ "$(docker inspect --format '{{if .Config.Healthcheck}}{{json .Config.Healthcheck.Test}}{{else}}null{{end}}' "${tls_cid}")" != '["NONE"]' ]; then
+            docker inspect "${tls_cid}"
+            exit 1
+          fi
+          tls_port="$(docker port "${tls_cid}" 8443/tcp | awk -F: '{print $NF}')"
+          if ! probe_ping "https://127.0.0.1:${tls_port}/" /tmp/tls-ping.json -k -u ci:docker-smoke-password; then
             docker logs "${tls_cid}"
             exit 1
           fi

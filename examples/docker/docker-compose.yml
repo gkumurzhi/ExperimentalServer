@@ -15,34 +15,80 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    stop_grace_period: 20s
+    # Resource envelope examples for container operators. Size memory from
+    # --workers, --max-size, and --body-memory-budget; size persistent storage
+    # with Docker volume/filesystem quotas plus the app's storage quota flags.
+    # mem_limit: 768m
+    # cpus: "1.0"
+    # pids_limit: 256
+    # ulimits:
+    #   nofile:
+    #     soft: 1024
+    #     hard: 4096
     ports:
-      - "8080:8080"
+      # Plain HTTP is local-host only by default. The container still binds
+      # 0.0.0.0 internally so Compose networking and reverse proxies work.
+      - "127.0.0.1:8080:8080"
     volumes:
       - exphttp-data:/data
     # The named volume preserves the image-owned /data permissions for UID/GID
     # 10001. If you need a host bind mount instead, create it first and make it
     # writable by 10001:10001, then replace the volume line with:
     #   - ./data:/data
-    # The default image command already serves /data over plain HTTP on :8080.
-    # If you override `command` to enable TLS or auth, also override or disable
-    # the image healthcheck so it probes the matching protocol/credentials.
-    # Use --auth-file for containers so the password is not exposed in argv.
-    # For example, create a Compose secret file containing one user:password
-    # line, mount it at /run/secrets/exphttp_auth, then enable the command:
-    # command:
-    #   - --host
-    #   - 0.0.0.0
-    #   - --port
-    #   - "8080"
-    #   - --dir
-    #   - /data
-    #   - --tls
-    #   - --auth-file
-    #   - /run/secrets/exphttp_auth
-    # secrets:
-    #   - exphttp_auth
-    # healthcheck:
-    #   disable: true
+    # The default image command serves /data over plain HTTP on :8080 and the
+    # Dockerfile healthcheck probes PING over plain HTTP at 127.0.0.1:8080.
+    # Use the auth-tls profile below when TLS/auth is required.
+
+  exphttp-auth-tls:
+    profiles:
+      - auth-tls
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: exphttp:local
+    container_name: exphttp-auth-tls
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes:
+      - exphttp-data:/data
+    secrets:
+      - exphttp_auth
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8443"
+      - --dir
+      - /data
+      - --tls
+      - --auth-file
+      - /run/secrets/exphttp_auth
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >
+          python -c "import base64, ssl, sys, urllib.request as u;
+          creds = open('/run/secrets/exphttp_auth', encoding='utf-8').read().strip();
+          token = base64.b64encode(creds.encode('utf-8')).decode('ascii');
+          req = u.Request('https://127.0.0.1:8443/', method='PING',
+          headers={'Authorization': 'Basic ' + token});
+          ctx = ssl._create_unverified_context();
+          sys.exit(0 if u.urlopen(req, context=ctx, timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
 
   exphttp-acme:
     profiles:
@@ -61,6 +107,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+    stop_grace_period: 20s
     ports:
       # Public port 80 must reach the HTTP-01 challenge listener.
       # The container uses high internal ports so the non-root process does not
@@ -105,8 +152,10 @@ volumes:
   exphttp-data:
   exphttp-acme-state:
 
-# Uncomment with the service-level secrets block above after creating
-# ./secrets/exphttp_auth with exactly one user:password line.
-# secrets:
-#   exphttp_auth:
-#     file: ./secrets/exphttp_auth
+secrets:
+  # Create this local file with exactly one user:password line before using the
+  # auth-tls profile. Docker Compose mounts local file-backed secrets with the
+  # source file's permissions, so it must be readable by container UID 10001.
+  # It is ignored by git; do not commit real credentials.
+  exphttp_auth:
+    file: ./secrets/exphttp_auth

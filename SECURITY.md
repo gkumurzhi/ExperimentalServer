@@ -98,6 +98,8 @@ When running the server outside a trusted lab:
 - Select the narrowest `--profile` that supports the workflow; avoid `lab` for
   externally reachable services unless experimental methods are required.
 - Bind to `127.0.0.1` unless external access is explicitly required.
+- For Docker, keep the default Compose plain HTTP publication on host loopback
+  and use mounted secret files with `--auth-file` for TLS/auth profiles.
 - Place behind a reverse proxy with rate limiting and request-size limits.
 - Configure an exact `--cors-origin` for a trusted browser UI. Wildcard
   `--cors-origin *` is read-only CORS and does not authorize browser writes or
@@ -114,6 +116,11 @@ optionally `--body-min-rate`), monitoring of `/metrics`, and an exact
 browser-origin policy for any separate UI origin. Keep
 `--stream-send-idle-timeout` and `--stream-send-timeout` enabled for exposed
 file downloads so slow readers cannot hold worker threads indefinitely.
+For containers, align Docker memory/CPU/PID/file-descriptor limits with
+`--workers`, `--max-size`, `--body-memory-budget`, and the upload/notepad/
+SMUGGLE storage quota flags. Protect ACME state volumes as secret certificate
+material and schedule controlled restarts before certificate expiry so
+startup-time renewal can run.
 
 ## Known Limitations
 

@@ -41,3 +41,9 @@
 - Files changed: `src/server.py`, `src/http/cors.py`, `src/handlers/files.py`, `tests/test_server_methods.py`, `tests/test_security/test_websocket_upgrade.py`, `API.md`, `README.md`, `SECURITY.md`, plan artifacts.
 - Verification: targeted server/WebSocket/request-pipeline/handler regression suite passed with 218 tests; literal wildcard-origin regressions passed; `python tools/check_stale_docs.py`, `ruff check src tests tools`, `ruff format --check src tests tools`, isolated `UV_PROJECT_ENVIRONMENT=/tmp/exphttp-stage007-venv uv run --extra lint mypy src`, `git diff --check`, and verifier subagent recheck passed.
 - Report: `stage-reports/STAGE-007-20260525-193113.md`
+
+## 2026-05-25 19:58:26 MSK - STAGE-008
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `examples/docker/docker-compose.yml`, `examples/docker/secrets/.gitignore`, `README.md`, `SECURITY.md`, plan artifacts.
+- Verification: Compose default/auth-tls/acme config passed; Docker build passed; default Docker health smoke passed; Docker TLS/auth smoke passed; Compose auth-tls runtime health smoke passed; `python tools/check_stale_docs.py`, CI Docker smoke shell syntax check, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-008-20260525-194815.md`

@@ -1,7 +1,7 @@
 # STAGE-008 - Docker and operational readiness
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -75,5 +75,9 @@ Make Docker examples and CI smoke safer and mode-aware for default HTTP, auth, T
 - Rollback: Keep Docker commands in CI where available and document skipped local verification in closure report.
 
 ## Completion notes
-Filled by `close-plan-stage`.
-
+- Closed on 2026-05-25 19:58:26 MSK.
+- Default Compose HTTP publishing is now loopback-only while the container still binds `0.0.0.0` internally.
+- Added a concrete `auth-tls` Compose profile using a mounted `--auth-file` secret and HTTPS/Auth healthcheck; ACME keeps disabled healthcheck with documented external probe expectations.
+- CI Docker smoke now waits for default Docker health and validates TLS/auth mode with a mounted auth-file fixture and disabled image healthcheck.
+- README and SECURITY now document Docker health behavior, ACME restart-before-expiry policy, and resource sizing from workers, body memory budget, and storage quotas.
+- Verification passed: Compose default/auth-tls/acme config, Docker build, default health smoke, TLS/auth smoke, Compose auth-tls runtime smoke, docs stale guard, CI Docker smoke shell syntax, and `git diff --check`.

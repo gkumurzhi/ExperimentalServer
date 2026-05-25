@@ -9,7 +9,7 @@
 | STAGE-005 | CLOSED | HIGH | Auth secret files and auth invariants | 2026-05-25 18:41:08 MSK | Auth-file secret source, invariant-safe authenticator setter, docs/examples, and regression tests completed | `stage-reports/STAGE-005-20260525-181754.md` |
 | STAGE-006 | CLOSED | HIGH | Feature profiles and capability gates | 2026-05-25 19:24:21 MSK | Feature profiles, capability gates, CLI/docs/UI, and profile regression tests completed | `stage-reports/STAGE-006-20260525-184508.md` |
 | STAGE-007 | CLOSED | MEDIUM | Wildcard CORS read-only policy | 2026-05-25 19:45:53 MSK | Wildcard CORS is read-only for responses/preflight and no longer trusts wildcard origins for browser mutations or WebSocket upgrades | `stage-reports/STAGE-007-20260525-193113.md` |
-| STAGE-008 | OPEN | MEDIUM | Docker and operational readiness | - | - | - |
+| STAGE-008 | CLOSED | MEDIUM | Docker and operational readiness | 2026-05-25 19:58:26 MSK | Loopback default Compose publish, secret-file auth/TLS profile, mode-aware health, CI Docker health smoke, ACME/restart and resource docs completed | `stage-reports/STAGE-008-20260525-194815.md` |
 | STAGE-009 | OPEN | MEDIUM | Release artifacts and provenance lane | - | - | - |
 | STAGE-010 | OPEN | MEDIUM | Public package identity migration | - | - | - |
 | STAGE-011 | OPEN | MEDIUM | WebSocket operations and failure semantics | - | - | - |
