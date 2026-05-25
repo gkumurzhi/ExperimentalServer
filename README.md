@@ -173,6 +173,8 @@ python -m exphttp [опции]
 | `--body-min-rate BYTES_PER_SECOND` | Мин. средняя скорость приема тела (`0` = выключен) | `0` |
 | `--stream-send-idle-timeout SECONDS` | Макс. блокировка отправки одного chunk streamed-ответа | `5` |
 | `--stream-send-timeout SECONDS` | Общий deadline streamed-ответа (`0` = выключен) | `300` |
+| `--max-websocket-connections N` | Макс. активных WebSocket соединений (`0` = отклонять все) | `workers // 2` |
+| `--websocket-frame-idle-timeout SECONDS` | Макс. пауза при ожидании продолжения неполного WebSocket frame | `5` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
 | `--debug` | Debug режим (подробное логирование) | выключен |
@@ -832,7 +834,8 @@ print(response.json())
   для aggregate quota `uploads/`, `--note-storage-limit` и
   `--note-count-limit` для encrypted blobs в `notes/`, отдельный 1 MiB decoded
   limit для Secure Notepad blobs, а также age/count/byte retention для
-  временных SMUGGLE HTML
+  временных SMUGGLE HTML и `--max-websocket-connections` для WebSocket
+  admission budget
 - **Скрытые файлы** — любые path-сегменты с leading dot, включая dotfiles в `uploads/`, недоступны через GET и INFO
 - **User content hardening** — загруженные HTML/SVG отдаются как attachment, а ответы получают `X-Content-Type-Options: nosniff`
 - **CSP для UI** — встроенный HTML ограничивает scripts до `'self'`; inline
@@ -863,6 +866,9 @@ XOR-шифрование используется для **обфускации*
 - **Max upload request**: 100 MB (по умолчанию)
 - **Body memory budget**: по умолчанию `workers * max upload request`;
   настраивается через `--body-memory-budget`
+- **WebSocket limits**: по умолчанию `workers // 2` активных соединений и
+  5s incomplete-frame idle timeout; настраивается через
+  `--max-websocket-connections` и `--websocket-frame-idle-timeout`
 - **Upload storage quota**: unlimited по умолчанию; настраивается через
   `--upload-storage-limit`, `--upload-file-limit`, `--upload-reserve-free`
 - **Notepad storage quota**: 256 MB и 1000 заметок по умолчанию; `0`

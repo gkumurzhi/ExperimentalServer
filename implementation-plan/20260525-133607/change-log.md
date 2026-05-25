@@ -59,3 +59,9 @@
 - Files changed: `exphttp/`, `pyproject.toml`, `src/__init__.py`, `src/__main__.py`, `src/cli.py`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/security.yml`, `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/contributing.md`, `tools/browser_smoke.py`, `tools/decrypt.py`, `tools/check_stale_docs.py`, `tests/test_import_boundaries.py`, `tests/test_cli.py`, `tests/test_check_stale_docs.py`, plan artifacts.
 - Verification: docs stale guard, `ruff check exphttp src tests tools`, focused format check for changed package/test/tool paths, isolated mypy over `exphttp src`, targeted pytest with 130 tests, isolated wheel build/install CLI/import smoke, wheel static UI check, installed-package browser smoke, and `git diff --check` passed.
 - Report: `stage-reports/STAGE-010-20260525-202611.md`
+
+## 2026-05-25 21:00:08 MSK - STAGE-011
+- Status: CLOSED
+- Files changed: `src/cli.py`, `src/server.py`, `tests/test_cli.py`, `tests/test_websocket_handlers.py`, `README.md`, `API.md`, plan artifacts.
+- Verification: targeted WebSocket/CLI suite passed with 210 tests; adjacent server-method frame/admission suite passed with 97 tests; focused regression rerun passed with 3 tests; `ruff check src tests`, `ruff format --check src tests`, isolated pinned `mypy src`, `python tools/check_stale_docs.py`, `git diff --check`, and scoped explorer subagent verification passed.
+- Report: `stage-reports/STAGE-011-20260525-205403.md`

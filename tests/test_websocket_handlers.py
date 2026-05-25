@@ -2,6 +2,7 @@
 
 import base64
 import json
+import logging
 import struct
 import threading
 from pathlib import Path
@@ -14,6 +15,26 @@ from src.security.keys import HAS_ECDH
 from src.server import ExperimentalHTTPServer
 from src.websocket import _MAX_FRAME_SIZE, WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
 from tests.conftest import make_request
+
+
+def _make_masked_ws_frame(opcode: int, payload: bytes) -> bytes:
+    mask_key = b"\x37\x38\x39\x30"
+    masked = bytearray(len(payload))
+    for index, value in enumerate(payload):
+        masked[index] = value ^ mask_key[index % 4]
+
+    header = bytearray((0x80 | opcode,))
+    length = len(payload)
+    if length < 126:
+        header.append(0x80 | length)
+    elif length < 65536:
+        header.append(0x80 | 126)
+        header.extend(struct.pack("!H", length))
+    else:
+        header.append(0x80 | 127)
+        header.extend(struct.pack("!Q", length))
+    header.extend(mask_key)
+    return bytes(header) + bytes(masked)
 
 
 class _MockSocket:
@@ -204,6 +225,40 @@ class TestWSClientMasking:
         assert close_frame[0] == WS_CLOSE
         assert struct.unpack("!H", close_frame[1][:2])[0] == 1002
         assert close_frame[1][2:] == b"Incomplete frame timeout"
+
+    def test_internal_message_error_closes_1011_and_logs_failure(
+        self,
+        temp_dir,
+        monkeypatch,
+        caplog,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+
+        def fail_message(_sock: object, _payload: bytes) -> None:
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(server, "_handle_ws_message", fail_message)
+        server.running = True
+        sock = _WebSocketLoopSocket([_make_masked_ws_frame(WS_TEXT, b'{"type":"list"}')])
+        request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+        )
+
+        with caplog.at_level(logging.ERROR, logger="httpserver"):
+            server._handle_notepad_ws(sock, request)
+
+        assert b"HTTP/1.1 101 Switching Protocols" in sock.sent[0]
+        close_frame = parse_ws_frame(sock.sent[-1])
+        assert close_frame is not None
+        assert close_frame[0] == WS_CLOSE
+        assert struct.unpack("!H", close_frame[1][:2])[0] == 1011
+        assert close_frame[1][2:] == b"Internal error"
+        assert server.get_metrics()["websocket"]["errors"] == 1
+        assert any(record.levelno == logging.ERROR for record in caplog.records)
+        assert "WS connection failed" in caplog.text
 
 
 class TestWSInvalidInput:

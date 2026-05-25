@@ -27,6 +27,7 @@ from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES
 from .server import (
     DEFAULT_STREAM_SEND_IDLE_TIMEOUT,
     DEFAULT_STREAM_SEND_TIMEOUT,
+    DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT,
     ExperimentalHTTPServer,
 )
 
@@ -285,6 +286,23 @@ Custom HTTP methods:
         ),
     )
     limits.add_argument(
+        "--max-websocket-connections",
+        type=_bounded_int("max websocket connections", minimum=0),
+        default=None,
+        metavar="N",
+        help="Max active WebSocket connections; 0 rejects all (default: workers // 2)",
+    )
+    limits.add_argument(
+        "--websocket-frame-idle-timeout",
+        type=_bounded_float("websocket frame idle timeout", minimum=0.001),
+        default=DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "Max idle seconds while waiting for the rest of an incomplete WebSocket frame "
+            f"(default: {DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT:g})"
+        ),
+    )
+    limits.add_argument(
         "-w",
         "--workers",
         type=_bounded_int("workers", minimum=1),
@@ -451,6 +469,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "body_min_rate": args.body_min_rate,
         "stream_send_idle_timeout": args.stream_send_idle_timeout,
         "stream_send_timeout": args.stream_send_timeout or None,
+        "max_websocket_connections": args.max_websocket_connections,
+        "websocket_frame_idle_timeout": args.websocket_frame_idle_timeout,
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,

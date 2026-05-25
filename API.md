@@ -52,6 +52,12 @@ The receive layer enforces protocol framing before handler dispatch:
   `--body-memory-budget MB`. The default budget is `--workers * --max-size`.
   Aggregate budget exhaustion returns `503` before the remaining body bytes are
   read.
+- Active WebSocket upgrades are capped by `--max-websocket-connections N`.
+  The default is `--workers // 2`; `0` rejects all WebSocket admissions with
+  `503`.
+- Incomplete WebSocket frames are capped by
+  `--websocket-frame-idle-timeout SECONDS` (`5` seconds by default). Timeout
+  failures close the WebSocket with protocol close code `1002`.
 - Aggregate disk usage under `uploads/` is controlled separately with optional
   `--upload-storage-limit MB`, `--upload-file-limit N`, and
   `--upload-reserve-free MB` limits. A value of `0` disables each aggregate
@@ -673,7 +679,10 @@ Real-time notepad sync over WebSocket (RFC 6455). The server detects an
 upgrade request on any path starting with `/notes/ws` and performs the
 handshake inline, before the normal HTTP handler runs. The connection uses a
 60-second idle timeout; the server sends a ping frame when idle to keep the
-connection alive. Upgrade validation requires `GET`, `Host`,
+connection alive. Active WebSocket connections are admitted against
+`--max-websocket-connections` (`--workers // 2` by default), and incomplete
+frames must finish within `--websocket-frame-idle-timeout` (`5` seconds by
+default). Upgrade validation requires `GET`, `Host`,
 `Upgrade: websocket`, `Connection: Upgrade`, a valid 16-byte
 `Sec-WebSocket-Key`, and `Sec-WebSocket-Version: 13`. When the server is
 running without the crypto backend, the upgrade is rejected with `501`.
@@ -727,6 +736,9 @@ Domain errors for `save`, `load`, `delete`, and `clear` can keep the operation
 response type (`saved`, `loaded`, `deleted`, or `cleared`) while adding
 `error` and `status`. Invalid JSON, non-object messages, unknown message types,
 and invalid note IDs use `{"type": "error", "error": "..."}`.
+Unexpected internal WebSocket failures are logged as errors, counted in
+`metrics.websocket.errors`, and closed with WebSocket code `1011` rather than
+normal close code `1000`.
 
 For idempotent WebSocket saves, send `opId` so the client can correlate the
 `saved` acknowledgement and send a stable hex `noteId` with

@@ -58,6 +58,7 @@ from .websocket import (
 logger = logging.getLogger("httpserver")
 DEFAULT_STREAM_SEND_IDLE_TIMEOUT = 5.0
 DEFAULT_STREAM_SEND_TIMEOUT = 300.0
+DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT = 5.0
 
 _BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
     {
@@ -146,7 +147,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         profile: str = DEFAULT_PROFILE,
         # WebSocket resource limits
         max_websocket_connections: int | None = None,
-        websocket_frame_idle_timeout: float = 5.0,
+        websocket_frame_idle_timeout: float = DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT,
     ):
         if port < 1 or port > 65535:
             raise ValueError("port must be between 1 and 65535")
@@ -645,6 +646,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Upload storage: {self.upload_storage.describe_limit()}")
         print(f"  Notepad limits: {self.note_storage_policy.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
+        print(f"  WebSocket connections: {self.max_websocket_connections}")
+        print(f"  WebSocket incomplete-frame timeout: {self.websocket_frame_idle_timeout:g} s")
         print(f"  Profile: {self.profile}")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
         print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")
@@ -1225,8 +1228,9 @@ class ExperimentalHTTPServer(HandlerMixin):
                     if opcode in (WS_TEXT, WS_BINARY):
                         self._handle_ws_message(sock, payload)
 
-        except Exception as e:
+        except Exception:
             self._metrics.record_websocket_error()
-            logger.debug("WS connection error: %s", e)
+            logger.exception("WS connection failed")
+            send_close(1011, "Internal error")
         finally:
             send_close()

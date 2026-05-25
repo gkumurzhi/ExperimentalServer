@@ -1,7 +1,7 @@
 # STAGE-011 - WebSocket operations and failure semantics
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -50,11 +50,11 @@ Expose WebSocket operational limits in the CLI and make unexpected WebSocket fai
 6. Add tests for CLI propagation, admission limits, incomplete-frame timeout, and unexpected failure close behavior.
 
 ## Acceptance criteria
-- [ ] Operators can configure WebSocket connection budget and incomplete-frame timeout from CLI.
-- [ ] Invalid WebSocket CLI values fail clearly before server start.
-- [ ] Unexpected internal WebSocket errors are logged as failures and do not close as normal `1000`.
-- [ ] Existing WebSocket frame cap and admission tests still pass.
-- [ ] Docs describe the new knobs and default behavior.
+- [x] Operators can configure WebSocket connection budget and incomplete-frame timeout from CLI.
+- [x] Invalid WebSocket CLI values fail clearly before server start.
+- [x] Unexpected internal WebSocket errors are logged as failures and do not close as normal `1000`.
+- [x] Existing WebSocket frame cap and admission tests still pass.
+- [x] Docs describe the new knobs and default behavior.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -73,5 +73,4 @@ Expose WebSocket operational limits in the CLI and make unexpected WebSocket fai
 - Rollback: Assert observable client error frame or server metric/log when close-code capture is unreliable.
 
 ## Completion notes
-Filled by `close-plan-stage`.
-
+Closed 2026-05-25 21:00:08 MSK. Added CLI flags for WebSocket admission budget and incomplete-frame timeout, wired them into `ExperimentalHTTPServer`, and documented defaults. Unexpected WebSocket internal failures now log at error level, increment `metrics.websocket.errors`, and close with `1011 Internal error` rather than normal `1000`. Targeted WebSocket/CLI tests, adjacent server-method frame/admission tests, lint, format, isolated pinned mypy, stale-doc guard, diff whitespace check, and scoped explorer subagent verification passed. Report: `stage-reports/STAGE-011-20260525-205403.md`.
