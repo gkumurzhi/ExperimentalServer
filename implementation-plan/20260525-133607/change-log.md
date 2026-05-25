@@ -53,3 +53,9 @@
 - Files changed: `.github/workflows/release.yml`, `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `tools/browser_smoke.py`, `tools/check_static_ui_assets.py`, `constraints/ci.txt`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/contributing.md`, `docs/changelog.md`, generated docs mirrors, plan artifacts.
 - Verification: wheel/sdist build passed; isolated installed-wheel CLI/import smoke passed; wheel-only static UI check passed; installed-package browser smoke passed; pip-audit scan and CycloneDX SBOM generation passed after constraint pin refresh; workflow YAML parse, docs sync/stale guards, ruff on touched tools, targeted pytest, `git diff --check`, and verifier subagent review passed.
 - Report: `stage-reports/STAGE-009-20260525-200007.md`
+
+## 2026-05-25 20:51:55 MSK - STAGE-010
+- Status: CLOSED
+- Files changed: `exphttp/`, `pyproject.toml`, `src/__init__.py`, `src/__main__.py`, `src/cli.py`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.github/workflows/security.yml`, `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/contributing.md`, `tools/browser_smoke.py`, `tools/decrypt.py`, `tools/check_stale_docs.py`, `tests/test_import_boundaries.py`, `tests/test_cli.py`, `tests/test_check_stale_docs.py`, plan artifacts.
+- Verification: docs stale guard, `ruff check exphttp src tests tools`, focused format check for changed package/test/tool paths, isolated mypy over `exphttp src`, targeted pytest with 130 tests, isolated wheel build/install CLI/import smoke, wheel static UI check, installed-package browser smoke, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-010-20260525-202611.md`

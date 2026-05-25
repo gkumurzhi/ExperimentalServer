@@ -80,12 +80,12 @@ jobs:
           import os
           from pathlib import Path
 
-          import src
-          from src import ExperimentalHTTPServer
+          import exphttp
+          from exphttp import ExperimentalHTTPServer
 
           repo_root = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
           module_paths = [
-              Path(inspect.getfile(src)).resolve(),
+              Path(inspect.getfile(exphttp)).resolve(),
               Path(inspect.getfile(ExperimentalHTTPServer)).resolve(),
           ]
           for module_path in module_paths:

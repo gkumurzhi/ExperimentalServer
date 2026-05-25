@@ -46,20 +46,20 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip check
-          python -m src --help > /dev/null
+          python -m exphttp --help > /dev/null
           python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
 
       - name: Pytest collection policy
         run: python tools/check_pytest_collection_policy.py
 
       - name: Lint (ruff)
-        run: ruff check src tests
+        run: ruff check exphttp src tests
 
       - name: Format check (ruff)
-        run: ruff format --check src tests
+        run: ruff format --check exphttp src tests
 
       - name: Type check (mypy)
-        run: mypy src
+        run: mypy exphttp src
 
       - name: Test (pytest + coverage)
         run: pytest --cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=65
@@ -132,13 +132,13 @@ jobs:
       - name: Dependency completeness smoke
         run: |
           python -m pip check
-          python -m src --help
+          python -m exphttp --help
           python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
 
       - name: CLI smoke
         run: |
-          python -m src --version
-          python -m src --help
+          python -m exphttp --version
+          python -m exphttp --help
 
       - name: Portable unit subset
         run: pytest -q tests/test_http tests/test_security/test_crypto.py tests/test_cli.py
@@ -185,8 +185,8 @@ jobs:
       - name: CLI, docs, and example sanity checks
         run: |
           set -euo pipefail
-          python -m src --dir /tmp --version
-          python -m src --help > /dev/null
+          python -m exphttp --dir /tmp --version
+          python -m exphttp --help > /dev/null
           bash -n examples/basic_file_server.sh
           python examples/notepad_client.py --help > /dev/null
           python tools/check_stale_docs.py

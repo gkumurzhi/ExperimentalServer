@@ -3,8 +3,13 @@
 ## Module layout
 
 ```
+exphttp/
+  __main__.py          # python -m exphttp entry point
+  cli.py               # public console-script wrapper
+  server.py            # public server exports
+
 src/
-  __main__.py          # python -m src entry point
+  __main__.py          # compatibility module entry point
   cli.py               # argparse
   server.py            # ExperimentalHTTPServer: socket lifecycle + WS helpers
   metrics.py           # MetricsCollector (thread-safe counters)

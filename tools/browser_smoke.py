@@ -36,7 +36,7 @@ def _path_is_under(path: Path, parent: Path) -> bool:
 
 
 def _remove_repo_import_paths() -> None:
-    """Remove checkout paths so installed-artifact smoke cannot import local src."""
+    """Remove checkout paths so installed-artifact smoke cannot import local packages."""
     filtered: list[str] = []
     for entry in sys.path:
         entry_path = Path(entry).resolve() if entry else Path.cwd().resolve()
@@ -53,7 +53,7 @@ def _load_server_class(*, installed_package: bool) -> tuple[type[Any], Path]:
     elif str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
 
-    from src.server import ExperimentalHTTPServer
+    from exphttp import ExperimentalHTTPServer
 
     module = sys.modules[ExperimentalHTTPServer.__module__]
     module_path = Path(getattr(module, "__file__", "")).resolve()

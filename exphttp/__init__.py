@@ -1,19 +1,21 @@
 """
-Experimental HTTP Server — modular HTTP server with custom method support.
+Public import package for exphttp.
+
+The implementation package remains importable as ``src`` for compatibility,
+but new user-facing imports should use ``exphttp``.
 """
 
-import warnings
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
-from .config import (
+from src.config import (
     HIDDEN_FILES,
-    __version__,  # noqa: F401 — re-export
+    __version__,  # noqa: F401 - re-export
 )
 
 if TYPE_CHECKING:
-    from .http import HTTPRequest, HTTPResponse
-    from .security import (
+    from src.http import HTTPRequest, HTTPResponse
+    from src.security import (
         BasicAuthenticator,
         check_openssl_available,
         compute_hmac,
@@ -25,8 +27,8 @@ if TYPE_CHECKING:
         xor_encrypt,
         xor_encrypt_with_hmac,
     )
-    from .server import ExperimentalHTTPServer
-    from .utils import generate_password_captcha, generate_smuggling_html
+    from src.server import ExperimentalHTTPServer
+    from src.utils import generate_password_captcha, generate_smuggling_html
 
 __all__ = [
     # Core
@@ -75,11 +77,6 @@ def __getattr__(name: str) -> Any:
     if name not in _LAZY_EXPORTS:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-    warnings.warn(
-        "The `src` public API is kept for compatibility; import from `exphttp` instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
     module_name, attr_name = _LAZY_EXPORTS[name]
     value = getattr(import_module(module_name), attr_name)
     globals()[name] = value

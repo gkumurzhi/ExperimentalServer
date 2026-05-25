@@ -22,11 +22,12 @@ DEFAULT_TARGETS: tuple[str, ...] = (
     "docs",
     "examples",
     ".github/PULL_REQUEST_TEMPLATE.md",
-    ".github/workflows/ci.yml",
+    ".github/workflows",
     "src/request_pipeline.py",
     "src/handlers/notepad.py",
     "src/data/static/ui/core.js",
     "tools/browser_smoke.playwright.js",
+    "tools/browser_smoke.py",
 )
 
 HISTORICAL_PATHS: frozenset[Path] = frozenset(
@@ -125,6 +126,18 @@ STALE_PATTERNS: tuple[StalePattern, ...] = (
             "stale Content-Length wording; identical duplicates are accepted, "
             "conflicting values are rejected"
         ),
+    ),
+    StalePattern(
+        re.compile(r"\bpython\s+-m\s+src(?:\b|\.)"),
+        "stale public module command `python -m src`; use `python -m exphttp`",
+    ),
+    StalePattern(
+        re.compile(r"\bfrom\s+src\s+import\b"),
+        "stale public import path `from src`; use `from exphttp`",
+    ),
+    StalePattern(
+        re.compile(r"(?<![\w.])import\s+src\b"),
+        "stale public import path `import src`; use `import exphttp`",
     ),
 )
 

@@ -20,7 +20,7 @@ Canonical project documentation lives in:
 pip install -e ".[dev]"
 
 # Run the server
-python -m src
+python -m exphttp
 # or after install:
 exphttp
 

@@ -120,7 +120,7 @@ The release lane builds `dist/*.whl` and `dist/*.tar.gz`, installs the wheel in
 a fresh virtual environment outside the checkout, runs CLI/import probes, checks
 static UI assets from the built wheel, and runs browser smoke with
 `tools/browser_smoke.py --installed-package`. That installed-package mode fails
-if `src` imports resolve back to the source tree.
+if package imports resolve back to the source tree.
 
 The workflow uses explicit permissions: `contents: read` for checkout,
 `id-token: write` for OIDC, and `attestations: write` for GitHub artifact

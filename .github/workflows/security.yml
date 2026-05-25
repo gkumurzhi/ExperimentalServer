@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip check
-          python -m src --help > /dev/null
+          python -m exphttp --help > /dev/null
           python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
           python tools/check_dependency_constraints.py --constraints constraints/ci.txt
 

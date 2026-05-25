@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compatibility module entry point for the legacy implementation package.
+Allows running the package as: python -m exphttp
 """
 
 import sys

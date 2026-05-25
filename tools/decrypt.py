@@ -25,7 +25,7 @@ from pathlib import Path
 # Добавляем корень проекта в путь
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.security.crypto import xor_decrypt_file, xor_encrypt_file
+from exphttp.security.crypto import xor_decrypt_file, xor_encrypt_file
 
 
 def format_size(size: int) -> str:

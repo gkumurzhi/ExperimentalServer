@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import src.cli as cli
-from src import ExperimentalHTTPServer
+from exphttp import ExperimentalHTTPServer
 from src.cli import create_parser
 
 
@@ -581,7 +581,7 @@ class TestCLIMain:
             [
                 sys.executable,
                 "-m",
-                "src.cli",
+                "exphttp",
                 "--host",
                 "127.0.0.1",
                 "--port",

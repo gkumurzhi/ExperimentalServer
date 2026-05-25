@@ -117,6 +117,21 @@ def test_threat_model_duplicate_content_length_wording_is_reported(tmp_path: Pat
     assert "identical duplicates are accepted" in findings[0].message
 
 
+def test_public_src_import_guidance_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "python -m src --help\nfrom src import ExperimentalHTTPServer\n",
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert len(findings) == 2
+    assert {finding.path for finding in findings} == {Path("README.md")}
+    assert any("python -m exphttp" in finding.message for finding in findings)
+    assert any("from exphttp" in finding.message for finding in findings)
+
+
 def test_semantic_contract_requires_final_api_metrics(tmp_path: Path) -> None:
     write_minimal_docs(tmp_path)
     (tmp_path / "API.md").write_text(

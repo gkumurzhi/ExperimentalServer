@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from types import FrameType
 from typing import Any
 
-from . import ExperimentalHTTPServer, __version__
+from .config import __version__
 from .features import DEFAULT_PROFILE, profile_names
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
@@ -24,7 +24,11 @@ from .http.io import (
     DEFAULT_MAX_HEADER_SIZE,
 )
 from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES
-from .server import DEFAULT_STREAM_SEND_IDLE_TIMEOUT, DEFAULT_STREAM_SEND_TIMEOUT
+from .server import (
+    DEFAULT_STREAM_SEND_IDLE_TIMEOUT,
+    DEFAULT_STREAM_SEND_TIMEOUT,
+    ExperimentalHTTPServer,
+)
 
 _MIB = 1024 * 1024
 

@@ -45,7 +45,7 @@ Repository = "https://github.com/gkumurzhi/ExperimentalServer"
 Issues = "https://github.com/gkumurzhi/ExperimentalServer/issues"
 
 [project.scripts]
-exphttp = "src.cli:main"
+exphttp = "exphttp.cli:main"
 
 [project.optional-dependencies]
 crypto = []
@@ -74,12 +74,19 @@ all = [
 [tool.setuptools.dynamic]
 version = {attr = "src.config.__version__"}
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
-exclude = ["src*.__pycache__"]
+include = ["exphttp*", "src*"]
+exclude = ["exphttp*.__pycache__", "src*.__pycache__"]
+namespaces = false
 
 [tool.setuptools.package-data]
+"exphttp" = [
+    "py.typed",
+]
 "src" = [
     "data/*.html",
     "data/static/*",
@@ -101,7 +108,7 @@ addopts = "-v --tb=short --strict-markers"
 
 # coverage configuration
 [tool.coverage.run]
-source = ["src"]
+source = ["exphttp", "src"]
 branch = true
 
 [tool.coverage.report]

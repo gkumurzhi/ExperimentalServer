@@ -1,7 +1,7 @@
 # STAGE-010 - Public package identity migration
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -76,5 +76,10 @@ Move the public import identity toward `exphttp`, protect package discovery, and
 - Rollback: First close a narrower discovery-guard slice, then migrate docs/imports in a separate follow-up if the full rename is too large.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed on 2026-05-25 20:51:55 MSK.
 
+- Added the public `exphttp` package and `python -m exphttp` entry point while keeping `src` as a compatibility import path.
+- Updated package discovery to include `exphttp*` and `src*` with `namespaces = false`, preserving `py.typed` and packaged static UI assets explicitly.
+- Updated CI/release/security smoke commands, tools, tests, and public docs to use `exphttp`.
+- Added regression coverage for `import exphttp`, installed CLI/module usage, `src` compatibility warnings, static asset namespace exclusion, and stale public `src` guidance.
+- Verified with docs guard, lint/format/type checks, targeted pytest, isolated wheel build/install smoke, wheel static asset check, installed-package browser smoke, and `git diff --check`.
