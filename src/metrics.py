@@ -21,6 +21,7 @@ class MetricsCollector:
         self._status_counts: dict[int, int] = {}
         self._receive_rejections: dict[str, int] = {}
         self._timeout_counts: dict[str, int] = {}
+        self._response_stream_aborts: dict[str, int] = {}
         self._connection_active: int = 0
         self._connection_accepted: int = 0
         self._connection_closed: int = 0
@@ -95,6 +96,11 @@ class MetricsCollector:
         with self._lock:
             self._timeout_counts[reason] = self._timeout_counts.get(reason, 0) + 1
 
+    def record_response_stream_abort(self, reason: str) -> None:
+        """Record an aborted streamed response by reason."""
+        with self._lock:
+            self._response_stream_aborts[reason] = self._response_stream_aborts.get(reason, 0) + 1
+
     def record_websocket_opened(self) -> None:
         """Record a WebSocket connection admitted by the server."""
         with self._lock:
@@ -140,7 +146,12 @@ class MetricsCollector:
         """Record a receive-layer request rejection reason."""
         with self._lock:
             self._receive_rejections[reason] = self._receive_rejections.get(reason, 0) + 1
-            if reason in {"header_timeout", "body_timeout"}:
+            if reason in {
+                "header_timeout",
+                "body_timeout",
+                "body_idle_timeout",
+                "body_rate_too_slow",
+            }:
                 self._timeout_counts[reason] = self._timeout_counts.get(reason, 0) + 1
 
     def record_request_admission_accepted(self) -> None:
@@ -175,6 +186,7 @@ class MetricsCollector:
             uptime = time.monotonic() - self._start_time if self._start_time else 0.0
             receive_rejections = dict(self._receive_rejections)
             timeout_counts = dict(self._timeout_counts)
+            response_stream_aborts = dict(self._response_stream_aborts)
             latency_avg = (
                 self._request_latency_total_ms / self._request_latency_count
                 if self._request_latency_count
@@ -201,6 +213,10 @@ class MetricsCollector:
                     "rejection_reasons": receive_rejections,
                 },
                 "timeouts": timeout_counts,
+                "response": {
+                    "stream_aborts": sum(response_stream_aborts.values()),
+                    "stream_abort_reasons": response_stream_aborts,
+                },
                 "request_latency_ms": {
                     "count": self._request_latency_count,
                     "total": round(self._request_latency_total_ms, 3),

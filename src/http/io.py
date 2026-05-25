@@ -18,6 +18,9 @@ logger = logging.getLogger("httpserver")
 
 HEADER_TIMEOUT = 30.0
 BODY_TIMEOUT = 300.0
+DEFAULT_BODY_IDLE_TIMEOUT = 5.0
+DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND = 0.0
+DEFAULT_BODY_MIN_RATE_GRACE = 0.25
 DEFAULT_IDLE_TIMEOUT = 5.0
 DEFAULT_MAX_HEADER_SIZE = 64 * 1024
 RECV_CHUNK = 65536
@@ -28,6 +31,8 @@ ReceiveRejectionReason = Literal[
     "body_too_large",
     "header_timeout",
     "body_timeout",
+    "body_idle_timeout",
+    "body_rate_too_slow",
     "body_incomplete",
     "unsupported_transfer_encoding",
     "invalid_content_length",
@@ -157,6 +162,9 @@ def receive_request(
     max_upload_size: int,
     max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
     idle_timeout: float | None = None,
+    body_idle_timeout: float | None = DEFAULT_BODY_IDLE_TIMEOUT,
+    body_timeout: float | None = BODY_TIMEOUT,
+    body_min_rate_bytes_per_second: float = DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
     on_reject: ReceiveRejectCallback | None = None,
 ) -> bytes:
     """Read one complete HTTP request from ``client_socket``.
@@ -172,6 +180,11 @@ def receive_request(
         idle_timeout: Initial timeout for the first ``recv`` (used by
             keep-alive loops waiting for the next request). ``None`` uses the
             default 5 s.
+        body_idle_timeout: Maximum idle seconds between body chunks. ``None`` disables it.
+        body_timeout: Maximum seconds to receive the declared body after headers arrive.
+            ``None`` disables the total body deadline.
+        body_min_rate_bytes_per_second: Optional minimum average body read rate. ``0`` disables
+            rate enforcement.
         on_reject: Optional callback invoked with the receive-layer rejection reason.
     """
     return receive_request_result(
@@ -179,6 +192,9 @@ def receive_request(
         max_upload_size=max_upload_size,
         max_header_size=max_header_size,
         idle_timeout=idle_timeout,
+        body_idle_timeout=body_idle_timeout,
+        body_timeout=body_timeout,
+        body_min_rate_bytes_per_second=body_min_rate_bytes_per_second,
         on_reject=on_reject,
     ).data
 
@@ -189,6 +205,9 @@ def receive_request_result(
     max_upload_size: int,
     max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
     idle_timeout: float | None = None,
+    body_idle_timeout: float | None = DEFAULT_BODY_IDLE_TIMEOUT,
+    body_timeout: float | None = BODY_TIMEOUT,
+    body_min_rate_bytes_per_second: float = DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
     on_reject: ReceiveRejectCallback | None = None,
     body_memory_budget: BodyMemoryBudget | None = None,
 ) -> RequestReceiveResult:
@@ -202,10 +221,17 @@ def receive_request_result(
         raise ValueError("max_upload_size must be greater than 0")
     if max_header_size <= 0:
         raise ValueError("max_header_size must be greater than 0")
+    if body_idle_timeout is not None and body_idle_timeout <= 0:
+        raise ValueError("body_idle_timeout must be greater than 0")
+    if body_timeout is not None and body_timeout <= 0:
+        raise ValueError("body_timeout must be greater than 0")
+    if body_min_rate_bytes_per_second < 0:
+        raise ValueError("body_min_rate_bytes_per_second must be at least 0")
 
     chunks: list[bytes] = []
     total_size = 0
     start_time = time.monotonic()
+    body_start_time: float | None = None
 
     initial_timeout = idle_timeout if idle_timeout is not None else DEFAULT_IDLE_TIMEOUT
     client_socket.settimeout(initial_timeout)
@@ -215,6 +241,44 @@ def receive_request_result(
     header_end_pos = 0
     first_recv = True
     body_reservation: BodyMemoryReservation | None = None
+
+    def body_received_bytes() -> int:
+        if not headers_received:
+            return 0
+        return max(0, total_size - header_end_pos - len(HEADER_TERMINATOR))
+
+    def body_rate_deadline() -> float | None:
+        if body_start_time is None or content_length <= 0 or body_min_rate_bytes_per_second <= 0:
+            return None
+        required_seconds = content_length / body_min_rate_bytes_per_second
+        required_seconds = max(DEFAULT_BODY_MIN_RATE_GRACE, required_seconds)
+        return body_start_time + required_seconds
+
+    def expired_body_deadline(now: float) -> ReceiveRejectionReason | None:
+        if body_start_time is None or content_length <= 0:
+            return None
+        if body_received_bytes() >= content_length:
+            return None
+        if body_timeout is not None and now - body_start_time >= body_timeout:
+            return "body_timeout"
+        rate_deadline = body_rate_deadline()
+        if rate_deadline is not None and now >= rate_deadline:
+            return "body_rate_too_slow"
+        return None
+
+    def body_recv_timeout(now: float) -> float | None:
+        timeouts: list[float] = []
+        if body_idle_timeout is not None:
+            timeouts.append(body_idle_timeout)
+        if body_start_time is not None:
+            if body_timeout is not None:
+                timeouts.append(max(0.001, body_timeout - (now - body_start_time)))
+            rate_deadline = body_rate_deadline()
+            if rate_deadline is not None:
+                timeouts.append(max(0.001, rate_deadline - now))
+        if not timeouts:
+            return None
+        return min(timeouts)
 
     def reject(reason: ReceiveRejectionReason) -> RequestReceiveResult:
         nonlocal body_reservation
@@ -226,13 +290,22 @@ def receive_request_result(
 
     try:
         while True:
-            elapsed = time.monotonic() - start_time
+            now = time.monotonic()
+            elapsed = now - start_time
             if not headers_received and elapsed > HEADER_TIMEOUT:
                 logger.warning("Header receive timeout (%.0fs)", elapsed)
                 return reject("header_timeout")
-            if headers_received and elapsed > HEADER_TIMEOUT + BODY_TIMEOUT:
-                logger.warning("Body receive timeout (%.0fs)", elapsed)
-                return reject("body_timeout")
+            if headers_received:
+                body_timeout_reason = expired_body_deadline(now)
+                if body_timeout_reason is not None:
+                    logger.warning(
+                        "Body receive deadline exceeded (%s, %d bytes < %d bytes)",
+                        body_timeout_reason,
+                        body_received_bytes(),
+                        content_length,
+                    )
+                    return reject(body_timeout_reason)
+                client_socket.settimeout(body_recv_timeout(now))
 
             try:
                 recv_size = RECV_CHUNK
@@ -302,6 +375,8 @@ def receive_request_result(
                                 )
                                 return reject("body_memory_budget_exceeded")
                         headers_received = True
+                        if content_length > 0:
+                            body_start_time = time.monotonic()
                         body_received = total_size - header_end_pos - len(HEADER_TERMINATOR)
                         if body_received > max_upload_size:
                             logger.warning(
@@ -328,7 +403,22 @@ def receive_request_result(
             except TimeoutError:
                 if not headers_received:
                     break
-                continue
+                now = time.monotonic()
+                body_timeout_reason = expired_body_deadline(now)
+                if body_timeout_reason is not None:
+                    logger.warning(
+                        "Body receive deadline exceeded (%s, %d bytes < %d bytes)",
+                        body_timeout_reason,
+                        body_received_bytes(),
+                        content_length,
+                    )
+                    return reject(body_timeout_reason)
+                logger.warning(
+                    "Request body idle timeout (%d bytes < %d bytes), dropping",
+                    body_received_bytes(),
+                    content_length,
+                )
+                return reject("body_idle_timeout")
 
         result = b"".join(chunks)
         if headers_received:

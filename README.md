@@ -163,6 +163,11 @@ exphttp [опции]
 | `--smuggle-temp-storage-limit MB` | Лимит размера временных SMUGGLE HTML (`0` = выключен) | `128` |
 | `--max-header-size KB` | Макс. размер HTTP request headers в KiB | `64` |
 | `--body-memory-budget MB` | Aggregate лимит in-flight тел запросов в памяти | `workers * max-size` |
+| `--body-idle-timeout SECONDS` | Макс. пауза между chunk-ами тела запроса (`0` = выключен) | `5` |
+| `--body-timeout SECONDS` | Общий deadline на прием тела после заголовков (`0` = выключен) | `300` |
+| `--body-min-rate BYTES_PER_SECOND` | Мин. средняя скорость приема тела (`0` = выключен) | `0` |
+| `--stream-send-idle-timeout SECONDS` | Макс. блокировка отправки одного chunk streamed-ответа | `5` |
+| `--stream-send-timeout SECONDS` | Общий deadline streamed-ответа (`0` = выключен) | `300` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
 | `--debug` | Debug режим (подробное логирование) | выключен |
@@ -742,7 +747,8 @@ print(response.json())
 - **CORS** — настроенные заголовки для кросс-доменных запросов
 - **Browser-origin guard** — cross-origin браузерные мутации отклоняются, кроме явно разрешённых `--cors-origin`
 - **Доступ только к uploads/** — ограничение пользовательских файловых операций
-- **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
+- **Таймауты** — защита от Slowloris (30s заголовки, idle/deadline/rate
+  контроль тела запроса и bounded streamed-ответы)
 - **Лимиты запросов и диска** — `--max-header-size` для заголовков,
   `--max-size` для тела одного запроса, `--body-memory-budget` для
   aggregate in-flight тел запросов в памяти, опциональные
@@ -769,9 +775,11 @@ XOR-шифрование используется для **обфускации*
 
 ## Технические детали
 
-- **Socket timeout**: 5 секунд (per-recv), 30s headers, 300s body
+- **Socket timeout**: 5 секунд ожидания первого запроса/keep-alive recv,
+  30s headers, 5s body idle, 300s body deadline, optional body min-rate
 - **Max headers**: 64 KiB по умолчанию (`--max-header-size`)
 - **Chunk size**: 65536 байт (64 KB) для приёма и стриминга файлов
+- **Streamed response timeout**: 5s send idle, 300s total transfer deadline
 - **Backlog**: 128 соединений
 - **HTTP версия**: 1.1
 - **Кодировка**: UTF-8

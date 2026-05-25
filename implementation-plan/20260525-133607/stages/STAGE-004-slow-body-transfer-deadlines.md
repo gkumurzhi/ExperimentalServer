@@ -1,7 +1,7 @@
 # STAGE-004 - Slow body and transfer deadlines
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -53,11 +53,11 @@ Add configurable request body idle/deadline/read-rate protection and basic strea
 6. Document the new knobs and deployment guidance.
 
 ## Acceptance criteria
-- [ ] Slow or incomplete bodies are closed well before the prior default combined 330 second budget when configured.
-- [ ] Normal slow-but-valid local tests remain possible through configurable thresholds.
-- [ ] Slow-body events are distinguishable in metrics or logs.
-- [ ] Streamed response sends have a bounded transfer/idle behavior.
-- [ ] Existing keep-alive and request size tests still pass.
+- [x] Slow or incomplete bodies are closed well before the prior default combined 330 second budget when configured.
+- [x] Normal slow-but-valid local tests remain possible through configurable thresholds.
+- [x] Slow-body events are distinguishable in metrics or logs.
+- [x] Streamed response sends have a bounded transfer/idle behavior.
+- [x] Existing keep-alive and request size tests still pass.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -76,5 +76,10 @@ Add configurable request body idle/deadline/read-rate protection and basic strea
 - Rollback: Keep thresholds configurable and test with small deterministic sockets rather than wall-clock-heavy sleeps.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 18:14:47 MSK.
 
+- Added configurable request-body idle timeout, total body deadline, and optional minimum average body read-rate enforcement.
+- Added bounded streamed-response sends with per-chunk idle timeout, optional total transfer deadline, and stream abort metrics.
+- Added CLI flags and documentation for slow-body and streamed-response controls.
+- Added receive, live, metrics, CLI, and adjacent send/pipeline regression coverage.
+- Verification passed for targeted tests, adjacent tests, ruff lint/format, and `git diff --check`; `mypy` could not run because the local environment lacks the `mypy` package.

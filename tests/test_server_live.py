@@ -10,6 +10,7 @@ import threading
 import time
 from pathlib import Path
 
+from src.http import HTTPResponse
 from src.server import ExperimentalHTTPServer
 from src.websocket import WS_CLOSE, WS_TEXT, parse_ws_frame
 
@@ -130,6 +131,27 @@ class _LiveServer:
         except OSError:
             pass
         self._thread.join(timeout=3.0)
+
+
+class _TimeoutAfterHeadersSocket:
+    """Socket-like test double that times out on the first streamed body chunk."""
+
+    def __init__(self) -> None:
+        self.payloads: list[bytes] = []
+        self.timeouts: list[float | None] = []
+        self._timeout: float | None = None
+
+    def gettimeout(self) -> float | None:
+        return self._timeout
+
+    def settimeout(self, timeout: float | None) -> None:
+        self._timeout = timeout
+        self.timeouts.append(timeout)
+
+    def sendall(self, payload: bytes) -> None:
+        if self.payloads:
+            raise TimeoutError("simulated slow reader")
+        self.payloads.append(payload)
 
 
 class TestLiveRequestHandling:
@@ -267,6 +289,79 @@ class TestLiveRequestHandling:
                     break
                 time.sleep(0.02)
             assert live.server.get_metrics()["body_memory"]["current_bytes"] == 0
+
+    def test_slow_body_idle_timeout_releases_worker_and_records_metrics(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(temp_dir, max_workers=1, body_idle_timeout=0.1) as live:
+            first = socket.create_connection(("127.0.0.1", live.port), timeout=2.0)
+            try:
+                first.settimeout(2.0)
+                first.sendall(
+                    (
+                        f"POST /slow HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Content-Length: 8\r\n"
+                        "\r\n"
+                        "x"
+                    ).encode("ascii")
+                )
+
+                for _ in range(100):
+                    metrics = live.server.get_metrics()
+                    if metrics["receive_rejections"].get("body_idle_timeout") == 1:  # type: ignore[union-attr]
+                        break
+                    time.sleep(0.02)
+
+                metrics = live.server.get_metrics()
+                assert metrics["receive_rejections"]["body_idle_timeout"] == 1
+                assert metrics["timeouts"]["body_idle_timeout"] == 1
+                assert metrics["request_admission"]["active"] == 0  # type: ignore[index]
+            finally:
+                first.close()
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as second:
+                second.settimeout(2.0)
+                second.sendall(
+                    (
+                        f"PING / HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(second)
+
+            assert status.startswith("HTTP/1.1 200")
+            assert json.loads(body)["status"] == "pong"
+
+    def test_streamed_response_timeout_is_bounded_and_recorded(self, temp_dir: Path) -> None:
+        payload = b"x" * (70 * 1024)
+        upload_dir = temp_dir / "uploads"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        upload_file = upload_dir / "payload.bin"
+        upload_file.write_bytes(payload)
+
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            stream_send_idle_timeout=0.05,
+            stream_send_timeout=0.05,
+        )
+        response = HTTPResponse(200)
+        response.set_file(upload_file, "application/octet-stream")
+        sock = _TimeoutAfterHeadersSocket()
+
+        bytes_sent = server._send_response(response, sock, {"keep_alive": True})
+
+        assert bytes_sent == len(sock.payloads[0])
+        metrics = server.get_metrics()
+        assert metrics["timeouts"]["response_stream_timeout"] == 1
+        assert metrics["response"] == {
+            "stream_aborts": 1,
+            "stream_abort_reasons": {"timeout": 1},
+        }
 
     def test_basic_auth_rejects_missing_header_and_accepts_valid_credentials(
         self,

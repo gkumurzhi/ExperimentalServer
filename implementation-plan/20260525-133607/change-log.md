@@ -17,3 +17,9 @@
 - Files changed: `src/http/io.py`, `src/server.py`, `src/cli.py`, `tests/test_http/test_io.py`, `tests/test_server_live.py`, `tests/test_server_methods.py`, `tests/test_cli.py`, `README.md`, `API.md`, `SECURITY.md`, plan artifacts.
 - Verification: receive/pipeline/live/metrics/CLI/server-method tests passed with 244 tests; stale-doc tests passed with 9 tests; `ruff check src tests`, `ruff format --check src tests`, and `git diff --check` passed. `mypy src` remains blocked by the local optional dependency environment (`mypy` module missing; `uv run --extra lint mypy src` timed out while downloading `mypy`).
 - Report: `stage-reports/STAGE-003-20260525-172228.md`
+
+## 2026-05-25 18:14:47 MSK - STAGE-004
+- Status: CLOSED
+- Files changed: `src/http/io.py`, `src/server.py`, `src/metrics.py`, `src/cli.py`, `tests/test_http/test_io.py`, `tests/test_server_live.py`, `tests/test_metrics.py`, `tests/test_cli.py`, `README.md`, `SECURITY.md`, plan artifacts.
+- Verification: targeted receive/live/metrics/CLI tests passed with 163 tests; adjacent server-method/request-pipeline tests passed with 105 tests; combined regression command passed with 269 tests; `ruff check src tests`, `ruff format --check src tests`, and `git diff --check` passed. `mypy src` remains blocked by the local optional dependency environment (`No module named mypy`).
+- Report: `stage-reports/STAGE-004-20260525-175855.md`

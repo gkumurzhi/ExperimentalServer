@@ -29,6 +29,10 @@ class TestMetricsCollector:
             "rejection_reasons": {},
         }
         assert snap["timeouts"] == {}
+        assert snap["response"] == {
+            "stream_aborts": 0,
+            "stream_abort_reasons": {},
+        }
         assert snap["request_latency_ms"] == {
             "count": 0,
             "total": 0.0,
@@ -88,6 +92,7 @@ class TestMetricsCollector:
         snap["status_counts"][500] = 999
         snap["receive_rejections"]["body_too_large"] = 999  # type: ignore[index]
         snap["receive"]["rejection_reasons"]["body_too_large"] = 999  # type: ignore[index]
+        snap["response"]["stream_abort_reasons"]["timeout"] = 999  # type: ignore[index]
         snap["worker"]["exception_sources"]["worker_future"] = 999  # type: ignore[index]
 
         # Original state must not be affected
@@ -98,6 +103,10 @@ class TestMetricsCollector:
             "bytes": 0,
             "rejections": 1,
             "rejection_reasons": {"header_too_large": 1},
+        }
+        assert snap2["response"] == {
+            "stream_aborts": 0,
+            "stream_abort_reasons": {},
         }
         assert snap2["worker"] == {
             "exceptions": 1,
@@ -123,6 +132,21 @@ class TestMetricsCollector:
                 "header_too_large": 2,
                 "body_too_large": 1,
             },
+        }
+
+    def test_slow_body_receive_rejections_are_counted_as_timeouts(self) -> None:
+        m = MetricsCollector()
+        m.record_receive_rejection("body_idle_timeout")
+        m.record_receive_rejection("body_rate_too_slow")
+
+        snap = m.snapshot()
+        assert snap["receive_rejections"] == {
+            "body_idle_timeout": 1,
+            "body_rate_too_slow": 1,
+        }
+        assert snap["timeouts"] == {
+            "body_idle_timeout": 1,
+            "body_rate_too_slow": 1,
         }
 
     def test_error_counters_are_status_based(self) -> None:
@@ -222,6 +246,7 @@ class TestMetricsCollector:
         m.record_request_latency(30.0)
         m.record_timeout("websocket_incomplete_frame")
         m.record_receive_rejection("header_timeout")
+        m.record_response_stream_abort("timeout")
         m.record_worker_exception("handle_client", RuntimeError("boom"))
 
         snap = m.snapshot()
@@ -237,6 +262,10 @@ class TestMetricsCollector:
         assert snap["timeouts"] == {
             "websocket_incomplete_frame": 1,
             "header_timeout": 1,
+        }
+        assert snap["response"] == {
+            "stream_aborts": 1,
+            "stream_abort_reasons": {"timeout": 1},
         }
         assert snap["worker"] == {
             "exceptions": 1,
@@ -254,6 +283,7 @@ class TestMetricsCollector:
                 m.record_connection_opened()
                 m.record_connection_closed()
                 m.record_receive_rejection("body_timeout")
+                m.record_response_stream_abort("timeout")
                 m.record_request_admission_accepted()
                 m.record_request_admission_released()
                 m.record_request_admission_rejected()
@@ -279,6 +309,10 @@ class TestMetricsCollector:
         assert snap["timeouts"] == {
             "body_timeout": 1000,
             "websocket_incomplete_frame": 1000,
+        }
+        assert snap["response"] == {
+            "stream_aborts": 1000,
+            "stream_abort_reasons": {"timeout": 1000},
         }
         assert snap["request_admission"] == {
             "active": 0,

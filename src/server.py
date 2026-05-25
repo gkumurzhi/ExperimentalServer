@@ -25,7 +25,14 @@ from .handlers.smuggle import (
 )
 from .http import HTTPRequest, HTTPResponse
 from .http.cors import parse_cors_origins, resolve_cors_origin
-from .http.io import DEFAULT_MAX_HEADER_SIZE, BodyMemoryBudget, RequestReceiveResult
+from .http.io import (
+    BODY_TIMEOUT,
+    DEFAULT_BODY_IDLE_TIMEOUT,
+    DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
+    DEFAULT_MAX_HEADER_SIZE,
+    BodyMemoryBudget,
+    RequestReceiveResult,
+)
 from .http.io import receive_request_result as _receive_request_result_io
 from .metrics import MetricsCollector
 from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES, NoteStoragePolicy
@@ -48,6 +55,8 @@ from .websocket import (
 
 # Logging setup
 logger = logging.getLogger("httpserver")
+DEFAULT_STREAM_SEND_IDLE_TIMEOUT = 5.0
+DEFAULT_STREAM_SEND_TIMEOUT = 300.0
 
 _BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
     {
@@ -100,6 +109,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         smuggle_temp_storage_limit: int | None = DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
         max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
         body_memory_budget: int | None = None,
+        body_idle_timeout: float | None = DEFAULT_BODY_IDLE_TIMEOUT,
+        body_timeout: float | None = BODY_TIMEOUT,
+        body_min_rate: float = DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
+        stream_send_idle_timeout: float = DEFAULT_STREAM_SEND_IDLE_TIMEOUT,
+        stream_send_timeout: float | None = DEFAULT_STREAM_SEND_TIMEOUT,
         max_workers: int = 10,
         quiet: bool = False,
         # TLS options
@@ -154,6 +168,16 @@ class ExperimentalHTTPServer(HandlerMixin):
             raise ValueError("max_header_size must be greater than 0")
         if body_memory_budget is not None and body_memory_budget <= 0:
             raise ValueError("body_memory_budget must be greater than 0")
+        if body_idle_timeout is not None and body_idle_timeout <= 0:
+            raise ValueError("body_idle_timeout must be greater than 0")
+        if body_timeout is not None and body_timeout <= 0:
+            raise ValueError("body_timeout must be greater than 0")
+        if body_min_rate < 0:
+            raise ValueError("body_min_rate must be at least 0")
+        if stream_send_idle_timeout <= 0:
+            raise ValueError("stream_send_idle_timeout must be greater than 0")
+        if stream_send_timeout is not None and stream_send_timeout <= 0:
+            raise ValueError("stream_send_timeout must be greater than 0")
         if max_workers <= 0:
             raise ValueError("max_workers must be greater than 0")
 
@@ -183,6 +207,11 @@ class ExperimentalHTTPServer(HandlerMixin):
             body_memory_budget if body_memory_budget is not None else max_upload_size * max_workers
         )
         self._body_memory_budget = BodyMemoryBudget(self.body_memory_budget)
+        self.body_idle_timeout = body_idle_timeout
+        self.body_timeout = body_timeout
+        self.body_min_rate = body_min_rate
+        self.stream_send_idle_timeout = stream_send_idle_timeout
+        self.stream_send_timeout = stream_send_timeout
         if max_websocket_connections is None:
             max_websocket_connections = max(0, max_workers // 2)
         if max_websocket_connections < 0:
@@ -369,6 +398,10 @@ class ExperimentalHTTPServer(HandlerMixin):
     def _record_timeout(self, reason: str) -> None:
         """Record a timeout signal."""
         self._metrics.record_timeout(reason)
+
+    def _record_response_stream_abort(self, reason: str) -> None:
+        """Record an aborted streamed response."""
+        self._metrics.record_response_stream_abort(reason)
 
     def _record_worker_exception(self, source: str, exc: BaseException) -> None:
         """Record an exception that happened in worker-owned execution."""
@@ -562,6 +595,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload request: {self.max_upload_size // (1024 * 1024)} MB")
         print(f"  Body memory budget: {self.body_memory_budget // (1024 * 1024)} MB")
+        print(f"  Body idle timeout: {self.body_idle_timeout or 'disabled'} s")
+        print(f"  Body deadline: {self.body_timeout or 'disabled'} s")
+        print(f"  Body minimum rate: {self.body_min_rate or 'disabled'} B/s")
         print(f"  Upload storage: {self.upload_storage.describe_limit()}")
         print(f"  Notepad limits: {self.note_storage_policy.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
@@ -753,19 +789,54 @@ class ExperimentalHTTPServer(HandlerMixin):
         Handles both streamed (file) and buffered (body) responses.
         For streamed responses, ``_bld`` is overridden to close the connection.
         """
+
+        def sendall_with_stream_deadline(payload: bytes) -> None:
+            timeout = self.stream_send_idle_timeout
+            if stream_deadline is not None:
+                remaining = stream_deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("stream response send deadline exceeded")
+                timeout = min(timeout, max(0.001, remaining))
+            client_socket.settimeout(timeout)
+            client_socket.sendall(payload)
+
+        stream_deadline = (
+            time.monotonic() + self.stream_send_timeout
+            if self.stream_send_timeout is not None
+            else None
+        )
+        try:
+            previous_timeout = client_socket.gettimeout()
+        except AttributeError:
+            previous_timeout = None
         try:
             if response.stream_path is not None:
                 _bld_close: ResponseBuildArgs = {**_bld, "keep_alive": False}
                 bytes_sent = 0
                 header_bytes = response.build_headers(**_bld_close)
-                client_socket.sendall(header_bytes)
+                try:
+                    sendall_with_stream_deadline(header_bytes)
+                except TimeoutError:
+                    self._record_timeout("response_stream_timeout")
+                    self._record_response_stream_abort("timeout")
+                    logger.warning("Streamed response aborted before headers were sent")
+                    return bytes_sent
                 bytes_sent = len(header_bytes)
                 with response.stream_path.open("rb") as f:
                     while True:
                         chunk = f.read(65536)
                         if not chunk:
                             break
-                        client_socket.sendall(chunk)
+                        try:
+                            sendall_with_stream_deadline(chunk)
+                        except TimeoutError:
+                            self._record_timeout("response_stream_timeout")
+                            self._record_response_stream_abort("timeout")
+                            logger.warning(
+                                "Streamed response aborted after %d bytes sent",
+                                bytes_sent,
+                            )
+                            return bytes_sent
                         bytes_sent += len(chunk)
                 return bytes_sent
 
@@ -773,6 +844,10 @@ class ExperimentalHTTPServer(HandlerMixin):
             client_socket.sendall(response_bytes)
             return len(response_bytes)
         finally:
+            try:
+                client_socket.settimeout(previous_timeout)
+            except AttributeError:
+                pass
             if response.stream_cleanup is not None:
                 response.stream_cleanup()
                 response.stream_cleanup = None
@@ -988,6 +1063,9 @@ class ExperimentalHTTPServer(HandlerMixin):
             max_upload_size=self.max_upload_size,
             max_header_size=self.max_header_size,
             idle_timeout=idle_timeout,
+            body_idle_timeout=self.body_idle_timeout,
+            body_timeout=self.body_timeout,
+            body_min_rate_bytes_per_second=self.body_min_rate,
             on_reject=self._record_receive_rejection,
             body_memory_budget=self._body_memory_budget,
         )

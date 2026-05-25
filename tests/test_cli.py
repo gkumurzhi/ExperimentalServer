@@ -68,6 +68,11 @@ class TestCLIParser:
         assert args.smuggle_temp_storage_limit == 128
         assert args.max_header_size == 64
         assert args.body_memory_budget is None
+        assert args.body_idle_timeout == 5.0
+        assert args.body_timeout == 300.0
+        assert args.body_min_rate == 0.0
+        assert args.stream_send_idle_timeout == 5.0
+        assert args.stream_send_timeout == 300.0
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
@@ -103,6 +108,12 @@ class TestCLIParser:
             ["--max-header-size", "-1"],
             ["--body-memory-budget", "0"],
             ["--body-memory-budget", "-1"],
+            ["--body-idle-timeout", "-1"],
+            ["--body-timeout", "-1"],
+            ["--body-min-rate", "-1"],
+            ["--stream-send-idle-timeout", "0"],
+            ["--stream-send-idle-timeout", "-1"],
+            ["--stream-send-timeout", "-1"],
             ["--workers", "0"],
             ["--workers", "-1"],
             ["--acme-http-port", "0"],
@@ -152,6 +163,27 @@ class TestCLIParser:
     def test_body_memory_budget(self):
         args = self.parser.parse_args(["--body-memory-budget", "512"])
         assert args.body_memory_budget == 512
+
+    def test_body_and_stream_timeout_flags(self):
+        args = self.parser.parse_args(
+            [
+                "--body-idle-timeout",
+                "1.5",
+                "--body-timeout",
+                "20",
+                "--body-min-rate",
+                "128",
+                "--stream-send-idle-timeout",
+                "2.5",
+                "--stream-send-timeout",
+                "30",
+            ]
+        )
+        assert args.body_idle_timeout == 1.5
+        assert args.body_timeout == 20.0
+        assert args.body_min_rate == 128.0
+        assert args.stream_send_idle_timeout == 2.5
+        assert args.stream_send_timeout == 30.0
 
     def test_debug_flag(self):
         args = self.parser.parse_args(["--debug"])
@@ -271,6 +303,16 @@ class TestCLIMain:
                 "128",
                 "--body-memory-budget",
                 "512",
+                "--body-idle-timeout",
+                "1.5",
+                "--body-timeout",
+                "20",
+                "--body-min-rate",
+                "128",
+                "--stream-send-idle-timeout",
+                "2.5",
+                "--stream-send-timeout",
+                "30",
                 "-w",
                 "20",
                 "--auth",
@@ -294,6 +336,11 @@ class TestCLIMain:
             "smuggle_temp_storage_limit": 32 * 1024 * 1024,
             "max_header_size": 128 * 1024,
             "body_memory_budget": 512 * 1024 * 1024,
+            "body_idle_timeout": 1.5,
+            "body_timeout": 20.0,
+            "body_min_rate": 128.0,
+            "stream_send_idle_timeout": 2.5,
+            "stream_send_timeout": 30.0,
             "max_workers": 20,
             "quiet": True,
             "debug": True,
@@ -550,6 +597,21 @@ class TestServerConstructorValidation:
             ({"max_header_size": -1}, "max_header_size must be greater than 0"),
             ({"body_memory_budget": 0}, "body_memory_budget must be greater than 0"),
             ({"body_memory_budget": -1}, "body_memory_budget must be greater than 0"),
+            ({"body_idle_timeout": 0}, "body_idle_timeout must be greater than 0"),
+            ({"body_idle_timeout": -1}, "body_idle_timeout must be greater than 0"),
+            ({"body_timeout": 0}, "body_timeout must be greater than 0"),
+            ({"body_timeout": -1}, "body_timeout must be greater than 0"),
+            ({"body_min_rate": -1}, "body_min_rate must be at least 0"),
+            (
+                {"stream_send_idle_timeout": 0},
+                "stream_send_idle_timeout must be greater than 0",
+            ),
+            (
+                {"stream_send_idle_timeout": -1},
+                "stream_send_idle_timeout must be greater than 0",
+            ),
+            ({"stream_send_timeout": 0}, "stream_send_timeout must be greater than 0"),
+            ({"stream_send_timeout": -1}, "stream_send_timeout must be greater than 0"),
             ({"max_workers": 0}, "max_workers must be greater than 0"),
             ({"max_workers": -1}, "max_workers must be greater than 0"),
         ],

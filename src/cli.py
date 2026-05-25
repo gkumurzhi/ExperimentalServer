@@ -16,8 +16,14 @@ from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
     DEFAULT_SMUGGLE_TEMP_MAX_FILES,
 )
-from .http.io import DEFAULT_MAX_HEADER_SIZE
+from .http.io import (
+    BODY_TIMEOUT,
+    DEFAULT_BODY_IDLE_TIMEOUT,
+    DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
+    DEFAULT_MAX_HEADER_SIZE,
+)
 from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES
+from .server import DEFAULT_STREAM_SEND_IDLE_TIMEOUT, DEFAULT_STREAM_SEND_TIMEOUT
 
 _MIB = 1024 * 1024
 
@@ -37,6 +43,31 @@ def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Call
             raise argparse.ArgumentTypeError(f"{name} must be between {minimum} and {maximum}")
         if maximum is not None and parsed > maximum:
             raise argparse.ArgumentTypeError(f"{name} must be between {minimum} and {maximum}")
+        return parsed
+
+    return parse
+
+
+def _bounded_float(
+    name: str,
+    *,
+    minimum: float,
+    maximum: float | None = None,
+) -> Callable[[str], float]:
+    """Return an argparse type function for a float with inclusive bounds."""
+
+    def parse(value: str) -> float:
+        try:
+            parsed = float(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"{name} must be a number") from None
+
+        if parsed < minimum:
+            if maximum is None:
+                raise argparse.ArgumentTypeError(f"{name} must be at least {minimum:g}")
+            raise argparse.ArgumentTypeError(f"{name} must be between {minimum:g} and {maximum:g}")
+        if maximum is not None and parsed > maximum:
+            raise argparse.ArgumentTypeError(f"{name} must be between {minimum:g} and {maximum:g}")
         return parsed
 
     return parse
@@ -193,6 +224,53 @@ Custom HTTP methods:
         help="Aggregate in-flight request body memory budget in MB (default: workers * max size)",
     )
     limits.add_argument(
+        "--body-idle-timeout",
+        type=_bounded_float("body idle timeout", minimum=0),
+        default=DEFAULT_BODY_IDLE_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "Max idle seconds between request body chunks; 0 disables "
+            f"(default: {DEFAULT_BODY_IDLE_TIMEOUT:g})"
+        ),
+    )
+    limits.add_argument(
+        "--body-timeout",
+        type=_bounded_float("body timeout", minimum=0),
+        default=BODY_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "Max seconds to receive a request body after headers; 0 disables "
+            f"(default: {BODY_TIMEOUT:g})"
+        ),
+    )
+    limits.add_argument(
+        "--body-min-rate",
+        type=_bounded_float("body minimum read rate", minimum=0),
+        default=DEFAULT_BODY_MIN_RATE_BYTES_PER_SECOND,
+        metavar="BYTES_PER_SECOND",
+        help="Minimum average request body read rate in bytes/s; 0 disables (default: 0)",
+    )
+    limits.add_argument(
+        "--stream-send-idle-timeout",
+        type=_bounded_float("stream send idle timeout", minimum=0.001),
+        default=DEFAULT_STREAM_SEND_IDLE_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "Max seconds a streamed response send may block per chunk "
+            f"(default: {DEFAULT_STREAM_SEND_IDLE_TIMEOUT:g})"
+        ),
+    )
+    limits.add_argument(
+        "--stream-send-timeout",
+        type=_bounded_float("stream send timeout", minimum=0),
+        default=DEFAULT_STREAM_SEND_TIMEOUT,
+        metavar="SECONDS",
+        help=(
+            "Max total seconds for a streamed response transfer; 0 disables "
+            f"(default: {DEFAULT_STREAM_SEND_TIMEOUT:g})"
+        ),
+    )
+    limits.add_argument(
         "-w",
         "--workers",
         type=_bounded_int("workers", minimum=1),
@@ -342,6 +420,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
         "max_header_size": args.max_header_size * 1024,
         "body_memory_budget": args.body_memory_budget * _MIB if args.body_memory_budget else None,
+        "body_idle_timeout": args.body_idle_timeout or None,
+        "body_timeout": args.body_timeout or None,
+        "body_min_rate": args.body_min_rate,
+        "stream_send_idle_timeout": args.stream_send_idle_timeout,
+        "stream_send_timeout": args.stream_send_timeout or None,
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,

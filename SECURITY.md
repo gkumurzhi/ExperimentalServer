@@ -103,8 +103,11 @@ Before exposing the service to untrusted networks, require all of: real TLS,
 strong Basic Auth credentials, a dedicated data directory, firewall allowlists
 where possible, reverse-proxy rate limiting, reverse-proxy request/header/body
 size caps, an explicit `--body-memory-budget` sized for available RAM,
-monitoring of `/metrics`, and an exact browser-origin policy for any separate
-UI origin.
+explicit slow-body settings (`--body-idle-timeout`, `--body-timeout`, and
+optionally `--body-min-rate`), monitoring of `/metrics`, and an exact
+browser-origin policy for any separate UI origin. Keep
+`--stream-send-idle-timeout` and `--stream-send-timeout` enabled for exposed
+file downloads so slow readers cannot hold worker threads indefinitely.
 
 ## Known Limitations
 

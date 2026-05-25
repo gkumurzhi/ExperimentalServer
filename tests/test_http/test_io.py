@@ -300,6 +300,130 @@ class TestReceiveRequest:
         assert budget.snapshot()["current_bytes"] == 0
         assert budget.snapshot()["peak_bytes"] == 10
 
+    def test_body_idle_timeout_rejects_stalled_body(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        client.sendall(b"POST /slow HTTP/1.1\r\nContent-Length: 10\r\n\r\nx")
+        reasons: list[str] = []
+
+        start = time.monotonic()
+        result = receive_request(
+            server,
+            max_upload_size=1024,
+            body_idle_timeout=0.05,
+            on_reject=reasons.append,
+        )
+        elapsed = time.monotonic() - start
+
+        assert result == b""
+        assert elapsed < 1.0
+        assert reasons == ["body_idle_timeout"]
+
+    def test_body_total_timeout_rejects_when_idle_timeout_disabled(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        client.sendall(b"POST /slow HTTP/1.1\r\nContent-Length: 10\r\n\r\nx")
+        reasons: list[str] = []
+
+        start = time.monotonic()
+        result = receive_request(
+            server,
+            max_upload_size=1024,
+            body_idle_timeout=None,
+            body_timeout=0.05,
+            on_reject=reasons.append,
+        )
+        elapsed = time.monotonic() - start
+
+        assert result == b""
+        assert elapsed < 1.0
+        assert reasons == ["body_timeout"]
+
+    def test_body_rate_rejects_trickle_when_idle_and_total_timeout_disabled(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        client.sendall(b"POST /slow HTTP/1.1\r\nContent-Length: 10\r\n\r\nx")
+        reasons: list[str] = []
+
+        result = receive_request(
+            server,
+            max_upload_size=1024,
+            body_idle_timeout=None,
+            body_timeout=None,
+            body_min_rate_bytes_per_second=100_000.0,
+            on_reject=reasons.append,
+        )
+
+        assert result == b""
+        assert reasons == ["body_rate_too_slow"]
+
+    def test_disabled_body_thresholds_clear_inherited_socket_timeout(self) -> None:
+        header = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n"
+        sock = ScriptedSocket([header, b""])
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_idle_timeout=None,
+            body_timeout=None,
+            body_min_rate_bytes_per_second=0,
+        )
+
+        assert result.data == b""
+        assert result.rejection_reason == "body_incomplete"
+        assert sock.timeouts[-1] is None
+
+    def test_slow_but_valid_body_can_be_allowed_by_config(
+        self,
+        socket_pair: tuple[socket.socket, socket.socket],
+    ) -> None:
+        server, client = socket_pair
+        header = b"POST /slow HTTP/1.1\r\nContent-Length: 4\r\n\r\n"
+        request = header + b"slow"
+
+        def sender() -> None:
+            client.sendall(header + b"s")
+            time.sleep(0.05)
+            client.sendall(b"low")
+
+        thread = threading.Thread(target=sender)
+        thread.start()
+
+        result = receive_request(
+            server,
+            max_upload_size=1024,
+            body_idle_timeout=0.5,
+            body_timeout=2.0,
+        )
+        thread.join(timeout=1.0)
+
+        assert result == request
+
+    def test_body_memory_budget_released_on_idle_timeout(self) -> None:
+        header = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n"
+        sock = ScriptedSocket([header, TimeoutError()])
+        budget = BodyMemoryBudget(10)
+        reasons: list[str] = []
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_idle_timeout=0.5,
+            body_memory_budget=budget,
+            on_reject=reasons.append,
+        )
+
+        assert result.data == b""
+        assert result.rejection_reason == "body_idle_timeout"
+        assert reasons == ["body_idle_timeout"]
+        assert budget.snapshot()["current_bytes"] == 0
+
     def test_rejects_request_exceeding_size_limit(
         self,
         socket_pair: tuple[socket.socket, socket.socket],
