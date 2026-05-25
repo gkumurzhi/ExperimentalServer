@@ -89,8 +89,8 @@ When running the server outside a trusted lab:
 
 - Always use `--tls` with a real certificate (Let's Encrypt or internal CA).
 - Use `--auth random` only in an interactive terminal; for services,
-  containers, and CI pass an explicit strong `user:password` from a secret
-  manager.
+  containers, and CI mount a secret-manager file containing one
+  `user:password` line and pass it with `--auth-file`.
 - Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.

@@ -23,3 +23,9 @@
 - Files changed: `src/http/io.py`, `src/server.py`, `src/metrics.py`, `src/cli.py`, `tests/test_http/test_io.py`, `tests/test_server_live.py`, `tests/test_metrics.py`, `tests/test_cli.py`, `README.md`, `SECURITY.md`, plan artifacts.
 - Verification: targeted receive/live/metrics/CLI tests passed with 163 tests; adjacent server-method/request-pipeline tests passed with 105 tests; combined regression command passed with 269 tests; `ruff check src tests`, `ruff format --check src tests`, and `git diff --check` passed. `mypy src` remains blocked by the local optional dependency environment (`No module named mypy`).
 - Report: `stage-reports/STAGE-004-20260525-175855.md`
+
+## 2026-05-25 18:41:08 MSK - STAGE-005
+- Status: CLOSED
+- Files changed: `src/cli.py`, `src/server.py`, `tests/test_cli.py`, `tests/test_security/test_auth.py`, `README.md`, `SECURITY.md`, `examples/docker/docker-compose.yml`, plan artifacts.
+- Verification: targeted CLI/auth/request-pipeline tests passed with 158 tests; `python tools/check_stale_docs.py`, `docker compose -f examples/docker/docker-compose.yml config`, `ruff check src tests`, `ruff format --check src tests`, isolated uv `mypy src`, and `git diff --check` passed. Direct `mypy` was unavailable in the active Python environment, so typecheck used `UV_PROJECT_ENVIRONMENT=/tmp/exphttp-stage005-venv uv run --extra lint mypy src`.
+- Report: `stage-reports/STAGE-005-20260525-181754.md`

@@ -1,6 +1,9 @@
 """Tests for authentication functionality."""
 
 import base64
+from pathlib import Path
+
+import pytest
 
 from src.security.auth import (
     BasicAuthenticator,
@@ -9,6 +12,8 @@ from src.security.auth import (
     parse_basic_auth,
     verify_password,
 )
+from src.server import ExperimentalHTTPServer
+from tests.conftest import make_request
 
 
 class TestParseBasicAuth:
@@ -170,3 +175,106 @@ class TestGenerateRandomCredentials:
         _, password = generate_random_credentials()
 
         assert len(password) > 0
+
+
+class TestServerAuthConfiguration:
+    """Tests for server-level auth configuration helpers."""
+
+    def test_auth_file_trims_newline_and_configures_rate_limiter(self, temp_dir: Path):
+        auth_file = temp_dir / "auth.txt"
+        auth_file.write_text("admin:secret:with:colon\n", encoding="utf-8")
+
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            auth_file=str(auth_file),
+        )
+        credentials = base64.b64encode(b"admin:secret:with:colon").decode("ascii")
+        request = make_request("GET", "/", headers={"Authorization": f"Basic {credentials}"})
+
+        assert server._rate_limiter is not None
+        assert server._authenticate_request(request, ("127.0.0.1", 12345)) is None
+
+    @pytest.mark.parametrize(
+        "contents",
+        [
+            "",
+            "\n",
+            "adminsecret\n",
+            "admin:secret\nother:credential\n",
+            "admin:secret\n\n",
+            ":secret\n",
+            "admin:\n",
+        ],
+    )
+    def test_auth_file_rejects_empty_or_malformed_values(
+        self,
+        temp_dir: Path,
+        contents: str,
+    ):
+        auth_file = temp_dir / "auth.txt"
+        auth_file.write_text(contents, encoding="utf-8")
+
+        with pytest.raises(ValueError, match="auth file must contain exactly one"):
+            ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, auth_file=str(auth_file))
+
+    def test_auth_file_missing_or_unreadable_errors_are_non_secret(self, temp_dir: Path):
+        missing_file = temp_dir / "missing-auth.txt"
+        with pytest.raises(ValueError, match="auth file does not exist") as missing:
+            ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, auth_file=str(missing_file))
+        assert "secret" not in str(missing.value)
+
+        unreadable_path = temp_dir / "auth-directory"
+        unreadable_path.mkdir()
+        with pytest.raises(ValueError, match="auth file could not be read") as unreadable:
+            ExperimentalHTTPServer(
+                root_dir=str(temp_dir),
+                quiet=True,
+                auth_file=str(unreadable_path),
+            )
+        assert "secret" not in str(unreadable.value)
+
+    def test_auth_file_rejects_empty_path(self, temp_dir: Path):
+        with pytest.raises(ValueError, match="--auth-file value must not be empty"):
+            ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, auth_file="")
+
+    def test_auth_file_rejects_invalid_utf8_without_echoing_bytes(self, temp_dir: Path):
+        auth_file = temp_dir / "auth.txt"
+        auth_file.write_bytes(b"admin:\xffsecret\n")
+
+        with pytest.raises(ValueError, match="auth file must be UTF-8 text") as exc_info:
+            ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, auth_file=str(auth_file))
+
+        assert "secret" not in str(exc_info.value)
+
+    def test_auth_and_auth_file_cannot_be_combined(self, temp_dir: Path):
+        auth_file = temp_dir / "auth.txt"
+        auth_file.write_text("admin:from-file\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="--auth and --auth-file cannot be combined"):
+            ExperimentalHTTPServer(
+                root_dir=str(temp_dir),
+                quiet=True,
+                auth="admin:inline-secret",
+                auth_file=str(auth_file),
+            )
+
+    def test_set_authenticator_refreshes_rate_limiter(self, temp_dir: Path):
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        assert server.authenticator is None
+        assert server._rate_limiter is None
+
+        server.set_authenticator(BasicAuthenticator({"admin": "secret"}))
+        assert server.authenticator is not None
+        assert server._rate_limiter is not None
+
+        failed_request = make_request("GET", "/")
+        address = ("127.0.0.1", 12345)
+        for _ in range(5):
+            server._authenticate_request(failed_request, address)
+
+        assert server._rate_limiter.is_blocked(address[0])
+
+        server.set_authenticator(None)
+        assert server.authenticator is None
+        assert server._rate_limiter is None

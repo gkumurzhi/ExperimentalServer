@@ -57,6 +57,7 @@ class TestCLIParser:
         assert args.debug is False
         assert args.tls is False
         assert args.auth is None
+        assert args.auth_file is None
         assert args.max_size == 100
         assert args.upload_storage_limit == 0
         assert args.upload_file_limit == 0
@@ -151,6 +152,10 @@ class TestCLIParser:
     def test_auth_user_pass(self):
         args = self.parser.parse_args(["--auth", "admin:secret"])
         assert args.auth == "admin:secret"
+
+    def test_auth_file(self):
+        args = self.parser.parse_args(["--auth-file", "/run/secrets/exphttp_auth"])
+        assert args.auth_file == "/run/secrets/exphttp_auth"
 
     def test_max_size(self):
         args = self.parser.parse_args(["-m", "500"])
@@ -357,11 +362,30 @@ class TestCLIMain:
             "acme_http_address": "",
             "acme_http_port": 80,
             "auth": "admin:secret",
+            "auth_file": None,
             "open_browser": True,
             "json_log": True,
             "cors_origin": "https://app.example",
             "started": True,
         }
+
+    def test_main_passes_auth_file_to_server(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class ServerStub:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def start(self):
+                captured["started"] = True
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", ServerStub)
+
+        result = cli.main(["--auth-file", "/run/secrets/exphttp_auth"])
+
+        assert result == 0
+        assert captured["auth"] is None
+        assert captured["auth_file"] == "/run/secrets/exphttp_auth"
 
     @pytest.mark.parametrize(
         ("argv", "expected_tls"),
@@ -469,12 +493,42 @@ class TestCLIMain:
             ["--public-ip", "8.8.8.8"],
             ["--acme-http-port", "0"],
             ["--acme-http-port", "70000"],
+            ["--auth-file", ""],
         ],
     )
     def test_main_rejects_invalid_acme_combinations(self, argv):
         with pytest.raises(SystemExit) as exc_info:
             cli.main(argv)
         assert exc_info.value.code == 2
+
+    def test_main_rejects_conflicting_auth_sources_without_echoing_secret(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not be constructed for invalid CLI config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(["--auth", "admin:supersecret", "--auth-file", "/run/secrets/auth"])
+
+        assert exc_info.value.code == 2
+        captured = capsys.readouterr()
+        assert "--auth and --auth-file cannot be combined" in captured.err
+        assert "supersecret" not in captured.err
+
+    def test_main_auth_file_parse_failure_does_not_echo_secret(self, temp_dir: Path, capsys):
+        auth_file = temp_dir / "auth.txt"
+        auth_file.write_text("admin:supersecret\nother:credential\n", encoding="utf-8")
+
+        result = cli.main(["-d", str(temp_dir), "--auth-file", str(auth_file)])
+        captured = capsys.readouterr()
+
+        assert result == 1
+        assert "auth file must contain exactly one user:password line" in captured.err
+        assert "supersecret" not in captured.err
 
     def test_main_returns_zero_on_keyboard_interrupt(self, monkeypatch):
         class ServerStub:

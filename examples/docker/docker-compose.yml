@@ -26,8 +26,9 @@ services:
     # The default image command already serves /data over plain HTTP on :8080.
     # If you override `command` to enable TLS or auth, also override or disable
     # the image healthcheck so it probes the matching protocol/credentials.
-    # Use explicit credentials from a secret source for containers; `--auth random`
-    # is intended for interactive terminals.
+    # Use --auth-file for containers so the password is not exposed in argv.
+    # For example, create a Compose secret file containing one user:password
+    # line, mount it at /run/secrets/exphttp_auth, then enable the command:
     # command:
     #   - --host
     #   - 0.0.0.0
@@ -36,8 +37,10 @@ services:
     #   - --dir
     #   - /data
     #   - --tls
-    #   - --auth
-    #   - admin:replace-with-a-strong-secret
+    #   - --auth-file
+    #   - /run/secrets/exphttp_auth
+    # secrets:
+    #   - exphttp_auth
     # healthcheck:
     #   disable: true
 
@@ -101,3 +104,9 @@ services:
 volumes:
   exphttp-data:
   exphttp-acme-state:
+
+# Uncomment with the service-level secrets block above after creating
+# ./secrets/exphttp_auth with exactly one user:password line.
+# secrets:
+#   exphttp_auth:
+#     file: ./secrets/exphttp_auth

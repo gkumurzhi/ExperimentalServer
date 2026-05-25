@@ -1,7 +1,7 @@
 # STAGE-005 - Auth secret files and auth invariants
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -52,11 +52,11 @@ Add a safe non-argv Basic Auth secret source and repair documented auth configur
 6. Add tests proving secrets do not appear in stdout/stderr/log output on failure paths.
 
 ## Acceptance criteria
-- [ ] Service/container deployments can configure Basic Auth from a file path without passing the password in argv.
-- [ ] Auth-file parsing handles newline trimming and rejects malformed or empty files safely.
-- [ ] Error output and docs do not expose secret contents.
-- [ ] README custom-auth guidance preserves auth rate-limiter invariants.
-- [ ] Existing `--auth random` and explicit `--auth user:pass` behavior remains tested.
+- [x] Service/container deployments can configure Basic Auth from a file path without passing the password in argv.
+- [x] Auth-file parsing handles newline trimming and rejects malformed or empty files safely.
+- [x] Error output and docs do not expose secret contents.
+- [x] README custom-auth guidance preserves auth rate-limiter invariants.
+- [x] Existing `--auth random` and explicit `--auth user:pass` behavior remains tested.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -75,5 +75,11 @@ Add a safe non-argv Basic Auth secret source and repair documented auth configur
 - Rollback: Fail when both are provided and document that behavior; this is safest and easy to reason about.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 18:41:08 MSK.
 
+- Added CLI/server `--auth-file` support with fail-closed `--auth` conflict handling.
+- Auth-file parsing reads one UTF-8 `user:password` line, trims one trailing newline, and rejects empty, malformed, multiline, invalid UTF-8, missing, and unreadable files without echoing secrets.
+- Added `ExperimentalHTTPServer.set_authenticator()` and updated README custom-auth guidance so rate limiting remains synchronized.
+- Updated service/container/CI docs and Docker Compose examples to prefer `--auth-file`.
+- Verification passed: targeted CLI/auth/request-pipeline tests, stale-doc guard, compose config, ruff check, ruff format check, and mypy via isolated uv lint environment.
+- Report: `stage-reports/STAGE-005-20260525-181754.md`.

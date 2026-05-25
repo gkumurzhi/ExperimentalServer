@@ -132,6 +132,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         acme_http_port: int = 80,
         # Auth options
         auth: str | None = None,  # "user:password" or "random"
+        auth_file: str | None = None,  # path to one "user:password" line
         # Debug
         debug: bool = False,
         # Browser
@@ -278,10 +279,8 @@ class ExperimentalHTTPServer(HandlerMixin):
 
         # Basic Auth
         self.authenticator: BasicAuthenticator | None = None
-        self._setup_auth(auth)
-
-        # Rate limiting for auth
-        self._rate_limiter = AuthRateLimiter() if self.authenticator else None
+        self._rate_limiter: AuthRateLimiter | None = None
+        self._setup_auth(auth, auth_file)
 
         # Logging setup
         self._setup_logging(quiet)
@@ -302,23 +301,63 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.method_handlers = self.build_method_handlers()
         self._request_pipeline = RequestPipeline(self)
 
-    def _setup_auth(self, auth: str | None) -> None:
+    def set_authenticator(self, authenticator: BasicAuthenticator | None) -> None:
+        """Install an authenticator and keep auth rate limiting in sync."""
+        self.authenticator = authenticator
+        self._rate_limiter = AuthRateLimiter() if authenticator else None
+
+    def _setup_auth(self, auth: str | None, auth_file: str | None = None) -> None:
         """Set up Basic Auth."""
+        if auth_file == "":
+            raise ValueError("--auth-file value must not be empty")
+        if auth and auth_file:
+            raise ValueError("--auth and --auth-file cannot be combined")
+
+        if auth_file:
+            auth = self._read_auth_file(auth_file)
+
         if not auth:
             return
 
         if auth == "random":
             username, password = generate_random_credentials()
-            self.authenticator = BasicAuthenticator({username: password})
+            self.set_authenticator(BasicAuthenticator({username: password}))
             self._print_generated_credentials(username, password)
         elif ":" in auth:
             username, password = auth.split(":", 1)
-            self.authenticator = BasicAuthenticator({username: password})
+            self.set_authenticator(BasicAuthenticator({username: password}))
         else:
             # Username only, password = random
             password = secrets.token_urlsafe(16)
-            self.authenticator = BasicAuthenticator({auth: password})
+            self.set_authenticator(BasicAuthenticator({auth: password}))
             self._print_generated_credentials(auth, password)
+
+    @staticmethod
+    def _read_auth_file(path: str) -> str:
+        """Read a single user:password credential line from a file."""
+        auth_path = Path(path)
+        try:
+            raw_value = auth_path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise ValueError("auth file does not exist") from None
+        except OSError:
+            raise ValueError("auth file could not be read") from None
+        except UnicodeDecodeError:
+            raise ValueError("auth file must be UTF-8 text") from None
+
+        if raw_value.endswith("\r\n"):
+            value = raw_value[:-2]
+        elif raw_value.endswith(("\r", "\n")):
+            value = raw_value[:-1]
+        else:
+            value = raw_value
+        if not value or "\n" in value or "\r" in value:
+            raise ValueError("auth file must contain exactly one user:password line")
+
+        username, separator, password = value.partition(":")
+        if not separator or not username or not password:
+            raise ValueError("auth file must contain exactly one user:password line")
+        return value
 
     @staticmethod
     def _print_generated_credentials(username: str, password: str) -> None:
@@ -326,7 +365,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not sys.stdout.isatty():
             raise RuntimeError(
                 "--auth random refuses to print generated credentials to non-interactive "
-                "stdout; pass explicit --auth user:password instead."
+                "stdout; pass --auth-file or explicit --auth user:password instead."
             )
         print("\n[AUTH] Generated credentials:")
         print(f"  Username: {username}")

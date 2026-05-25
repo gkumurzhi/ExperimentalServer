@@ -68,9 +68,9 @@ exphttp --open
 
 Полезные комбинации:
 ```bash
-exphttp --tls --auth random    # HTTPS + авто-пароль
+exphttp --tls --auth random    # HTTPS + авто-пароль в интерактивном терминале
 exphttp -d ./data -m 500       # Рабочая папка ./data/uploads, лимит 500 MB
-exphttp -H 0.0.0.0 -p 8443 --tls --auth random  # Только trusted lab; см. режимы ниже
+exphttp -H 0.0.0.0 -p 8443 --tls --auth-file ./auth.txt  # Trusted lab; см. режимы ниже
 ```
 
 ## Структура проекта
@@ -187,7 +187,8 @@ exphttp [опции]
 | `--acme-server URL` | Пользовательский ACME directory URL | - |
 | `--acme-http-address ADDR` | Адрес HTTP-01 challenge server | все интерфейсы |
 | `--acme-http-port PORT` | Порт HTTP-01 challenge server | `80` |
-| `--auth USER:PASS` | Включить Basic Auth | выключен |
+| `--auth USER:PASS` | Включить Basic Auth через argv; только для локального интерактивного запуска | выключен |
+| `--auth-file FILE` | Включить Basic Auth из файла с одной строкой `user:password` | выключен |
 | `--auth random` | Сгенерировать случайные credentials в интерактивном терминале | - |
 | `--help` | Показать справку | - |
 
@@ -200,20 +201,23 @@ exphttp
 # HTTPS с самоподписным сертификатом
 exphttp --tls
 
-# HTTPS с Basic Auth (случайные credentials)
+# HTTPS с Basic Auth (случайные credentials в интерактивном терминале)
 exphttp --tls --auth random
 
-# HTTPS с своими credentials
+# HTTPS с своими credentials для локального интерактивного запуска
 exphttp --tls --auth admin:secretpassword
+
+# HTTPS с credentials из файла; предпочтительно для services/containers/CI
+exphttp --tls --auth-file ./auth.txt
 
 # HTTPS с готовыми сертификатами
 exphttp --tls --cert cert.pem --key key.pem
 
-# Внешний доступ для доверенной сети: минимум TLS + Auth
-exphttp -H 0.0.0.0 -p 443 --tls --auth admin:pass
+# Внешний доступ для доверенной сети: минимум TLS + Auth из secret file
+exphttp -H 0.0.0.0 -p 443 --tls --auth-file /run/secrets/exphttp_auth
 
 # Комбинированный режим
-exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth random -m 200
+exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth-file ./auth.txt -m 200
 ```
 
 ### Режимы эксплуатации
@@ -225,9 +229,10 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth random -m 200
   и ограничивайте доступ firewall/NAT.
 - **External exposure** — привязка к `0.0.0.0`, TLS и Auth не делает сервис
   безопасным для произвольного интернета. Для такого режима нужны как минимум
-  реальный сертификат, сильные credentials из secret-хранилища, reverse proxy
-  с rate limiting и request-size limits, мониторинг, firewall allowlist и
-  точный `--cors-origin` для доверенного браузерного UI. Не используйте
+  реальный сертификат, сильные credentials из secret-хранилища через
+  `--auth-file`, reverse proxy с rate limiting и request-size limits,
+  мониторинг, firewall allowlist и точный `--cors-origin` для доверенного
+  браузерного UI. Не используйте
   `--cors-origin *` для публичного браузерного интерфейса.
 
 ## HTTP-методы
@@ -471,8 +476,13 @@ HTTP Basic Authentication для защиты доступа.
 ### Режимы аутентификации
 
 ```bash
-# Фиксированные credentials
-exphttp --auth admin:mysecretpassword
+# Фиксированные credentials для локального интерактивного запуска.
+# Значение --auth видно в argv/process listings; не используйте так для services/containers.
+exphttp --auth 'admin:<strong-password>'
+
+# Credentials из файла, предпочтительно для services/containers/CI.
+# Файл должен содержать ровно одну строку user:password; завершающий newline допустим.
+exphttp --auth-file /run/secrets/exphttp_auth
 
 # Случайные credentials (выведет в консоль)
 exphttp --auth random
@@ -502,9 +512,13 @@ def check_user(username, password):
 
 auth = BasicAuthenticator(auth_callback=check_user)
 server = ExperimentalHTTPServer(host="0.0.0.0", port=443, tls=True)
-server.authenticator = auth
+server.set_authenticator(auth)
 server.start()
 ```
+
+Используйте `set_authenticator()` вместо прямой записи в
+`server.authenticator`: setter одновременно включает/выключает auth
+rate-limiter, который защищает Basic Auth от быстрой серии неудачных попыток.
 
 ## Область доступа uploads/
 

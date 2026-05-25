@@ -336,6 +336,11 @@ Custom HTTP methods:
         metavar="CREDS",
         help="Basic Auth: 'user:pass', 'random', or 'user' (random password)",
     )
+    auth.add_argument(
+        "--auth-file",
+        metavar="FILE",
+        help="Read Basic Auth credentials from one user:pass line in FILE",
+    )
 
     return parser
 
@@ -371,6 +376,11 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         for flag, active in acme_only_flags:
             if active:
                 parser.error(f"{flag} requires --letsencrypt or --sslip")
+
+    if args.auth and args.auth_file:
+        parser.error("--auth and --auth-file cannot be combined")
+    if args.auth_file == "":
+        parser.error("--auth-file value must not be empty")
 
 
 def _install_shutdown_signal_handlers(server: ExperimentalHTTPServer) -> dict[signal.Signals, Any]:
@@ -441,6 +451,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "acme_http_address": args.acme_http_address,
         "acme_http_port": args.acme_http_port,
         "auth": args.auth,
+        "auth_file": args.auth_file,
         "open_browser": args.open,
         "json_log": args.json_log,
         "cors_origin": args.cors_origin,
