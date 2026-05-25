@@ -15,6 +15,7 @@ import pytest
 from src.handlers import HandlerMixin
 from src.handlers.smuggle import SmuggleTempPolicy
 from src.http import HTTPRequest, HTTPResponse
+from src.http.io import RequestReceiveResult
 from src.security.auth import AuthRateLimiter, BasicAuthenticator
 from src.server import ExperimentalHTTPServer
 from src.websocket import WS_CLOSE, WS_PING, WS_PONG, WS_TEXT, parse_ws_frame
@@ -1007,7 +1008,7 @@ class TestServerHelpers:
             raise RuntimeError("receive failed")
 
         caplog.set_level(logging.ERROR, logger="httpserver")
-        monkeypatch.setattr(server, "_receive_request", fail_receive)
+        monkeypatch.setattr(server, "_receive_request_result", fail_receive)
         server.running = True
 
         server._handle_client(sock, ("127.0.0.1", 43210))
@@ -1159,6 +1160,50 @@ class TestServerHelpers:
 
         assert result == b""
         assert server.get_metrics()["receive_rejections"] == {"header_too_large": 1}
+
+    def test_receive_request_legacy_wrapper_releases_body_reservation(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            body_memory_budget=8,
+        )
+        request = b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\nhello"
+        sock = _WebSocketSocketStub([request])
+
+        result = server._receive_request(sock)
+
+        assert result == request
+        body_memory = server.get_metrics()["body_memory"]
+        assert body_memory["current_bytes"] == 0
+        assert body_memory["peak_bytes"] == 5
+
+    def test_handle_client_releases_body_reservation_when_processing_raises(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        sock = _SendSocketStub()
+        reservation = server._body_memory_budget.try_reserve(4)
+        assert reservation is not None
+
+        def fake_receive(_sock, idle_timeout=None):
+            return RequestReceiveResult(b"body", reservation)
+
+        def fail_process(*_args, **_kwargs):
+            raise RuntimeError("process failed")
+
+        monkeypatch.setattr(server, "_receive_request_result", fake_receive)
+        monkeypatch.setattr(server, "_process_request", fail_process)
+        server.running = True
+
+        server._handle_client(sock, ("127.0.0.1", 43210))
+
+        assert server.get_metrics()["body_memory"]["current_bytes"] == 0
+        assert server.get_metrics()["worker"]["last_exception_type"] == "RuntimeError"
+        assert sock.closed is True
 
     def test_smuggle_rejects_over_source_limit_without_temp_artifact(self, server, upload_dir):
         server.smuggle_source_size_limit = 4
@@ -1644,13 +1689,13 @@ class TestServerHelpers:
 
         def fake_receive(_sock, idle_timeout=None):
             idle_timeouts.append(idle_timeout)
-            return next(payloads, b"")
+            return RequestReceiveResult(next(payloads, b""))
 
         def fake_process(data, _sock, _addr, request_num):
             processed.append((data, request_num))
             return request_num == 1
 
-        monkeypatch.setattr(server, "_receive_request", fake_receive)
+        monkeypatch.setattr(server, "_receive_request_result", fake_receive)
         monkeypatch.setattr(server, "_process_request", fake_process)
         server.running = True
 

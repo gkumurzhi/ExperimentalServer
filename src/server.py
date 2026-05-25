@@ -25,8 +25,8 @@ from .handlers.smuggle import (
 )
 from .http import HTTPRequest, HTTPResponse
 from .http.cors import parse_cors_origins, resolve_cors_origin
-from .http.io import DEFAULT_MAX_HEADER_SIZE
-from .http.io import receive_request as _receive_request_io
+from .http.io import DEFAULT_MAX_HEADER_SIZE, BodyMemoryBudget, RequestReceiveResult
+from .http.io import receive_request_result as _receive_request_result_io
 from .metrics import MetricsCollector
 from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES, NoteStoragePolicy
 from .request_pipeline import RequestPipeline, ResponseBuildArgs
@@ -99,6 +99,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         smuggle_temp_file_limit: int | None = DEFAULT_SMUGGLE_TEMP_MAX_FILES,
         smuggle_temp_storage_limit: int | None = DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
         max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
+        body_memory_budget: int | None = None,
         max_workers: int = 10,
         quiet: bool = False,
         # TLS options
@@ -151,6 +152,8 @@ class ExperimentalHTTPServer(HandlerMixin):
             raise ValueError("smuggle_temp_storage_limit must be at least 0")
         if max_header_size <= 0:
             raise ValueError("max_header_size must be greater than 0")
+        if body_memory_budget is not None and body_memory_budget <= 0:
+            raise ValueError("body_memory_budget must be greater than 0")
         if max_workers <= 0:
             raise ValueError("max_workers must be greater than 0")
 
@@ -176,6 +179,10 @@ class ExperimentalHTTPServer(HandlerMixin):
         )
         self.max_header_size = max_header_size
         self.max_workers = max_workers
+        self.body_memory_budget = (
+            body_memory_budget if body_memory_budget is not None else max_upload_size * max_workers
+        )
+        self._body_memory_budget = BodyMemoryBudget(self.body_memory_budget)
         if max_websocket_connections is None:
             max_websocket_connections = max(0, max_workers // 2)
         if max_websocket_connections < 0:
@@ -369,7 +376,9 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def get_metrics(self) -> dict[str, object]:
         """Return current server metrics snapshot."""
-        return self._metrics.snapshot()
+        metrics = self._metrics.snapshot()
+        metrics["body_memory"] = self._body_memory_budget.snapshot()
+        return metrics
 
     def _try_acquire_request_admission(self, *, wait_timeout: float = 0.0) -> bool:
         """Return True when a socket can be submitted to a worker."""
@@ -552,6 +561,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  File access: uploads/ only ({self.upload_dir})")
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload request: {self.max_upload_size // (1024 * 1024)} MB")
+        print(f"  Body memory budget: {self.body_memory_budget // (1024 * 1024)} MB")
         print(f"  Upload storage: {self.upload_storage.describe_limit()}")
         print(f"  Notepad limits: {self.note_storage_policy.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
@@ -659,18 +669,28 @@ class ExperimentalHTTPServer(HandlerMixin):
                 # For subsequent requests, use keep-alive idle timeout
                 idle_timeout = self.KEEP_ALIVE_TIMEOUT if requests_on_conn > 0 else None
 
-                data = self._receive_request(client_socket, idle_timeout=idle_timeout)
-                if not data:
+                received = self._receive_request_result(client_socket, idle_timeout=idle_timeout)
+                if not received.data:
+                    if received.rejection_reason == "body_memory_budget_exceeded":
+                        self._send_receive_rejection_response(
+                            client_socket,
+                            503,
+                            "Request body memory budget exceeded",
+                        )
                     break
-                self._record_bytes_received(len(data))
 
-                requests_on_conn += 1
-                keep_alive = self._process_request(
-                    data,
-                    client_socket,
-                    client_address,
-                    requests_on_conn,
-                )
+                try:
+                    self._record_bytes_received(len(received.data))
+
+                    requests_on_conn += 1
+                    keep_alive = self._process_request(
+                        received.data,
+                        client_socket,
+                        client_address,
+                        requests_on_conn,
+                    )
+                finally:
+                    received.release_body_reservation()
                 if not keep_alive:
                     break
         except Exception as exc:
@@ -778,6 +798,21 @@ class ExperimentalHTTPServer(HandlerMixin):
             "application/json",
         )
         return response
+
+    def _send_receive_rejection_response(
+        self,
+        client_socket: socket.socket,
+        status: int,
+        message: str,
+    ) -> None:
+        """Send a stable HTTP error for receive-layer rejections that support it."""
+        response = self._build_error_response(status, message)
+        try:
+            payload = response.build(keep_alive=False)
+            client_socket.sendall(payload)
+            self._record_metric(status, len(payload), error=status >= 500)
+        except Exception:
+            pass
 
     def _resolve_keep_alive(
         self,
@@ -936,12 +971,25 @@ class ExperimentalHTTPServer(HandlerMixin):
         idle_timeout: float | None = None,
     ) -> bytes:
         """Delegate to :func:`src.http.io.receive_request`."""
-        return _receive_request_io(
+        received = self._receive_request_result(client_socket, idle_timeout=idle_timeout)
+        try:
+            return received.data
+        finally:
+            received.release_body_reservation()
+
+    def _receive_request_result(
+        self,
+        client_socket: socket.socket,
+        idle_timeout: float | None = None,
+    ) -> RequestReceiveResult:
+        """Receive a request and retain any body-memory reservation."""
+        return _receive_request_result_io(
             client_socket,
             max_upload_size=self.max_upload_size,
             max_header_size=self.max_header_size,
             idle_timeout=idle_timeout,
             on_reject=self._record_receive_rejection,
+            body_memory_budget=self._body_memory_budget,
         )
 
     def _handle_notepad_ws(

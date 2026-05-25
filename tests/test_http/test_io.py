@@ -10,9 +10,11 @@ import pytest
 
 from src.http.io import (
     DEFAULT_MAX_HEADER_SIZE,
+    BodyMemoryBudget,
     _has_transfer_encoding,
     _parse_content_length,
     receive_request,
+    receive_request_result,
 )
 
 
@@ -82,6 +84,25 @@ class SizeRespectingSocket:
         chunk = bytes(self._data[:size])
         del self._data[:size]
         return chunk
+
+
+class ScriptedSocket:
+    def __init__(self, chunks: list[bytes | BaseException]) -> None:
+        self._chunks = list(chunks)
+        self.recv_calls = 0
+        self.timeouts: list[float | None] = []
+
+    def settimeout(self, timeout: float | None) -> None:
+        self.timeouts.append(timeout)
+
+    def recv(self, _size: int) -> bytes:
+        self.recv_calls += 1
+        if not self._chunks:
+            return b""
+        item = self._chunks.pop(0)
+        if isinstance(item, BaseException):
+            raise item
+        return item
 
 
 class TestReceiveRequest:
@@ -201,6 +222,83 @@ class TestReceiveRequest:
         assert result == b""
         assert sock.recv_calls == 1
         assert reasons == ["body_too_large"]
+
+    def test_body_memory_budget_reserves_until_caller_releases(self) -> None:
+        body = b"hello"
+        request = b"POST / HTTP/1.1\r\nContent-Length: 5\r\n\r\n" + body
+        budget = BodyMemoryBudget(8)
+        sock = SizeRespectingSocket(request)
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_memory_budget=budget,
+        )
+
+        assert result.data == request
+        assert budget.snapshot()["current_bytes"] == len(body)
+        assert budget.snapshot()["peak_bytes"] == len(body)
+
+        result.release_body_reservation()
+        result.release_body_reservation()
+        assert budget.snapshot()["current_bytes"] == 0
+
+    def test_body_memory_budget_rejects_before_reading_body(self) -> None:
+        header = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n"
+        sock = ScriptedSocket([header, b"0123456789"])
+        budget = BodyMemoryBudget(5)
+        reasons: list[str] = []
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_memory_budget=budget,
+            on_reject=reasons.append,
+        )
+
+        assert result.data == b""
+        assert result.rejection_reason == "body_memory_budget_exceeded"
+        assert sock.recv_calls == 1
+        assert reasons == ["body_memory_budget_exceeded"]
+        assert budget.snapshot() == {
+            "max_bytes": 5,
+            "current_bytes": 0,
+            "peak_bytes": 0,
+            "rejected": 1,
+        }
+
+    def test_body_memory_budget_released_on_incomplete_body(self) -> None:
+        header = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n"
+        sock = ScriptedSocket([header, b"12345", b""])
+        budget = BodyMemoryBudget(10)
+        reasons: list[str] = []
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_memory_budget=budget,
+            on_reject=reasons.append,
+        )
+
+        assert result.data == b""
+        assert result.rejection_reason == "body_incomplete"
+        assert reasons == ["body_incomplete"]
+        assert budget.snapshot()["current_bytes"] == 0
+
+    def test_body_memory_budget_released_when_recv_raises_after_reservation(self) -> None:
+        header = b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\n"
+        sock = ScriptedSocket([header, ConnectionResetError("reset")])
+        budget = BodyMemoryBudget(10)
+
+        with pytest.raises(ConnectionResetError):
+            receive_request_result(
+                sock,
+                max_upload_size=1024,
+                body_memory_budget=budget,
+            )
+
+        assert budget.snapshot()["current_bytes"] == 0
+        assert budget.snapshot()["peak_bytes"] == 10
 
     def test_rejects_request_exceeding_size_limit(
         self,

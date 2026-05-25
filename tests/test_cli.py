@@ -67,6 +67,7 @@ class TestCLIParser:
         assert args.smuggle_temp_file_limit == 32
         assert args.smuggle_temp_storage_limit == 128
         assert args.max_header_size == 64
+        assert args.body_memory_budget is None
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
@@ -100,6 +101,8 @@ class TestCLIParser:
             ["--smuggle-temp-storage-limit", "-1"],
             ["--max-header-size", "0"],
             ["--max-header-size", "-1"],
+            ["--body-memory-budget", "0"],
+            ["--body-memory-budget", "-1"],
             ["--workers", "0"],
             ["--workers", "-1"],
             ["--acme-http-port", "0"],
@@ -145,6 +148,10 @@ class TestCLIParser:
     def test_workers(self):
         args = self.parser.parse_args(["-w", "20"])
         assert args.workers == 20
+
+    def test_body_memory_budget(self):
+        args = self.parser.parse_args(["--body-memory-budget", "512"])
+        assert args.body_memory_budget == 512
 
     def test_debug_flag(self):
         args = self.parser.parse_args(["--debug"])
@@ -262,6 +269,8 @@ class TestCLIMain:
                 "32",
                 "--max-header-size",
                 "128",
+                "--body-memory-budget",
+                "512",
                 "-w",
                 "20",
                 "--auth",
@@ -284,6 +293,7 @@ class TestCLIMain:
             "smuggle_temp_file_limit": 5,
             "smuggle_temp_storage_limit": 32 * 1024 * 1024,
             "max_header_size": 128 * 1024,
+            "body_memory_budget": 512 * 1024 * 1024,
             "max_workers": 20,
             "quiet": True,
             "debug": True,
@@ -538,6 +548,8 @@ class TestServerConstructorValidation:
             ),
             ({"max_header_size": 0}, "max_header_size must be greater than 0"),
             ({"max_header_size": -1}, "max_header_size must be greater than 0"),
+            ({"body_memory_budget": 0}, "body_memory_budget must be greater than 0"),
+            ({"body_memory_budget": -1}, "body_memory_budget must be greater than 0"),
             ({"max_workers": 0}, "max_workers must be greater than 0"),
             ({"max_workers": -1}, "max_workers must be greater than 0"),
         ],

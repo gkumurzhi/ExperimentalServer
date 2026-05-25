@@ -162,6 +162,7 @@ exphttp [опции]
 | `--smuggle-temp-file-limit N` | Лимит количества временных SMUGGLE HTML (`0` = выключен) | `32` |
 | `--smuggle-temp-storage-limit MB` | Лимит размера временных SMUGGLE HTML (`0` = выключен) | `128` |
 | `--max-header-size KB` | Макс. размер HTTP request headers в KiB | `64` |
+| `--body-memory-budget MB` | Aggregate лимит in-flight тел запросов в памяти | `workers * max-size` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
 | `--debug` | Debug режим (подробное логирование) | выключен |
@@ -743,7 +744,8 @@ print(response.json())
 - **Доступ только к uploads/** — ограничение пользовательских файловых операций
 - **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
 - **Лимиты запросов и диска** — `--max-header-size` для заголовков,
-  `--max-size` для тела одного запроса, опциональные
+  `--max-size` для тела одного запроса, `--body-memory-budget` для
+  aggregate in-flight тел запросов в памяти, опциональные
   `--upload-storage-limit`, `--upload-file-limit` и `--upload-reserve-free`
   для aggregate quota `uploads/`, `--note-storage-limit` и
   `--note-count-limit` для encrypted blobs в `notes/`, отдельный 1 MiB decoded
@@ -775,6 +777,8 @@ XOR-шифрование используется для **обфускации*
 - **Кодировка**: UTF-8
 - **Worker threads**: 10 (по умолчанию)
 - **Max upload request**: 100 MB (по умолчанию)
+- **Body memory budget**: по умолчанию `workers * max upload request`;
+  настраивается через `--body-memory-budget`
 - **Upload storage quota**: unlimited по умолчанию; настраивается через
   `--upload-storage-limit`, `--upload-file-limit`, `--upload-reserve-free`
 - **Notepad storage quota**: 256 MB и 1000 заметок по умолчанию; `0`

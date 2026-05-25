@@ -102,8 +102,9 @@ When running the server outside a trusted lab:
 Before exposing the service to untrusted networks, require all of: real TLS,
 strong Basic Auth credentials, a dedicated data directory, firewall allowlists
 where possible, reverse-proxy rate limiting, reverse-proxy request/header/body
-size caps, monitoring of `/metrics`, and an exact browser-origin policy for any
-separate UI origin.
+size caps, an explicit `--body-memory-budget` sized for available RAM,
+monitoring of `/metrics`, and an exact browser-origin policy for any separate
+UI origin.
 
 ## Known Limitations
 

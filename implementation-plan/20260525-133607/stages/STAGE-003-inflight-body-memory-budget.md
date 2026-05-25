@@ -1,7 +1,7 @@
 # STAGE-003 - In-flight body memory budget
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -54,11 +54,11 @@ Add a process-wide in-flight request body memory budget, or an equivalent stream
 6. Add tests that simulate concurrent allowed bodies exceeding the aggregate budget.
 
 ## Acceptance criteria
-- [ ] Concurrent request body memory is bounded by a configurable process-wide budget or equivalent streaming design.
-- [ ] Budget rejection occurs before full body allocation.
-- [ ] Reservations are released on success and all tested failure paths.
-- [ ] Existing parser/body cap tests still pass.
-- [ ] Operator docs state the relationship among workers, max request size, and body memory budget.
+- [x] Concurrent request body memory is bounded by a configurable process-wide budget or equivalent streaming design.
+- [x] Budget rejection occurs before full body allocation.
+- [x] Reservations are released on success and all tested failure paths.
+- [x] Existing parser/body cap tests still pass.
+- [x] Operator docs state the relationship among workers, max request size, and body memory budget.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,5 +77,10 @@ Add a process-wide in-flight request body memory budget, or an equivalent stream
 - Rollback: Make the budget configurable and ensure release-on-disconnect; revert to prior receive path only if tests show deadlocks or leaked reservations.
 
 ## Completion notes
-Filled by `close-plan-stage`.
-
+Closed 2026-05-25 17:56:04 MSK. Implemented declared `Content-Length`
+reservation with a process-wide body memory budget, CLI/server configuration,
+`body_memory` metrics, a stable JSON `503` for aggregate budget exhaustion, and
+operator docs for the `workers * max-size` default. Added receive, live
+concurrency, CLI, and server lifecycle regression tests covering budget
+saturation and reservation release on success, incomplete bodies, receive
+exceptions, processing exceptions, and legacy wrapper use.

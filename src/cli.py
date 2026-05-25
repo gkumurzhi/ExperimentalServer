@@ -186,6 +186,13 @@ Custom HTTP methods:
         help="Max HTTP request header size in KiB (default: 64)",
     )
     limits.add_argument(
+        "--body-memory-budget",
+        type=_bounded_int("body memory budget", minimum=1),
+        default=None,
+        metavar="MB",
+        help="Aggregate in-flight request body memory budget in MB (default: workers * max size)",
+    )
+    limits.add_argument(
         "-w",
         "--workers",
         type=_bounded_int("workers", minimum=1),
@@ -334,6 +341,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.smuggle_temp_storage_limit * _MIB if args.smuggle_temp_storage_limit else None
         ),
         "max_header_size": args.max_header_size * 1024,
+        "body_memory_budget": args.body_memory_budget * _MIB if args.body_memory_budget else None,
         "max_workers": args.workers,
         "quiet": args.quiet,
         "debug": args.debug,

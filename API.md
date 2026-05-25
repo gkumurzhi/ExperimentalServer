@@ -23,7 +23,7 @@ below.
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
 | WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`, `503`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
 | Advanced upload | Unknown methods carrying an advanced payload in the body, headers, chunked headers, or query string are routed to advanced upload by default. Unknown methods without an advanced payload return shared JSON `405`. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
-| Auth and request guards | Basic-auth failures, auth rate limits, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
+| Auth and request guards | Basic-auth failures, auth rate limits, internal pipeline errors, and aggregate body-memory budget exhaustion use JSON `{"error": "...", "status": NNN}`. Other receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
 ---
 
@@ -35,6 +35,10 @@ The receive layer enforces protocol framing before handler dispatch:
   before the terminating blank line.
 - Request bodies are capped by `--max-size MB` (`100` MiB by default) using the
   declared `Content-Length` and the bytes actually read.
+- Concurrent in-flight request bodies are reserved against
+  `--body-memory-budget MB`. The default budget is `--workers * --max-size`.
+  Aggregate budget exhaustion returns `503` before the remaining body bytes are
+  read.
 - Aggregate disk usage under `uploads/` is controlled separately with optional
   `--upload-storage-limit MB`, `--upload-file-limit N`, and
   `--upload-reserve-free MB` limits. A value of `0` disables each aggregate
@@ -51,8 +55,9 @@ The receive layer enforces protocol framing before handler dispatch:
 - Invalid, negative, or conflicting duplicate `Content-Length` values are
   rejected. Duplicate identical `Content-Length` values are accepted.
 - Receive-layer framing failures may close the connection before an HTTP error
-  response is built. Rejections are counted in `metrics.receive_rejections` and
-  summarized under `metrics.receive`.
+  response is built, except aggregate body-memory budget exhaustion, which
+  returns a JSON `503`. Rejections are counted in `metrics.receive_rejections`
+  and summarized under `metrics.receive`.
 
 ---
 
@@ -306,6 +311,12 @@ PING / HTTP/1.1
       "accepted": 150,
       "rejected": 1
     },
+    "body_memory": {
+      "max_bytes": 1048576000,
+      "current_bytes": 0,
+      "peak_bytes": 52428800,
+      "rejected": 0
+    },
     "request_latency_ms": {
       "count": 150,
       "total": 2450.75,
@@ -343,6 +354,8 @@ bucket. Receive-layer drops before request dispatch are tracked by
 `connections` tracks worker-owned accepted sockets. `request_admission`
 tracks the bounded worker budget before submission. `request_latency_ms`
 contains in-process timing aggregates for processed request pipeline entries.
+`body_memory` tracks the aggregate declared request-body budget, current and
+peak reserved bytes, and aggregate-budget rejections.
 `timeouts` uses low-cardinality names for receive and WebSocket timeout
 signals. Accepted WebSocket upgrades are tracked through the `websocket`
 resource counters rather than `total_requests`, `status_counts`, or

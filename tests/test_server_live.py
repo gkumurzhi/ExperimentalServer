@@ -209,6 +209,65 @@ class TestLiveRequestHandling:
             finally:
                 first.close()
 
+    def test_body_memory_budget_rejects_second_inflight_body_before_body_read(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(
+            temp_dir,
+            max_workers=2,
+            max_upload_size=16,
+            body_memory_budget=10,
+        ) as live:
+            first = socket.create_connection(("127.0.0.1", live.port), timeout=2.0)
+            try:
+                first.settimeout(2.0)
+                first.sendall(
+                    (
+                        f"POST /hold HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Content-Length: 8\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+
+                for _ in range(100):
+                    body_memory = live.server.get_metrics()["body_memory"]
+                    if body_memory["current_bytes"] == 8:  # type: ignore[index]
+                        break
+                    time.sleep(0.02)
+                assert live.server.get_metrics()["body_memory"]["current_bytes"] == 8
+
+                with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as second:
+                    second.settimeout(2.0)
+                    second.sendall(
+                        (
+                            f"POST /blocked HTTP/1.1\r\n"
+                            f"Host: 127.0.0.1:{live.port}\r\n"
+                            "Content-Length: 8\r\n"
+                            "\r\n"
+                        ).encode("ascii")
+                    )
+                    status, _headers, body = _recv_http_response(second)
+
+                assert status.startswith("HTTP/1.1 503")
+                assert json.loads(body) == {
+                    "error": "Request body memory budget exceeded",
+                    "status": 503,
+                }
+                metrics = live.server.get_metrics()
+                assert metrics["body_memory"]["rejected"] == 1  # type: ignore[index]
+                assert metrics["receive_rejections"]["body_memory_budget_exceeded"] == 1
+            finally:
+                first.close()
+
+            for _ in range(100):
+                body_memory = live.server.get_metrics()["body_memory"]
+                if body_memory["current_bytes"] == 0:  # type: ignore[index]
+                    break
+                time.sleep(0.02)
+            assert live.server.get_metrics()["body_memory"]["current_bytes"] == 0
+
     def test_basic_auth_rejects_missing_header_and_accepts_valid_credentials(
         self,
         temp_dir: Path,

@@ -11,3 +11,9 @@
 - Files changed: `src/notepad_service.py`, `src/handlers/notepad.py`, `src/handlers/smuggle.py`, `src/server.py`, `src/cli.py`, `tests/test_handlers/test_notepad.py`, `tests/test_websocket_handlers.py`, `tests/test_server_methods.py`, `tests/test_cli.py`, `README.md`, `API.md`, `docs/api.md`, `docs/threat-model.md`, plan artifacts.
 - Verification: required Notepad/WebSocket/server-method tests passed with 177 tests; extended CLI/quota tests passed with 260 tests; `ruff check src tests`, `ruff format --check src tests`, stale-doc guard, API mirror check, docs tests, and `git diff --check` passed. `mypy src` and full `pytest` remain blocked by pre-existing local dependency issues (`mypy` launcher missing module, venv missing `acme`, full suite missing `hypothesis`).
 - Report: `stage-reports/STAGE-002-20260525-141226.md`
+
+## 2026-05-25 17:56:04 MSK - STAGE-003
+- Status: CLOSED
+- Files changed: `src/http/io.py`, `src/server.py`, `src/cli.py`, `tests/test_http/test_io.py`, `tests/test_server_live.py`, `tests/test_server_methods.py`, `tests/test_cli.py`, `README.md`, `API.md`, `SECURITY.md`, plan artifacts.
+- Verification: receive/pipeline/live/metrics/CLI/server-method tests passed with 244 tests; stale-doc tests passed with 9 tests; `ruff check src tests`, `ruff format --check src tests`, and `git diff --check` passed. `mypy src` remains blocked by the local optional dependency environment (`mypy` module missing; `uv run --extra lint mypy src` timed out while downloading `mypy`).
+- Report: `stage-reports/STAGE-003-20260525-172228.md`
