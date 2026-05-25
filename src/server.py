@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
-from .features import DEFAULT_PROFILE, FeatureSet, resolve_feature_profile
+from .features import DEFAULT_PROFILE, SERVE_METHODS, FeatureSet, resolve_feature_profile
 from .handlers import HandlerMixin
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
@@ -966,7 +966,8 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _cors_allow_methods_header(self) -> str:
         """Return the profile-derived CORS allow-methods header value."""
-        return ", ".join(self.features.methods)
+        methods = SERVE_METHODS if self.cors_origins == ("*",) else self.features.methods
+        return ", ".join(methods)
 
     def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
         """Allow only same-origin or explicitly configured browser mutations.
@@ -982,7 +983,7 @@ class ExperimentalHTTPServer(HandlerMixin):
             if (
                 fetch_site := request.headers.get("sec-fetch-site", "").strip().lower()
             ) and fetch_site not in _FETCH_METADATA_SAME_ORIGIN_VALUES:
-                return origin in self.cors_origins or self.cors_origins == ("*",)
+                return self._is_explicit_cors_origin(origin)
             return self._is_browser_origin_allowed_for_mutation(request, origin)
 
         fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
@@ -1005,11 +1006,13 @@ class ExperimentalHTTPServer(HandlerMixin):
         origin: str,
     ) -> bool:
         """Return True when Origin is same-origin or explicitly CORS-allowed."""
-        if self.cors_origins == ("*",):
-            return True
-        if origin in self.cors_origins:
+        if self._is_explicit_cors_origin(origin):
             return True
         return self._is_same_http_origin(request, origin)
+
+    def _is_explicit_cors_origin(self, origin: str) -> bool:
+        """Return True when origin is a configured non-wildcard trusted origin."""
+        return origin != "*" and origin in self.cors_origins
 
     def _is_same_http_origin(self, request: HTTPRequest, origin: str) -> bool:
         """Compare Origin against the request Host and effective server scheme."""
@@ -1041,10 +1044,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         if not origin:
             return True
 
-        if self.cors_origins == ("*",):
-            return True
-
-        if origin in self.cors_origins:
+        if self._is_explicit_cors_origin(origin):
             return True
 
         host = request.headers.get("host", "")

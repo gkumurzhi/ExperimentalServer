@@ -486,7 +486,7 @@ class TestWebSocketOriginValidation:
         )
         assert server._is_websocket_origin_allowed(req) is True
 
-    def test_wildcard_origin_allows_cross_origin_upgrade(self, temp_dir):
+    def test_wildcard_origin_rejects_cross_origin_upgrade(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
         req = make_request(
@@ -501,7 +501,24 @@ class TestWebSocketOriginValidation:
                 "Sec-WebSocket-Version": "13",
             },
         )
-        assert server._is_websocket_origin_allowed(req) is True
+        assert server._is_websocket_origin_allowed(req) is False
+
+    def test_literal_wildcard_origin_rejects_websocket_upgrade(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
+        req = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "*",
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert server._is_websocket_origin_allowed(req) is False
 
     def test_origin_with_missing_host_is_rejected(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -576,10 +593,23 @@ class TestCorsContract:
         response = HTTPResponse(200)
         response.set_body("OK", "text/plain")
 
-        built = response.build(cors_origin=server._resolve_cors_origin(req))
+        built = response.build(
+            cors_origin=server._resolve_cors_origin(req),
+            cors_allow_methods=server._cors_allow_methods_header(),
+        )
 
         assert b"Access-Control-Allow-Origin: *\r\n" in built
         assert b"Vary: Origin\r\n" not in built
+        methods_header = next(
+            line
+            for line in built.split(b"\r\n")
+            if line.startswith(b"Access-Control-Allow-Methods:")
+        )
+        assert b"GET" in methods_header
+        assert b"FETCH" in methods_header
+        assert b"POST" not in methods_header
+        assert b"DELETE" not in methods_header
+        assert b"SMUGGLE" not in methods_header
 
     def test_mixed_wildcard_origin_config_is_rejected(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -609,6 +639,29 @@ class TestCorsContract:
         allowed = response.headers["Access-Control-Allow-Methods"]
         assert "XUPLOAD" in allowed
         assert "SMUGGLE" in allowed
+
+    def test_wildcard_options_advertises_only_read_methods(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="*",
+        )
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={"Access-Control-Request-Method": "XUPLOAD"},
+        )
+
+        response = server.handle_options(req)
+
+        allowed = response.headers["Access-Control-Allow-Methods"]
+        assert "GET" in allowed
+        assert "FETCH" in allowed
+        assert "POST" not in allowed
+        assert "DELETE" not in allowed
+        assert "SMUGGLE" not in allowed
+        assert "XUPLOAD" not in allowed
 
     def test_options_allows_advanced_upload_headers(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -704,7 +757,7 @@ class TestBrowserMutationGuard:
 
         assert server._is_browser_mutation_allowed(req) is True
 
-    def test_cross_origin_mutation_with_wildcard_cors_is_allowed(self, temp_dir):
+    def test_cross_origin_mutation_with_wildcard_cors_is_rejected(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
         req = make_request(
@@ -718,7 +771,40 @@ class TestBrowserMutationGuard:
         )
 
         assert server._resolve_cors_origin(req) == "*"
-        assert server._is_browser_mutation_allowed(req) is True
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_cross_site_fetch_metadata_with_wildcard_cors_is_rejected(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "https://app.example",
+                "Sec-Fetch-Site": "cross-site",
+            },
+            body=b"x",
+        )
+
+        assert server._resolve_cors_origin(req) == "*"
+        assert server._is_browser_mutation_allowed(req) is False
+
+    def test_literal_wildcard_origin_with_wildcard_cors_is_rejected(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, cors_origin="*")
+        req = make_request(
+            "POST",
+            "/upload",
+            headers={
+                "Host": "127.0.0.1:8080",
+                "Origin": "*",
+            },
+            body=b"x",
+        )
+
+        assert server._resolve_cors_origin(req) == "*"
+        assert server._is_browser_mutation_allowed(req) is False
 
     def test_configured_cors_origin_allows_browser_mutation(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")

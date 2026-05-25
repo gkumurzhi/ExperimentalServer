@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from ..features import FeatureSet, resolve_feature_profile
+from ..features import SERVE_METHODS, FeatureSet, resolve_feature_profile
 
 CORS_ALLOW_METHODS: tuple[str, ...] = (
     "GET",
@@ -120,13 +120,16 @@ def is_http_token(value: str) -> bool:
 def resolve_preflight_allow_methods(
     requested_method: str,
     features: FeatureSet | None = None,
+    *,
+    read_only: bool = False,
 ) -> str:
     """Return allowed methods, including a requested advanced upload token."""
     feature_set = features or resolve_feature_profile(None)
-    methods = list(feature_set.methods)
+    methods = list(SERVE_METHODS if read_only else feature_set.methods)
     method = requested_method.strip().upper()
     if (
-        feature_set.allow_unknown_advanced_upload_methods
+        not read_only
+        and feature_set.allow_unknown_advanced_upload_methods
         and method
         and method not in methods
         and is_http_token(method)

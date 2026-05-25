@@ -35,3 +35,9 @@
 - Files changed: `src/features.py`, `src/server.py`, `src/cli.py`, `src/handlers/__init__.py`, `src/handlers/base.py`, `src/handlers/files.py`, `src/handlers/info.py`, `src/handlers/notepad.py`, `src/handlers/smuggle.py`, `src/http/cors.py`, `src/http/response.py`, `src/request_pipeline.py`, `src/data/static/ui/core.js`, `src/data/static/ui/upload.js`, `src/data/static/ui/files.js`, `src/data/static/ui/requests.js`, `src/data/static/ui/notepad.js`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_cli.py`, `tools/browser_smoke.py`, `README.md`, `API.md`, `SECURITY.md`, plan artifacts.
 - Verification: targeted + CLI regression suite passed with 245 tests; `python tools/browser_smoke.py`, `ruff check src tests tools`, focused `ruff format --check` for touched files, `python -m compileall -q src`, and `git diff --check` passed. Full format check still reports an unrelated pre-existing issue in `tools/close_plan_stages.py`; direct `mypy` is unavailable and isolated `uvx` mypy timed out while downloading.
 - Report: `stage-reports/STAGE-006-20260525-184508.md`
+
+## 2026-05-25 19:45:53 MSK - STAGE-007
+- Status: CLOSED
+- Files changed: `src/server.py`, `src/http/cors.py`, `src/handlers/files.py`, `tests/test_server_methods.py`, `tests/test_security/test_websocket_upgrade.py`, `API.md`, `README.md`, `SECURITY.md`, plan artifacts.
+- Verification: targeted server/WebSocket/request-pipeline/handler regression suite passed with 218 tests; literal wildcard-origin regressions passed; `python tools/check_stale_docs.py`, `ruff check src tests tools`, `ruff format --check src tests tools`, isolated `UV_PROJECT_ENVIRONMENT=/tmp/exphttp-stage007-venv uv run --extra lint mypy src`, `git diff --check`, and verifier subagent recheck passed.
+- Report: `stage-reports/STAGE-007-20260525-193113.md`

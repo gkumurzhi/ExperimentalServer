@@ -10,12 +10,17 @@ from src.server import ExperimentalHTTPServer
 from tests.conftest import find_free_port
 
 
-def _start_server(port: int, disable_ecdh: bool = False) -> ExperimentalHTTPServer:
+def _start_server(
+    port: int,
+    disable_ecdh: bool = False,
+    cors_origin: str | None = None,
+) -> ExperimentalHTTPServer:
     server = ExperimentalHTTPServer(
         host="127.0.0.1",
         port=port,
         root_dir="/tmp",
         quiet=True,
+        cors_origin=cors_origin,
     )
     if disable_ecdh:
         server._ecdh_manager = None
@@ -120,6 +125,44 @@ class TestWebSocketUpgradeSecurity:
             ).encode("ascii")
             response = _send_raw(port, raw)
             assert b"HTTP/1.1 101 Switching Protocols" in response
+        finally:
+            server.stop()
+
+    def test_exact_configured_origin_upgrade_accepted(self) -> None:
+        port = find_free_port()
+        server = _start_server(port, cors_origin="https://app.example")
+        try:
+            raw = (
+                f"GET /notes/ws HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "Origin: https://app.example\r\n"
+                "\r\n"
+            ).encode("ascii")
+            response = _send_raw(port, raw)
+            assert b"HTTP/1.1 101 Switching Protocols" in response
+        finally:
+            server.stop()
+
+    def test_wildcard_origin_upgrade_rejected(self) -> None:
+        port = find_free_port()
+        server = _start_server(port, cors_origin="*")
+        try:
+            raw = (
+                f"GET /notes/ws HTTP/1.1\r\n"
+                f"Host: 127.0.0.1:{port}\r\n"
+                "Upgrade: websocket\r\n"
+                "Connection: Upgrade\r\n"
+                "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                "Sec-WebSocket-Version: 13\r\n"
+                "Origin: https://evil.example\r\n"
+                "\r\n"
+            ).encode("ascii")
+            response = _send_raw(port, raw)
+            assert b"HTTP/1.1 403 Forbidden" in response
         finally:
             server.stop()
 

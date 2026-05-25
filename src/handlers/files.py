@@ -349,7 +349,11 @@ class FileHandlersMixin(BaseHandler):
         logger.debug(f"OPTIONS preflight: {requested_method}")
         response.set_header(
             "Access-Control-Allow-Methods",
-            resolve_preflight_allow_methods(requested_method, self._feature_set()),
+            resolve_preflight_allow_methods(
+                requested_method,
+                self._feature_set(),
+                read_only=getattr(self, "cors_origins", ()) == ("*",),
+            ),
         )
 
         requested_headers = request.headers.get("access-control-request-headers", "")

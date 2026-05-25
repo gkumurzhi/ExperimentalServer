@@ -99,8 +99,9 @@ When running the server outside a trusted lab:
   externally reachable services unless experimental methods are required.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.
-- Configure an exact `--cors-origin` for a trusted browser UI; avoid
-  `--cors-origin *` on internet-facing deployments.
+- Configure an exact `--cors-origin` for a trusted browser UI. Wildcard
+  `--cors-origin *` is read-only CORS and does not authorize browser writes or
+  WebSocket upgrades.
 
 ### External exposure baseline
 

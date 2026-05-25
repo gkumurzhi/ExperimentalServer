@@ -699,8 +699,8 @@ Sec-WebSocket-Accept: <computed accept key>
 All WebSocket messages are UTF-8 JSON text frames. The client sends masked frames (required by RFC 6455); the server sends unmasked frames.
 
 Same-origin upgrades are allowed by default. Cross-origin upgrades require the
-`Origin` to match a configured `--cors-origin` value, unless CORS is configured
-as wildcard `*`.
+`Origin` to match an exact configured `--cors-origin` value. Wildcard
+`--cors-origin *` is read-only CORS and does not authorize WebSocket upgrades.
 
 **Client message types:**
 
@@ -742,10 +742,12 @@ CORS preflight handler. Returns allowed methods when CORS is enabled.
 
 **Response (204):** No body. If CORS is disabled, no
 `Access-Control-Allow-*` headers are emitted. If CORS is enabled,
-`Access-Control-Allow-Methods` lists built-in methods. A requested unknown
-method is added when it is a valid HTTP token, enabling advanced-upload
-preflights. Requested headers are reflected only when they are in the server
-allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
+`Access-Control-Allow-Methods` lists profile-enabled methods for exact origins.
+For wildcard `--cors-origin *`, preflight stays read-only and lists only read
+methods. A requested unknown method is added only for exact-origin lab-profile
+advanced-upload preflights when it is a valid HTTP token. Requested headers are
+reflected only when they are in the server allowlist (`Authorization`,
+`Content-Type`, `If-None-Match`,
 `X-File-Name`, `X-Session-Id`, `X-Exphttp-No-Gzip`, `X-D`, `X-E`, `X-K`,
 `X-Kb64`, `X-N`, `X-H`, and numeric `X-D-N` chunk headers).
 
@@ -847,8 +849,8 @@ Requests with an `Origin` header must match the request host/scheme or a
 configured CORS origin. `Sec-Fetch-Site: cross-site` and `same-site` requests
 without `Origin` are rejected; with `Origin`, they require a configured CORS
 origin. Non-browser API clients that omit both `Origin` and `Sec-Fetch-Site`
-keep the existing behavior. Setting `--cors-origin *` explicitly opts into
-browser mutations from any origin.
+keep the existing behavior. Wildcard `--cors-origin *` still emits read CORS
+headers, but does not authorize browser mutations from arbitrary origins.
 
 Rejected browser-origin mutations return `403` JSON:
 

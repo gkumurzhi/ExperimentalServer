@@ -1,7 +1,7 @@
 # STAGE-007 - Wildcard CORS read-only policy
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -51,11 +51,11 @@ Preserve wildcard read CORS responses while requiring exact configured origins f
 6. Update API/security docs and stale-doc guards if they reference wildcard write behavior.
 
 ## Acceptance criteria
-- [ ] `--cors-origin *` does not authorize browser mutations.
-- [ ] `--cors-origin *` does not authorize WebSocket upgrades.
-- [ ] Exact configured origins still authorize intended mutations and WebSocket upgrades.
-- [ ] Read-only wildcard CORS responses remain available.
-- [ ] Documentation no longer says wildcard opts into browser write/WS trust.
+- [x] `--cors-origin *` does not authorize browser mutations.
+- [x] `--cors-origin *` does not authorize WebSocket upgrades.
+- [x] Exact configured origins still authorize intended mutations and WebSocket upgrades.
+- [x] Read-only wildcard CORS responses remain available.
+- [x] Documentation no longer says wildcard opts into browser write/WS trust.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -74,5 +74,4 @@ Preserve wildcard read CORS responses while requiring exact configured origins f
 - Rollback: Require explicit exact origins for writes and document how lab users can list trusted origins; avoid restoring wildcard write trust.
 
 ## Completion notes
-Filled by `close-plan-stage`.
-
+Closed 2026-05-25 19:45:53 MSK. Wildcard CORS remains available for read responses and read-only preflight methods, but no longer authorizes browser mutations, WebSocket upgrades, or literal `Origin: *` trust checks. Exact configured origins still authorize browser mutations and WebSocket upgrades. Targeted regression tests, stale-doc guard, ruff, isolated mypy, and verifier subagent review passed; see `stage-reports/STAGE-007-20260525-193113.md`.
