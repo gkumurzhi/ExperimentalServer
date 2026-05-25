@@ -77,6 +77,7 @@ class TestCLIParser:
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
+        assert args.profile == "lab"
         assert args.sslip is False
         assert args.public_ip is None
         assert args.acme_staging is False
@@ -206,6 +207,15 @@ class TestCLIParser:
         args = self.parser.parse_args(["--advanced-upload"])
         assert args.advanced_upload is True
 
+    def test_profile_flag_selects_capability_profile(self):
+        args = self.parser.parse_args(["--profile", "workspace"])
+        assert args.profile == "workspace"
+
+    def test_invalid_profile_is_rejected(self):
+        with pytest.raises(SystemExit) as exc_info:
+            self.parser.parse_args(["--profile", "unsafe"])
+        assert exc_info.value.code == 2
+
     def test_letsencrypt_requires_domain(self):
         """--letsencrypt without --domain should be caught by main()."""
         # Parser itself accepts it; validation is in main()
@@ -259,6 +269,11 @@ class TestCLIParser:
 
 
 class TestCLIMain:
+    def test_advanced_upload_alias_conflicts_with_safe_profiles(self):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(["--advanced-upload", "--profile", "serve"])
+        assert exc_info.value.code == 2
+
     def test_main_starts_server_with_expected_config(self, monkeypatch):
         captured: dict[str, object] = {}
 
@@ -366,6 +381,7 @@ class TestCLIMain:
             "open_browser": True,
             "json_log": True,
             "cors_origin": "https://app.example",
+            "profile": "lab",
             "started": True,
         }
 

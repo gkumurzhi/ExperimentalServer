@@ -11,6 +11,7 @@ from types import FrameType
 from typing import Any
 
 from . import ExperimentalHTTPServer, __version__
+from .features import DEFAULT_PROFILE, profile_names
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
     DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
@@ -128,7 +129,16 @@ Custom HTTP methods:
     modes.add_argument(
         "--advanced-upload",
         action="store_true",
-        help="Deprecated no-op; advanced upload is always enabled",
+        help="Deprecated alias for --profile lab",
+    )
+    modes.add_argument(
+        "--profile",
+        choices=profile_names(),
+        default=DEFAULT_PROFILE,
+        help=(
+            "Feature profile: serve=read-only, workspace=uploads/delete, "
+            f"lab=experimental methods (default: {DEFAULT_PROFILE})"
+        ),
     )
 
     # Limits
@@ -381,6 +391,8 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--auth and --auth-file cannot be combined")
     if args.auth_file == "":
         parser.error("--auth-file value must not be empty")
+    if args.advanced_upload and args.profile != "lab":
+        parser.error("--advanced-upload is a deprecated alias for --profile lab")
 
 
 def _install_shutdown_signal_handlers(server: ExperimentalHTTPServer) -> dict[signal.Signals, Any]:
@@ -455,6 +467,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "open_browser": args.open,
         "json_log": args.json_log,
         "cors_origin": args.cors_origin,
+        "profile": args.profile,
     }
 
     try:

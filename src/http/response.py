@@ -57,6 +57,7 @@ class HTTPResponse:
     def build_headers(
         self,
         cors_origin: str | None = None,
+        cors_allow_methods: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -64,6 +65,7 @@ class HTTPResponse:
         """Build only the HTTP header portion (for streaming)."""
         self._finalize_headers(
             cors_origin,
+            cors_allow_methods,
             keep_alive,
             keep_alive_timeout,
             keep_alive_max,
@@ -81,6 +83,7 @@ class HTTPResponse:
     def build(
         self,
         cors_origin: str | None = None,
+        cors_allow_methods: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -89,6 +92,7 @@ class HTTPResponse:
         return (
             self.build_headers(
                 cors_origin,
+                cors_allow_methods,
                 keep_alive,
                 keep_alive_timeout,
                 keep_alive_max,
@@ -99,6 +103,7 @@ class HTTPResponse:
     def _finalize_headers(
         self,
         cors_origin: str | None = None,
+        cors_allow_methods: str | None = None,
         keep_alive: bool = False,
         keep_alive_timeout: int = 15,
         keep_alive_max: int = 100,
@@ -116,9 +121,13 @@ class HTTPResponse:
         else:
             self.set_header("Connection", "close")
 
-        self._set_cors_headers(cors_origin)
+        self._set_cors_headers(cors_origin, cors_allow_methods)
 
-    def _set_cors_headers(self, cors_origin: str | None = None) -> None:
+    def _set_cors_headers(
+        self,
+        cors_origin: str | None = None,
+        cors_allow_methods: str | None = None,
+    ) -> None:
         """Set CORS headers."""
         cors_origin = normalize_cors_header_origin(cors_origin)
         if not cors_origin:
@@ -132,7 +141,7 @@ class HTTPResponse:
         if "Access-Control-Allow-Methods" not in self.headers:
             self.set_header(
                 "Access-Control-Allow-Methods",
-                CORS_ALLOW_METHODS_HEADER,
+                cors_allow_methods or CORS_ALLOW_METHODS_HEADER,
             )
 
         if "Access-Control-Allow-Headers" not in self.headers:

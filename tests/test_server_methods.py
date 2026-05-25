@@ -217,6 +217,203 @@ class TestDispatchHandler:
         assert (server.upload_dir / "advanced.txt").read_bytes() == b"advanced upload"
 
 
+class TestFeatureProfiles:
+    def test_serve_profile_exposes_read_only_capabilities(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            profile="serve",
+        )
+
+        assert list(server.method_handlers.keys()) == [
+            "GET",
+            "HEAD",
+            "OPTIONS",
+            "FETCH",
+            "INFO",
+            "PING",
+        ]
+
+        ping = server._dispatch_handler(make_request("PING", "/"))
+        ping_data = json.loads(ping.body)
+        assert ping_data["profile"] == "serve"
+        assert ping_data["advanced_upload"] is False
+        assert ping_data["capabilities"] == {
+            "ordinary_upload": False,
+            "file_delete": False,
+            "clear_uploads": False,
+            "advanced_upload": False,
+            "smuggle": False,
+            "note_http": False,
+            "note_delete": False,
+            "note_clear": False,
+            "websocket_notes": False,
+        }
+
+        upload = server._dispatch_handler(make_request("POST", "/blocked.txt", body=b"x"))
+        advanced = server._dispatch_handler(
+            make_request("XUPLOAD", "/", headers={"X-D": base64.b64encode(b"x").decode()})
+        )
+        note = server._dispatch_handler(make_request("NOTE", "/notes/key"))
+        smuggle = server._dispatch_handler(make_request("SMUGGLE", "/uploads/file.txt"))
+        clear = server._dispatch_handler(make_request("DELETE", "/uploads?clear=1"))
+        assert [upload.status_code, advanced.status_code, note.status_code] == [405, 405, 405]
+        assert [smuggle.status_code, clear.status_code] == [405, 405]
+        assert not (server.upload_dir / "blocked.txt").exists()
+
+        options = server.handle_options(
+            make_request(
+                "OPTIONS",
+                "/",
+                headers={"Access-Control-Request-Method": "XUPLOAD"},
+            )
+        )
+        allowed = options.headers["Access-Control-Allow-Methods"]
+        assert "GET" in allowed
+        assert "POST" not in allowed
+        assert "NOTE" not in allowed
+        assert "SMUGGLE" not in allowed
+        assert "XUPLOAD" not in allowed
+        assert (
+            server._is_websocket_upgrade_attempt(
+                make_request(
+                    "GET",
+                    "/notes/ws",
+                    headers={
+                        "Upgrade": "websocket",
+                        "Connection": "Upgrade",
+                        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                        "Sec-WebSocket-Version": "13",
+                    },
+                )
+            )
+            is False
+        )
+
+    def test_workspace_profile_allows_upload_delete_but_not_lab_features(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            profile="workspace",
+        )
+
+        assert list(server.method_handlers.keys()) == [
+            "GET",
+            "HEAD",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS",
+            "FETCH",
+            "INFO",
+            "PING",
+            "NONE",
+        ]
+
+        upload = server._dispatch_handler(make_request("POST", "/workspace.txt", body=b"x"))
+        assert upload.status_code == 201
+        assert (server.upload_dir / "workspace.txt").read_bytes() == b"x"
+
+        delete = server._dispatch_handler(make_request("DELETE", "/uploads/workspace.txt"))
+        assert delete.status_code == 200
+        assert not (server.upload_dir / "workspace.txt").exists()
+
+        (server.upload_dir / "keep.txt").write_text("keep", encoding="utf-8")
+        clear = server._dispatch_handler(make_request("DELETE", "/uploads?clear=1"))
+        assert clear.status_code == 403
+        assert (server.upload_dir / "keep.txt").exists()
+
+        advanced = server._dispatch_handler(
+            make_request("XUPLOAD", "/", headers={"X-D": base64.b64encode(b"x").decode()})
+        )
+        note = server._dispatch_handler(make_request("NOTE", "/notes/key"))
+        smuggle = server._dispatch_handler(make_request("SMUGGLE", "/uploads/keep.txt"))
+        assert [advanced.status_code, note.status_code, smuggle.status_code] == [405, 405, 405]
+
+        ping_data = json.loads(server._dispatch_handler(make_request("PING", "/")).body)
+        assert ping_data["profile"] == "workspace"
+        assert ping_data["capabilities"]["ordinary_upload"] is True
+        assert ping_data["capabilities"]["file_delete"] is True
+        assert ping_data["capabilities"]["clear_uploads"] is False
+        assert ping_data["capabilities"]["advanced_upload"] is False
+        assert ping_data["capabilities"]["note_http"] is False
+        assert ping_data["capabilities"]["websocket_notes"] is False
+        assert (
+            server._is_websocket_upgrade_attempt(
+                make_request(
+                    "GET",
+                    "/notes/ws",
+                    headers={
+                        "Upgrade": "websocket",
+                        "Connection": "Upgrade",
+                        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                        "Sec-WebSocket-Version": "13",
+                    },
+                )
+            )
+            is False
+        )
+
+        options = server.handle_options(
+            make_request(
+                "OPTIONS",
+                "/",
+                headers={"Access-Control-Request-Method": "XUPLOAD"},
+            )
+        )
+        allowed = options.headers["Access-Control-Allow-Methods"]
+        assert "POST" in allowed
+        assert "DELETE" in allowed
+        assert "NOTE" not in allowed
+        assert "SMUGGLE" not in allowed
+        assert "XUPLOAD" not in allowed
+
+    def test_lab_profile_preserves_experimental_surface(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            profile="lab",
+        )
+
+        assert "NOTE" in server.method_handlers
+        assert "SMUGGLE" in server.method_handlers
+        assert server.features.advanced_upload is True
+        assert (
+            server._is_websocket_upgrade_attempt(
+                make_request(
+                    "GET",
+                    "/notes/ws",
+                    headers={
+                        "Upgrade": "websocket",
+                        "Connection": "Upgrade",
+                        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                        "Sec-WebSocket-Version": "13",
+                    },
+                )
+            )
+            is True
+        )
+
+        options = server.handle_options(
+            make_request(
+                "OPTIONS",
+                "/",
+                headers={"Access-Control-Request-Method": "XUPLOAD"},
+            )
+        )
+        allowed = options.headers["Access-Control-Allow-Methods"]
+        assert "NOTE" in allowed
+        assert "SMUGGLE" in allowed
+        assert "XUPLOAD" in allowed
+
+
 class TestWebSocketOriginValidation:
     def test_missing_origin_allowed(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")

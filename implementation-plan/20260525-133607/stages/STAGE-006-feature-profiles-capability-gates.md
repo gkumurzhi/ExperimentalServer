@@ -1,7 +1,7 @@
 # STAGE-006 - Feature profiles and capability gates
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -58,11 +58,11 @@ Introduce a `FeatureSet` or `ServerProfile` single source of truth and gate risk
 7. Update docs and browser/API smoke expectations.
 
 ## Acceptance criteria
-- [ ] A safe profile can serve read/static paths without enabling advanced upload, SMUGGLE, NOTE, or destructive clear operations.
-- [ ] A workspace profile can enable ordinary upload/delete only where explicitly intended.
-- [ ] A lab profile preserves experimental methods intentionally and visibly.
-- [ ] Handler registry, PING/capabilities, CORS method list, WebSocket availability, and UI affordances use the same capability source.
-- [ ] Tests cover positive and negative paths for each profile.
+- [x] A safe profile can serve read/static paths without enabling advanced upload, SMUGGLE, NOTE, or destructive clear operations.
+- [x] A workspace profile can enable ordinary upload/delete only where explicitly intended.
+- [x] A lab profile preserves experimental methods intentionally and visibly.
+- [x] Handler registry, PING/capabilities, CORS method list, WebSocket availability, and UI affordances use the same capability source.
+- [x] Tests cover positive and negative paths for each profile.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -81,5 +81,17 @@ Introduce a `FeatureSet` or `ServerProfile` single source of truth and gate risk
 - Rollback: Keep backward-compatible `lab` default for one release if required, but make Docker/docs use safer explicit profiles.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 19:24:21 MSK. Added a `FeatureSet` source of truth for
+`serve`, `workspace`, and `lab`; wired handler registration, advanced upload
+fallback, destructive clears, PING capabilities, CORS allow methods, WebSocket
+admission, CLI profile selection, and browser UI affordances to it. Added
+profile matrix tests and updated docs/smoke expectations.
 
+Verification passed: targeted + CLI regression suite (`245 passed`), browser
+smoke, `ruff check`, focused format check for touched files, `compileall`, and
+`git diff --check`. Full format check still reports an unrelated pre-existing
+format issue in `tools/close_plan_stages.py`; direct `mypy` is unavailable in
+the active Python environment and isolated `uvx` mypy timed out while
+downloading.
+
+Report: `stage-reports/STAGE-006-20260525-184508.md`.

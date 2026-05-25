@@ -4,6 +4,9 @@ const uploadMethodButtons = Array.from(document.querySelectorAll('.upload-method
 
 function setUploadMethod(method, btn, options = {}) {
     const { focusButton = false } = options;
+    if (typeof isServerMethodSupported === 'function' && !isServerMethodSupported(method)) {
+        return;
+    }
     uploadMethod = method;
 
     let activeButton = btn || null;
@@ -31,6 +34,46 @@ const fileList = document.getElementById('fileList');
 const uploadBtn = document.getElementById('uploadBtn');
 const uploadResponseAreaEl = document.getElementById('uploadResponseArea');
 const uploadSelectionState = document.getElementById('uploadSelectionState');
+
+function isOrdinaryUploadEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('ordinary_upload');
+}
+
+function refreshUploadCapability() {
+    const enabled = isOrdinaryUploadEnabled();
+    uploadMethodButtons.forEach(button => {
+        const method = button.dataset.uploadMethod || '';
+        const methodSupported = typeof isServerMethodSupported !== 'function'
+            || isServerMethodSupported(method);
+        button.disabled = !enabled || !methodSupported;
+        button.dataset.capabilityAvailable = enabled && methodSupported ? 'true' : 'false';
+    });
+
+    if (fileInput) fileInput.disabled = !enabled;
+    if (dropZone) {
+        dropZone.classList.toggle('is-disabled', !enabled);
+        dropZone.setAttribute('aria-disabled', String(!enabled));
+        dropZone.setAttribute('tabindex', enabled ? '0' : '-1');
+    }
+    if (uploadBtn) {
+        uploadBtn.disabled = !enabled || filesToUpload.length === 0;
+    }
+
+    if (
+        enabled
+        && typeof isServerMethodSupported === 'function'
+        && !isServerMethodSupported(uploadMethod)
+    ) {
+        const nextButton = uploadMethodButtons.find(button => {
+            const method = button.dataset.uploadMethod || '';
+            return isServerMethodSupported(method);
+        });
+        if (nextButton?.dataset.uploadMethod) {
+            setUploadMethod(nextButton.dataset.uploadMethod, nextButton);
+        }
+    }
+}
 
 function bindDropZoneKeyboardTrigger(container, input) {
     container.addEventListener('keydown', (event) => {
@@ -162,6 +205,10 @@ if (uploadMethodButtons.length > 0) {
 }
 
 function handleFiles(files) {
+    if (!isOrdinaryUploadEnabled()) {
+        return;
+    }
+
     for (const file of files) {
         if (!filesToUpload.find(f => f.name === file.name && f.size === file.size)) {
             filesToUpload.push({
@@ -174,7 +221,7 @@ function handleFiles(files) {
         }
     }
     renderFileList();
-    uploadBtn.disabled = filesToUpload.length === 0;
+    uploadBtn.disabled = !isOrdinaryUploadEnabled() || filesToUpload.length === 0;
     refreshUploadSelectionLocale();
 }
 
@@ -232,7 +279,7 @@ function getStatusText(status) {
 function removeFile(index) {
     filesToUpload.splice(index, 1);
     renderFileList();
-    uploadBtn.disabled = filesToUpload.length === 0;
+    uploadBtn.disabled = !isOrdinaryUploadEnabled() || filesToUpload.length === 0;
     refreshUploadSelectionLocale();
 }
 
@@ -256,6 +303,10 @@ function buildUploadRequestExchange(fileData, arrayBuffer, encodedFileName) {
 }
 
 async function uploadAllFiles() {
+    if (!isOrdinaryUploadEnabled()) {
+        return;
+    }
+
     announceLiveRegion('uploadResponseAreaLive', t('uploadStarting'));
     setExchangeInspector('upload', {
         phase: 'sending',
@@ -380,8 +431,9 @@ async function uploadAllFiles() {
     // Очищаем успешно загруженные файлы
     filesToUpload = filesToUpload.filter(f => f.status !== 'success');
     renderFileList();
-    uploadBtn.disabled = filesToUpload.length === 0;
+    uploadBtn.disabled = !isOrdinaryUploadEnabled() || filesToUpload.length === 0;
     refreshUploadSelectionLocale();
 }
 
 refreshUploadSelectionLocale();
+refreshUploadCapability();

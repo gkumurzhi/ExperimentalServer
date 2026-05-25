@@ -420,6 +420,141 @@ class TestLiveRequestHandling:
         assert body == payload
 
 
+class TestLiveFeatureProfiles:
+    def test_serve_profile_rejects_mutating_and_experimental_methods(self, temp_dir: Path) -> None:
+        with _LiveServer(temp_dir, profile="serve") as live:
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"GET / HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, _body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 200")
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"POST /blocked.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Content-Length: 7\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                        "blocked"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 405")
+                assert b"Method 'POST' not allowed" in body
+                assert not (temp_dir / "uploads" / "blocked.txt").exists()
+
+            payload = base64.b64encode(b"fallback upload").decode("ascii")
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"STEALTH /mystery HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        f"X-D: {payload}\r\n"
+                        "X-N: fallback.txt\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, _body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 405")
+                assert not (temp_dir / "uploads" / "fallback.txt").exists()
+
+    def test_workspace_profile_allows_upload_delete_but_rejects_lab_methods(
+        self,
+        temp_dir: Path,
+    ) -> None:
+        with _LiveServer(temp_dir, profile="workspace") as live:
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"POST /workspace.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Content-Length: 9\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                        "workspace"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 201")
+                assert json.loads(body)["success"] is True
+                assert (temp_dir / "uploads" / "workspace.txt").read_bytes() == b"workspace"
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"DELETE /uploads/workspace.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 200")
+                assert json.loads(body)["success"] is True
+                assert not (temp_dir / "uploads" / "workspace.txt").exists()
+
+            (temp_dir / "uploads" / "keep.txt").write_text("keep", encoding="utf-8")
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"DELETE /uploads?clear=1 HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, _body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 403")
+                assert (temp_dir / "uploads" / "keep.txt").exists()
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"NOTE /notes/key HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, _body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 405")
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"GET /notes/ws HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Upgrade: websocket\r\n"
+                        "Connection: Upgrade\r\n"
+                        "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+                        "Sec-WebSocket-Version: 13\r\n"
+                        f"Origin: http://127.0.0.1:{live.port}\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, _body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 404")
+                assert live.server.get_metrics()["websocket"]["active"] == 0
+                assert live.server.get_metrics()["websocket"]["rejected_admissions"] == 0
+
+
 class TestLiveAdvancedUploadRouting:
     def test_advanced_upload_is_enabled_without_mode_flags(
         self,

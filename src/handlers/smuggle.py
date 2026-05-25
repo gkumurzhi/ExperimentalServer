@@ -75,6 +75,9 @@ class SmuggleHandlersMixin(BaseHandler):
         Query params:
             encrypt=1 — enable XOR obfuscation (password generated server-side)
         """
+        if not self._feature_set().smuggle:
+            return self._method_not_allowed(request.method)
+
         encrypt = request.query_params.get("encrypt") == "1"
 
         if self._is_hidden_file(request.path):

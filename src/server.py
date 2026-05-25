@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
+from .features import DEFAULT_PROFILE, FeatureSet, resolve_feature_profile
 from .handlers import HandlerMixin
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
@@ -141,6 +142,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         json_log: bool = False,
         # CORS
         cors_origin: str | None = None,
+        # Feature profile
+        profile: str = DEFAULT_PROFILE,
         # WebSocket resource limits
         max_websocket_connections: int | None = None,
         websocket_frame_idle_timeout: float = 5.0,
@@ -229,7 +232,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.json_log = json_log
         self.cors_origin = cors_origin or None
         self.cors_origins = parse_cors_origins(self.cors_origin)
-        self.advanced_upload_enabled = True
+        self.features: FeatureSet = resolve_feature_profile(profile)
+        self.profile = self.features.profile
+        self.advanced_upload_enabled = self.features.advanced_upload
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
         # views used by status printing and request handling).
@@ -640,6 +645,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Upload storage: {self.upload_storage.describe_limit()}")
         print(f"  Notepad limits: {self.note_storage_policy.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
+        print(f"  Profile: {self.profile}")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
         print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")
 
@@ -958,6 +964,10 @@ class ExperimentalHTTPServer(HandlerMixin):
             return None
         return resolve_cors_origin(self.cors_origin, request_origin)
 
+    def _cors_allow_methods_header(self) -> str:
+        """Return the profile-derived CORS allow-methods header value."""
+        return ", ".join(self.features.methods)
+
     def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
         """Allow only same-origin or explicitly configured browser mutations.
 
@@ -983,11 +993,11 @@ class ExperimentalHTTPServer(HandlerMixin):
     def _is_browser_protected_mutation(self, request: HTTPRequest) -> bool:
         """Return True when an HTTP request can change server-side state."""
         method = request.method.upper()
-        if method in _BROWSER_PROTECTED_MUTATION_METHODS:
+        if method in _BROWSER_PROTECTED_MUTATION_METHODS and method in self.method_handlers:
             return True
         if method in _BROWSER_READ_ONLY_METHODS:
             return False
-        return self._has_advanced_upload_payload(request)
+        return self.features.advanced_upload and self._has_advanced_upload_payload(request)
 
     def _is_browser_origin_allowed_for_mutation(
         self,
@@ -1051,9 +1061,10 @@ class ExperimentalHTTPServer(HandlerMixin):
             and expected_origin == origin.rstrip("/")
         )
 
-    @staticmethod
-    def _is_websocket_upgrade_attempt(request: HTTPRequest) -> bool:
+    def _is_websocket_upgrade_attempt(self, request: HTTPRequest) -> bool:
         """Return True when the request appears to target the WebSocket handshake path."""
+        if not self.features.websocket_notes:
+            return False
         return request.path.startswith("/notes/ws") and any(
             (
                 request.headers.get("upgrade"),

@@ -196,6 +196,10 @@ class FileHandlersMixin(BaseHandler):
 
     def handle_delete(self, request: HTTPRequest) -> HTTPResponse:
         """Handle DELETE request — delete file from uploads/."""
+        features = self._feature_set()
+        if not features.file_delete:
+            return self._method_not_allowed(request.method)
+
         if self._is_hidden_file(request.path):
             return self._not_found(request.path)
 
@@ -207,6 +211,11 @@ class FileHandlersMixin(BaseHandler):
         if file_path.resolve() == self.upload_dir.resolve() and self._is_clear_uploads_request(
             request
         ):
+            if not features.clear_uploads:
+                return self._error_response(
+                    403,
+                    f"Clearing uploads/ is disabled for the {features.profile} profile",
+                )
             return self._clear_uploads_directory()
 
         # Reject directories
@@ -340,7 +349,7 @@ class FileHandlersMixin(BaseHandler):
         logger.debug(f"OPTIONS preflight: {requested_method}")
         response.set_header(
             "Access-Control-Allow-Methods",
-            resolve_preflight_allow_methods(requested_method),
+            resolve_preflight_allow_methods(requested_method, self._feature_set()),
         )
 
         requested_headers = request.headers.get("access-control-request-headers", "")
@@ -387,6 +396,9 @@ class FileHandlersMixin(BaseHandler):
 
     def handle_none(self, request: HTTPRequest) -> HTTPResponse:
         """Custom NONE method — file upload."""
+        if not self._feature_set().ordinary_upload:
+            return self._method_not_allowed(request.method)
+
         filename = request.headers.get("x-file-name", "")
         if filename:
             filename = unquote(filename)

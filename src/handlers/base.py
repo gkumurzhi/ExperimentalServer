@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
+from ..features import FeatureSet, resolve_feature_profile
 from ..http import HTTPResponse, format_file_size
 from ..http.utils import resolve_descendant_path
 from ..storage import UploadStorageService
@@ -113,6 +114,7 @@ class BaseHandler:
     notes_dir: Path
     upload_storage: UploadStorageService
     method_handlers: Mapping[str, "Handler"]
+    features: FeatureSet
     advanced_upload_enabled: bool
     _temp_smuggle_files: set[str]
     _smuggle_lock: "threading.Lock"
@@ -132,6 +134,16 @@ class BaseHandler:
         storage = UploadStorageService(self.upload_dir)
         self.upload_storage = storage
         return storage
+
+    def _feature_set(self) -> FeatureSet:
+        """Return the server feature set, defaulting old lightweight test stubs to lab."""
+        features = getattr(self, "features", None)
+        if isinstance(features, FeatureSet):
+            return features
+
+        features = resolve_feature_profile(None)
+        self.features = features
+        return features
 
     def _get_file_path(self, url_path: str, for_sandbox: bool = False) -> Path | None:
         """

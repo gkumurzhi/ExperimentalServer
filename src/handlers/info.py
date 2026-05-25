@@ -96,6 +96,7 @@ class InfoHandlersMixin(BaseHandler):
         """Custom PING method — server health check."""
         logger.debug("PING")
         response = HTTPResponse(200)
+        features = self._feature_set()
 
         ping_info: dict[str, Any] = {
             "status": "pong",
@@ -103,7 +104,9 @@ class InfoHandlersMixin(BaseHandler):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "supported_methods": list(self.method_handlers.keys()),
             "access_scope": "uploads",
-            "advanced_upload": True,
+            "profile": features.profile,
+            "capabilities": features.capabilities(),
+            "advanced_upload": features.advanced_upload,
         }
         get_metrics = getattr(self, "get_metrics", None)
         if callable(get_metrics):

@@ -48,6 +48,44 @@ const notepadTransportInputs = Array.from(document.querySelectorAll('input[name=
 const notepadSelectedIds = new Set();
 let notepadLastExchangeRequest = null;
 
+function isNotepadHttpEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('note_http');
+}
+
+function isNotepadWebSocketEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('websocket_notes');
+}
+
+function refreshNotepadCapability() {
+    const enabled = isNotepadHttpEnabled();
+    const wsEnabled = isNotepadWebSocketEnabled();
+    notepadTransportInputs.forEach(input => {
+        if (input.value === 'ws') {
+            input.disabled = !enabled || !wsEnabled;
+            if (!wsEnabled && input.checked) {
+                const httpInput = notepadTransportInputs.find(item => item.value === 'http');
+                if (httpInput) {
+                    httpInput.checked = true;
+                }
+                notepadDisconnectWs(false);
+            }
+        } else {
+            input.disabled = !enabled;
+        }
+    });
+
+    const tab = document.getElementById('tab-notepad');
+    if (tab) {
+        tab.classList.toggle('is-capability-disabled', !enabled);
+        tab.disabled = !enabled;
+    }
+    if (!enabled && !notepadInitDone) {
+        notepadMarkUnavailable('unavailableServer');
+    }
+}
+
 function notepadTraceRequest(request, response = null, phase = 'sending') {
     notepadLastExchangeRequest = request || notepadLastExchangeRequest;
     setExchangeInspector('notepad', {
@@ -467,6 +505,11 @@ function base64ToUint8(b64) {
 // ── ECDH Session Init ───────────────────────────────────
 
 async function notepadInit() {
+    if (!isNotepadHttpEnabled()) {
+        notepadMarkUnavailable('unavailableServer');
+        return;
+    }
+
     if (notepadInitDone) {
         if (notepadAvailable) {
             notepadRefreshList();
@@ -647,7 +690,7 @@ function scheduleReconnect() {
 }
 
 function notepadConnectWs() {
-    if (!notepadAvailable) return;
+    if (!notepadAvailable || !isNotepadWebSocketEnabled()) return;
     notepadDisconnectWs(true);
     wsIntentionalClose = false;
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';

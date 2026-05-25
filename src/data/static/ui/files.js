@@ -8,6 +8,28 @@ const browsePathInput = document.getElementById('browsePathInput');
 const serverFilesEl = document.getElementById('serverFiles');
 const selectedUploadPaths = new Set();
 
+function isFileDeleteEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('file_delete');
+}
+
+function isUploadsClearEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('clear_uploads');
+}
+
+function isSmuggleEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('smuggle');
+}
+
+function refreshFilesCapability() {
+    if (clearUploadsBtn) {
+        clearUploadsBtn.disabled = !isUploadsClearEnabled();
+    }
+    updateSelectedUploadsButton();
+}
+
 if (browseRootBtn) {
     browseRootBtn.addEventListener('click', goToRoot);
 }
@@ -52,9 +74,9 @@ if (serverFilesEl) {
             getFileInfo(path);
         } else if (action === 'download') {
             downloadFile(path);
-        } else if (action === 'smuggle') {
+        } else if (action === 'smuggle' && isSmuggleEnabled()) {
             showSmuggleDialog(path, actionBtn);
-        } else if (action === 'delete') {
+        } else if (action === 'delete' && isFileDeleteEnabled()) {
             deleteFile(path, actionBtn);
         } else if (action === 'open-dir') {
             browsePathInput.value = path;
@@ -115,9 +137,11 @@ function focusFilesBrowserAnchor() {
     }
 }
 
+refreshFilesCapability();
+
 function updateSelectedUploadsButton() {
     if (deleteSelectedUploadsBtn) {
-        deleteSelectedUploadsBtn.disabled = selectedUploadPaths.size === 0;
+        deleteSelectedUploadsBtn.disabled = !isFileDeleteEnabled() || selectedUploadPaths.size === 0;
         deleteSelectedUploadsBtn.dataset.count = String(selectedUploadPaths.size);
     }
 }
@@ -162,6 +186,30 @@ async function browseDirectory() {
                 const smuggleLabel = esc(`${t('smuggleTitle')}: ${item.name}`);
                 const deleteLabel = esc(`${t('deleteBtn')}: ${item.name}`);
                 const selectLabel = esc(`${t('selectFileLabel')}: ${item.name}`);
+                const smuggleButton = isSmuggleEnabled() ? `
+                            <button
+                                class="btn-ghost btn--sm file-row__action-muted file-row__action-compact"
+                                data-file-action="smuggle"
+                                data-path="${encodedItemPath}"
+                                title="${smuggleLabel}"
+                                aria-label="${smuggleLabel}"
+                            >HTML</button>
+                ` : '';
+                const deleteButton = isFileDeleteEnabled() ? `
+                            <button
+                                class="btn-ghost btn--sm file-row__action-danger file-row__action-icon"
+                                data-file-action="delete"
+                                data-path="${encodedItemPath}"
+                                title="${deleteLabel}"
+                                aria-label="${deleteLabel}"
+                            >×</button>
+                ` : '';
+                const selectBox = isFileDeleteEnabled() ? `
+                        <label class="file-select" title="${selectLabel}" aria-label="${selectLabel}">
+                            <input type="checkbox" data-file-select data-path="${encodedItemPath}">
+                            <span aria-hidden="true"></span>
+                        </label>
+                ` : '';
 
                 if (item.is_dir) {
                     return `
@@ -190,10 +238,7 @@ async function browseDirectory() {
                 return `
                 <div class="uploaded-file uploaded-file--file">
                     <div class="file-info">
-                        <label class="file-select" title="${selectLabel}" aria-label="${selectLabel}">
-                            <input type="checkbox" data-file-select data-path="${encodedItemPath}">
-                            <span aria-hidden="true"></span>
-                        </label>
+                        ${selectBox}
                         <span class="file-icon" aria-hidden="true">${itemIcon}</span>
                         <div class="file-meta">
                             <span class="file-name">${esc(item.name)}</span>
@@ -217,20 +262,8 @@ async function browseDirectory() {
                                 title="${infoLabel}"
                                 aria-label="${infoLabel}"
                             >i</button>
-                            <button
-                                class="btn-ghost btn--sm file-row__action-muted file-row__action-compact"
-                                data-file-action="smuggle"
-                                data-path="${encodedItemPath}"
-                                title="${smuggleLabel}"
-                                aria-label="${smuggleLabel}"
-                            >HTML</button>
-                            <button
-                                class="btn-ghost btn--sm file-row__action-danger file-row__action-icon"
-                                data-file-action="delete"
-                                data-path="${encodedItemPath}"
-                                title="${deleteLabel}"
-                                aria-label="${deleteLabel}"
-                            >×</button>
+                            ${smuggleButton}
+                            ${deleteButton}
                         </div>
                     </div>
                 </div>
@@ -293,6 +326,10 @@ async function getFileInfo(path) {
 }
 
 async function clearUploads(triggerEl = null) {
+    if (!isUploadsClearEnabled()) {
+        return;
+    }
+
     const confirmed = await showConfirmDialog({
         title: t('clearUploadsBtn'),
         message: t('clearUploadsConfirm'),
@@ -380,6 +417,10 @@ async function clearUploads(triggerEl = null) {
 }
 
 async function deleteSelectedUploadFiles(triggerEl = null) {
+    if (!isFileDeleteEnabled()) {
+        return;
+    }
+
     const paths = Array.from(selectedUploadPaths);
     if (paths.length === 0) return;
 
@@ -471,6 +512,10 @@ async function deleteSelectedUploadFiles(triggerEl = null) {
 
 // ===== DELETE file =====
 async function deleteFile(path, triggerEl = null) {
+    if (!isFileDeleteEnabled()) {
+        return;
+    }
+
     const confirmed = await showConfirmDialog({
         title: t('deleteBtn'),
         message: t('deleteConfirm'),
@@ -515,6 +560,10 @@ async function deleteFile(path, triggerEl = null) {
 }
 // ===== HTML Smuggling =====
 function showSmuggleDialog(filePath, triggerEl = null) {
+    if (!isSmuggleEnabled()) {
+        return;
+    }
+
     openManagedDialog({
         dialogId: 'smuggleModal',
         triggerEl,

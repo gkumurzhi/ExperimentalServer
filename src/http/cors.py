@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from ..features import FeatureSet, resolve_feature_profile
+
 CORS_ALLOW_METHODS: tuple[str, ...] = (
     "GET",
     "HEAD",
@@ -115,11 +117,20 @@ def is_http_token(value: str) -> bool:
     return bool(_HTTP_TOKEN_RE.fullmatch(value))
 
 
-def resolve_preflight_allow_methods(requested_method: str) -> str:
+def resolve_preflight_allow_methods(
+    requested_method: str,
+    features: FeatureSet | None = None,
+) -> str:
     """Return allowed methods, including a requested advanced upload token."""
-    methods = list(CORS_ALLOW_METHODS)
+    feature_set = features or resolve_feature_profile(None)
+    methods = list(feature_set.methods)
     method = requested_method.strip().upper()
-    if method and method not in methods and is_http_token(method):
+    if (
+        feature_set.allow_unknown_advanced_upload_methods
+        and method
+        and method not in methods
+        and is_http_token(method)
+    ):
         methods.append(method)
     return ", ".join(methods)
 

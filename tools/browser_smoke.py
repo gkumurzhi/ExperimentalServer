@@ -44,6 +44,7 @@ class _LiveServer:
             port=_find_free_port(),
             root_dir=str(root_dir),
             quiet=True,
+            profile="lab",
         )
         if disable_ecdh:
             self.server._ecdh_manager = None

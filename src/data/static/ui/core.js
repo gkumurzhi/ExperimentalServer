@@ -763,6 +763,75 @@ let advancedUploadCapability = {
     checked: false,
     checkFailed: false,
 };
+let serverCapabilities = {};
+let serverSupportedMethods = [];
+
+function getServerCapabilities() {
+    return { ...serverCapabilities };
+}
+
+function isServerCapabilityEnabled(name) {
+    return serverCapabilities[name] === true;
+}
+
+function isServerMethodSupported(method) {
+    if (!serverSupportedMethods.length) {
+        return true;
+    }
+    return serverSupportedMethods.includes(String(method || '').toUpperCase());
+}
+
+function refreshCapabilityBoundControls() {
+    document.querySelectorAll('[data-request-method]').forEach(button => {
+        const supported = isServerMethodSupported(button.dataset.requestMethod);
+        button.dataset.capabilityAvailable = supported ? 'true' : 'false';
+        button.disabled = !supported;
+    });
+
+    const opsecTab = document.getElementById('tab-opsec');
+    const notepadTab = document.getElementById('tab-notepad');
+    if (opsecTab) {
+        opsecTab.classList.toggle('is-capability-disabled', !isServerCapabilityEnabled('advanced_upload'));
+    }
+    if (notepadTab) {
+        notepadTab.classList.toggle('is-capability-disabled', !isServerCapabilityEnabled('note_http'));
+        notepadTab.disabled = !isServerCapabilityEnabled('note_http');
+    }
+
+    if (typeof refreshUploadCapability === 'function') {
+        refreshUploadCapability();
+    }
+    if (typeof refreshFilesCapability === 'function') {
+        refreshFilesCapability();
+    }
+    if (typeof refreshOpsecCapability === 'function') {
+        refreshOpsecCapability();
+    }
+    if (typeof refreshNotepadCapability === 'function') {
+        refreshNotepadCapability();
+    }
+}
+
+function setServerCapabilitiesFromPing(info) {
+    const caps = info && typeof info.capabilities === 'object' && info.capabilities !== null
+        ? info.capabilities
+        : {};
+    serverCapabilities = {
+        ordinary_upload: caps.ordinary_upload === true,
+        file_delete: caps.file_delete === true,
+        clear_uploads: caps.clear_uploads === true,
+        advanced_upload: caps.advanced_upload === true || info?.advanced_upload === true,
+        smuggle: caps.smuggle === true,
+        note_http: caps.note_http === true,
+        note_delete: caps.note_delete === true,
+        note_clear: caps.note_clear === true,
+        websocket_notes: caps.websocket_notes === true,
+    };
+    serverSupportedMethods = Array.isArray(info?.supported_methods)
+        ? info.supported_methods.map(method => String(method).toUpperCase())
+        : [];
+    refreshCapabilityBoundControls();
+}
 
 function getAdvancedUploadCapability() {
     return {
@@ -834,8 +903,10 @@ async function checkServerMode() {
             }
             document.getElementById('browsePathInput').value = '/';
         }
-        setAdvancedUploadCapability(info.advanced_upload === true, { checked: true });
+        setServerCapabilitiesFromPing(info);
+        setAdvancedUploadCapability(isServerCapabilityEnabled('advanced_upload'), { checked: true });
     } catch (e) {
+        setServerCapabilitiesFromPing({});
         setAdvancedUploadCapability(false, { checked: true, checkFailed: true });
         console.log('Could not check server mode:', e);
     }

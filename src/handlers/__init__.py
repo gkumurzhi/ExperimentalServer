@@ -32,23 +32,25 @@ class HandlerMixin(
 
     def build_method_handlers(self) -> HandlerRegistry:
         """Build the canonical HTTP method registry for this handler set."""
+        features = self._feature_set()
         method_handlers = HandlerRegistry()
+        handlers = {
+            "GET": self.handle_get,
+            "HEAD": self.handle_head,
+            "POST": self.handle_post,
+            "PUT": self.handle_none,
+            "PATCH": self.handle_patch,
+            "DELETE": self.handle_delete,
+            "OPTIONS": self.handle_options,
+            "FETCH": self.handle_fetch,
+            "INFO": self.handle_info,
+            "PING": self.handle_ping,
+            "NONE": self.handle_none,
+            "NOTE": self.handle_note,
+            "SMUGGLE": self.handle_smuggle,
+        }
         method_handlers.register_many(
-            {
-                "GET": self.handle_get,
-                "HEAD": self.handle_head,
-                "POST": self.handle_post,
-                "PUT": self.handle_none,
-                "PATCH": self.handle_patch,
-                "DELETE": self.handle_delete,
-                "OPTIONS": self.handle_options,
-                "FETCH": self.handle_fetch,
-                "INFO": self.handle_info,
-                "PING": self.handle_ping,
-                "NONE": self.handle_none,
-                "NOTE": self.handle_note,
-                "SMUGGLE": self.handle_smuggle,
-            }
+            {method: handlers[method] for method in features.methods if method in handlers}
         )
         return method_handlers
 
@@ -61,7 +63,10 @@ class HandlerMixin(
         if handler:
             return handler(request)
 
-        if self._has_advanced_upload_payload(request):
+        if (
+            self._feature_set().allow_unknown_advanced_upload_methods
+            and self._has_advanced_upload_payload(request)
+        ):
             return self.handle_advanced_upload(request)
 
         return self._method_not_allowed(request.method)

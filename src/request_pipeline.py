@@ -18,6 +18,7 @@ class ResponseBuildArgs(TypedDict, total=False):
     """Parameters threaded into :class:`HTTPResponse` header building."""
 
     cors_origin: str | None
+    cors_allow_methods: str | None
     keep_alive: bool
     keep_alive_timeout: int
     keep_alive_max: int
@@ -114,6 +115,9 @@ class RequestPipeline:
                 self._send_direct_response(response, client_socket, build_args)
                 return False
             build_args["cors_origin"] = self._server._resolve_cors_origin(request)
+            cors_methods = getattr(self._server, "_cors_allow_methods_header", None)
+            if callable(cors_methods):
+                build_args["cors_allow_methods"] = cors_methods()
 
             use_keep_alive, remaining = self._server._resolve_keep_alive(request, request_num)
             build_args["keep_alive"] = use_keep_alive

@@ -272,7 +272,10 @@ function setRequestPathValue(path) {
 function syncRequestControlState() {
     const controlsDisabled = isRequestBusy || isRequestBatchRunning;
     requestMethodButtons.forEach(button => {
-        button.disabled = controlsDisabled;
+        const methodSupported = typeof isServerMethodSupported !== 'function'
+            || isServerMethodSupported(button.dataset.requestMethod);
+        button.disabled = controlsDisabled || !methodSupported;
+        button.dataset.capabilityAvailable = methodSupported ? 'true' : 'false';
     });
     if (requestRunAllBtnEl) {
         requestRunAllBtnEl.disabled = controlsDisabled;
@@ -558,6 +561,9 @@ function getRequestBatchPlan() {
         .map(button => {
             const method = button.dataset.requestMethod;
             if (!method) {
+                return null;
+            }
+            if (typeof isServerMethodSupported === 'function' && !isServerMethodSupported(method)) {
                 return null;
             }
             return {
@@ -1803,6 +1809,9 @@ async function buildRequestScenario(method, typedPath) {
 
 async function sendRequest(method) {
     if (!responseAreaEl) return;
+    if (typeof isServerMethodSupported === 'function' && !isServerMethodSupported(method)) {
+        throw new Error(`Method ${method} is disabled by the active server profile`);
+    }
 
     const typedPath = pathInputEl ? pathInputEl.value : '';
     const fallbackPath = normalizeRequestPath(typedPath, '/');

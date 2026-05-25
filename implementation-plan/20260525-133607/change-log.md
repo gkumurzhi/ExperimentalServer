@@ -29,3 +29,9 @@
 - Files changed: `src/cli.py`, `src/server.py`, `tests/test_cli.py`, `tests/test_security/test_auth.py`, `README.md`, `SECURITY.md`, `examples/docker/docker-compose.yml`, plan artifacts.
 - Verification: targeted CLI/auth/request-pipeline tests passed with 158 tests; `python tools/check_stale_docs.py`, `docker compose -f examples/docker/docker-compose.yml config`, `ruff check src tests`, `ruff format --check src tests`, isolated uv `mypy src`, and `git diff --check` passed. Direct `mypy` was unavailable in the active Python environment, so typecheck used `UV_PROJECT_ENVIRONMENT=/tmp/exphttp-stage005-venv uv run --extra lint mypy src`.
 - Report: `stage-reports/STAGE-005-20260525-181754.md`
+
+## 2026-05-25 19:24:21 MSK - STAGE-006
+- Status: CLOSED
+- Files changed: `src/features.py`, `src/server.py`, `src/cli.py`, `src/handlers/__init__.py`, `src/handlers/base.py`, `src/handlers/files.py`, `src/handlers/info.py`, `src/handlers/notepad.py`, `src/handlers/smuggle.py`, `src/http/cors.py`, `src/http/response.py`, `src/request_pipeline.py`, `src/data/static/ui/core.js`, `src/data/static/ui/upload.js`, `src/data/static/ui/files.js`, `src/data/static/ui/requests.js`, `src/data/static/ui/notepad.js`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_cli.py`, `tools/browser_smoke.py`, `README.md`, `API.md`, `SECURITY.md`, plan artifacts.
+- Verification: targeted + CLI regression suite passed with 245 tests; `python tools/browser_smoke.py`, `ruff check src tests tools`, focused `ruff format --check` for touched files, `python -m compileall -q src`, and `git diff --check` passed. Full format check still reports an unrelated pre-existing issue in `tools/close_plan_stages.py`; direct `mypy` is unavailable and isolated `uvx` mypy timed out while downloading.
+- Report: `stage-reports/STAGE-006-20260525-184508.md`

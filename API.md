@@ -27,6 +27,19 @@ below.
 
 ---
 
+## Feature Profiles
+
+`--profile` selects the method and capability surface advertised by `PING` and
+CORS and enforced by the handler registry.
+
+| Profile | Capability surface |
+|---|---|
+| `serve` | Read-only/static/file-inspection methods: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. |
+| `workspace` | `serve` plus ordinary upload methods (`POST`, `PUT`, `PATCH`, `NONE`) and single-file `DELETE`; destructive clears and lab methods are disabled. |
+| `lab` | Full experimental surface: advanced upload fallback, `SMUGGLE`, `NOTE`, notepad WebSocket, upload clear, and note clear. |
+
+---
+
 ## Request Framing and Caps
 
 The receive layer enforces protocol framing before handler dispatch:
@@ -272,6 +285,18 @@ PING / HTTP/1.1
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
   "access_scope": "uploads",
+  "profile": "lab",
+  "capabilities": {
+    "ordinary_upload": true,
+    "file_delete": true,
+    "clear_uploads": true,
+    "advanced_upload": true,
+    "smuggle": true,
+    "note_http": true,
+    "note_delete": true,
+    "note_clear": true,
+    "websocket_notes": true
+  },
   "advanced_upload": true,
   "metrics": {
     "uptime_seconds": 3600.5,
@@ -341,6 +366,10 @@ PING / HTTP/1.1
   }
 }
 ```
+
+The `profile` and `capabilities` fields are the source of truth for UI
+affordances, handler registration, CORS preflight methods, and WebSocket
+availability. `advanced_upload` is retained as a compatibility boolean.
 
 The response also includes the header `X-Ping-Response: pong`. The same
 metrics object is available as JSON from `GET /metrics`.

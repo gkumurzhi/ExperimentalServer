@@ -174,7 +174,8 @@ exphttp [опции]
 | `--open` | Открыть в браузере после запуска | выключен |
 | `--json-log` | Структурированный JSON формат логов | выключен |
 | `--cors-origin ORIGIN` | Разрешить CORS и browser-origin mutations для указанного origin | выключен |
-| `--advanced-upload` | Устаревший no-op для совместимости; продвинутая загрузка всегда включена | - |
+| `--profile {serve,workspace,lab}` | Набор возможностей сервера | `lab` |
+| `--advanced-upload` | Устаревший alias для `--profile lab` | - |
 | `--tls` | Включить HTTPS (самоподписный сертификат) | выключен |
 | `--cert FILE` | Путь к сертификату (PEM) | - |
 | `--key FILE` | Путь к приватному ключу (PEM) | - |
@@ -191,6 +192,17 @@ exphttp [опции]
 | `--auth-file FILE` | Включить Basic Auth из файла с одной строкой `user:password` | выключен |
 | `--auth random` | Сгенерировать случайные credentials в интерактивном терминале | - |
 | `--help` | Показать справку | - |
+
+### Профили возможностей
+
+| Профиль | Методы и возможности |
+|---------|----------------------|
+| `serve` | Только чтение: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. Загрузка, удаление, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
+| `workspace` | `serve` + обычная загрузка (`POST`, `PUT`, `PATCH`, `NONE`) и удаление отдельных файлов через `DELETE`. Очистка `uploads/`, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
+| `lab` | Совместимый экспериментальный режим: все методы, advanced upload, `SMUGGLE`, `NOTE`, WebSocket и операции очистки включены явно. |
+
+`PING` возвращает активный `profile`, `supported_methods` и карту
+`capabilities`; CORS preflight и браузерный UI используют эти же данные.
 
 ### Примеры запуска
 
@@ -253,6 +265,9 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth-file ./auth.txt -m 200
 | `NOTE` | Защищённый блокнот (ECDH + AES-256-GCM) | Только notes/ |
 | `SMUGGLE` | HTML Smuggling — генерация страницы со встроенным файлом | Только uploads/ |
 | Любой нестандартный метод с payload | Загрузка (продвинутая) через `d`/`data`, `X-D` или `?d=` | `uploads/` |
+
+Доступность методов зависит от `--profile`; таблица выше описывает полный
+набор режима `lab`.
 
 ### Заголовки ответов
 

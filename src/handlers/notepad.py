@@ -71,6 +71,10 @@ class NotepadHandlersMixin(BaseHandler):
         | NOTE /notes/{id}               | Load note          |
         | NOTE /notes/{id}?delete        | Delete note        |
         """
+        features = self._feature_set()
+        if not features.note_http:
+            return self._method_not_allowed(request.method)
+
         path = request.path
         query = request.query_string
 
@@ -88,6 +92,11 @@ class NotepadHandlersMixin(BaseHandler):
         # Route: /notes  (root)
         if clean == "notes" or clean == "notes/":
             if self._is_note_clear_request(request):
+                if not features.note_clear:
+                    return self._error_response(
+                        403,
+                        f"Clearing notes is disabled for the {features.profile} profile",
+                    )
                 return self._note_clear()
             if "list" in query:
                 return self._note_list()
@@ -101,6 +110,11 @@ class NotepadHandlersMixin(BaseHandler):
             if not is_valid_note_id(note_id):
                 return self._bad_request("Invalid note ID")
             if "delete" in query:
+                if not features.note_delete:
+                    return self._error_response(
+                        403,
+                        f"Deleting notes is disabled for the {features.profile} profile",
+                    )
                 return self._note_delete(note_id)
             return self._note_load(note_id)
 

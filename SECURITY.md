@@ -74,6 +74,9 @@ High-level assumptions:
 Advanced upload is a built-in transport convenience with optional payload
 obfuscation, not a replacement for TLS or authentication:
 
+- Advanced upload is enabled only by the `lab` feature profile. Prefer
+  `--profile serve` for read-only sharing and `--profile workspace` for normal
+  upload/delete workspaces.
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
 - Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`
@@ -92,6 +95,8 @@ When running the server outside a trusted lab:
   containers, and CI mount a secret-manager file containing one
   `user:password` line and pass it with `--auth-file`.
 - Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
+- Select the narrowest `--profile` that supports the workflow; avoid `lab` for
+  externally reachable services unless experimental methods are required.
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - Place behind a reverse proxy with rate limiting and request-size limits.
 - Configure an exact `--cors-origin` for a trusted browser UI; avoid
