@@ -11,7 +11,15 @@ from types import FrameType
 from typing import Any
 
 from . import ExperimentalHTTPServer, __version__
+from .handlers.smuggle import (
+    DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
+    DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
+    DEFAULT_SMUGGLE_TEMP_MAX_FILES,
+)
 from .http.io import DEFAULT_MAX_HEADER_SIZE
+from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES
+
+_MIB = 1024 * 1024
 
 
 def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Callable[[str], int]:
@@ -122,6 +130,53 @@ Custom HTTP methods:
         default=0,
         metavar="MB",
         help="Minimum free disk space to preserve while committing uploads in MB (default: 0)",
+    )
+    limits.add_argument(
+        "--note-storage-limit",
+        type=_bounded_int("note storage limit", minimum=0),
+        default=DEFAULT_MAX_NOTE_STORAGE_BYTES // _MIB,
+        metavar="MB",
+        help=(
+            "Aggregate encrypted notes/ blob quota in MB; 0 disables "
+            f"(default: {DEFAULT_MAX_NOTE_STORAGE_BYTES // _MIB})"
+        ),
+    )
+    limits.add_argument(
+        "--note-count-limit",
+        type=_bounded_int("note count limit", minimum=0),
+        default=DEFAULT_MAX_NOTES,
+        metavar="N",
+        help=f"Aggregate encrypted note count quota; 0 disables (default: {DEFAULT_MAX_NOTES})",
+    )
+    limits.add_argument(
+        "--smuggle-temp-age",
+        type=_bounded_int("SMUGGLE temp max age", minimum=0),
+        default=DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
+        metavar="SECONDS",
+        help=(
+            "Max age for retained SMUGGLE temp pages in seconds; 0 disables "
+            f"(default: {DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS})"
+        ),
+    )
+    limits.add_argument(
+        "--smuggle-temp-file-limit",
+        type=_bounded_int("SMUGGLE temp file limit", minimum=0),
+        default=DEFAULT_SMUGGLE_TEMP_MAX_FILES,
+        metavar="N",
+        help=(
+            "Max retained SMUGGLE temp page count; 0 disables "
+            f"(default: {DEFAULT_SMUGGLE_TEMP_MAX_FILES})"
+        ),
+    )
+    limits.add_argument(
+        "--smuggle-temp-storage-limit",
+        type=_bounded_int("SMUGGLE temp storage limit", minimum=0),
+        default=DEFAULT_SMUGGLE_TEMP_MAX_BYTES // _MIB,
+        metavar="MB",
+        help=(
+            "Max retained SMUGGLE temp page bytes in MB; 0 disables "
+            f"(default: {DEFAULT_SMUGGLE_TEMP_MAX_BYTES // _MIB})"
+        ),
     )
     limits.add_argument(
         "--max-header-size",
@@ -267,10 +322,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         "root_dir": args.dir,
         "max_upload_size": args.max_size * 1024 * 1024,
         "upload_storage_limit": (
-            args.upload_storage_limit * 1024 * 1024 if args.upload_storage_limit else None
+            args.upload_storage_limit * _MIB if args.upload_storage_limit else None
         ),
         "upload_file_limit": args.upload_file_limit or None,
-        "upload_reserved_free_space": args.upload_reserve_free * 1024 * 1024,
+        "upload_reserved_free_space": args.upload_reserve_free * _MIB,
+        "note_storage_limit": args.note_storage_limit * _MIB if args.note_storage_limit else None,
+        "note_count_limit": args.note_count_limit or None,
+        "smuggle_temp_max_age": args.smuggle_temp_age or None,
+        "smuggle_temp_file_limit": args.smuggle_temp_file_limit or None,
+        "smuggle_temp_storage_limit": (
+            args.smuggle_temp_storage_limit * _MIB if args.smuggle_temp_storage_limit else None
+        ),
         "max_header_size": args.max_header_size * 1024,
         "max_workers": args.workers,
         "quiet": args.quiet,

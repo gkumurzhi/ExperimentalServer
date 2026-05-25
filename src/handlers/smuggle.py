@@ -5,6 +5,9 @@ HTML Smuggling handler.
 import json
 import logging
 import secrets
+import time
+from dataclasses import dataclass
+from pathlib import Path
 
 from ..http import HTTPRequest, HTTPResponse
 from ..utils.captcha import generate_password_captcha
@@ -14,12 +17,54 @@ from .base import BaseHandler
 logger = logging.getLogger("httpserver")
 
 SMUGGLE_SOURCE_SIZE_LIMIT = 10 * 1024 * 1024
+DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS = 3600
+DEFAULT_SMUGGLE_TEMP_MAX_FILES = 32
+DEFAULT_SMUGGLE_TEMP_MAX_BYTES = 128 * 1024 * 1024
+
+
+@dataclass(frozen=True, slots=True)
+class SmuggleTempPolicy:
+    """Retention policy for generated one-shot SMUGGLE HTML artifacts."""
+
+    max_age_seconds: float | None = DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS
+    max_file_count: int | None = DEFAULT_SMUGGLE_TEMP_MAX_FILES
+    max_total_bytes: int | None = DEFAULT_SMUGGLE_TEMP_MAX_BYTES
+
+    def __post_init__(self) -> None:
+        if self.max_age_seconds is not None and self.max_age_seconds < 0:
+            raise ValueError("smuggle_temp_max_age must be at least 0")
+        if self.max_file_count is not None and self.max_file_count < 0:
+            raise ValueError("smuggle_temp_file_limit must be at least 0")
+        if self.max_total_bytes is not None and self.max_total_bytes < 0:
+            raise ValueError("smuggle_temp_storage_limit must be at least 0")
+
+
+@dataclass(frozen=True, slots=True)
+class SmuggleTempArtifact:
+    """Current generated SMUGGLE file metadata."""
+
+    path: Path
+    size: int
+    mtime: float
+
+
+@dataclass(frozen=True, slots=True)
+class SmuggleTempUsage:
+    """Current retained SMUGGLE temp usage."""
+
+    total_bytes: int
+    file_count: int
+
+
+class SmuggleTempQuotaExceeded(Exception):
+    """Raised when a generated SMUGGLE artifact cannot be retained."""
 
 
 class SmuggleHandlersMixin(BaseHandler):
     """Mixin with HTML Smuggling handler."""
 
     smuggle_source_size_limit = SMUGGLE_SOURCE_SIZE_LIMIT
+    smuggle_temp_policy: SmuggleTempPolicy
 
     # Temporary SMUGGLE files attribute (defined in server)
     _temp_smuggle_files: set[str]
@@ -79,17 +124,17 @@ class SmuggleHandlersMixin(BaseHandler):
             password_captcha=password_captcha,
         )
 
-        # Save HTML to a temp file in uploads
-        temp_name = f"smuggle_{secrets.token_hex(8)}.html"
-        temp_path = self.upload_dir / temp_name
-        with temp_path.open("w", encoding="utf-8") as f:
-            f.write(html)
-
-        # Register as temp file (will be deleted after serving)
-        with self._smuggle_lock:
-            self._temp_smuggle_files.add(str(temp_path))
+        try:
+            temp_path = self._write_smuggle_temp_html(html.encode("utf-8"))
+        except SmuggleTempQuotaExceeded as exc:
+            logger.warning("SMUGGLE temp artifact rejected by storage policy: %s", exc)
+            return self._error_response(507, str(exc))
+        except OSError as exc:
+            logger.error("SMUGGLE temp artifact write failed: %s", exc)
+            return self._error_response(500, "Failed to create SMUGGLE artifact")
 
         # Return URL to the temp file
+        temp_name = temp_path.name
         response = HTTPResponse(200)
         response.set_body(
             json.dumps(
@@ -112,6 +157,154 @@ class SmuggleHandlersMixin(BaseHandler):
         )
         upload_limit = int(getattr(self, "max_upload_size", configured_limit))
         return min(configured_limit, upload_limit)
+
+    def _smuggle_temp_policy(self) -> SmuggleTempPolicy:
+        """Return the effective generated-artifact retention policy."""
+        policy = getattr(self, "smuggle_temp_policy", None)
+        if isinstance(policy, SmuggleTempPolicy):
+            return policy
+        return SmuggleTempPolicy()
+
+    def _write_smuggle_temp_html(self, html_bytes: bytes) -> Path:
+        """Write and register a generated SMUGGLE artifact under retention limits."""
+        with self._smuggle_lock:
+            self._ensure_smuggle_temp_capacity_locked(len(html_bytes))
+            last_error: FileExistsError | None = None
+            for _attempt in range(64):
+                temp_path = self.upload_dir / f"smuggle_{secrets.token_hex(8)}.html"
+                try:
+                    with temp_path.open("xb") as output_file:
+                        output_file.write(html_bytes)
+                    self._temp_smuggle_files.add(str(temp_path))
+                    return temp_path
+                except FileExistsError as exc:
+                    last_error = exc
+                except OSError:
+                    temp_path.unlink(missing_ok=True)
+                    raise
+
+        raise FileExistsError("Could not reserve a SMUGGLE temp file") from last_error
+
+    def _ensure_smuggle_temp_capacity_locked(self, pending_bytes: int) -> None:
+        """Prune old artifacts and raise if a pending artifact still cannot fit."""
+        self._cleanup_smuggle_temp_artifacts_locked(pending_bytes=pending_bytes, pending_files=1)
+        usage = self._smuggle_temp_usage_locked()
+        policy = self._smuggle_temp_policy()
+
+        projected_files = usage.file_count + 1
+        if policy.max_file_count is not None and projected_files > policy.max_file_count:
+            raise SmuggleTempQuotaExceeded(
+                "SMUGGLE temp file count quota exceeded. "
+                f"Current files: {usage.file_count}; limit: {policy.max_file_count}."
+            )
+
+        projected_bytes = usage.total_bytes + pending_bytes
+        if policy.max_total_bytes is not None and projected_bytes > policy.max_total_bytes:
+            raise SmuggleTempQuotaExceeded(
+                "SMUGGLE temp storage quota exceeded. "
+                f"Current usage: {self.format_size(usage.total_bytes)}; "
+                f"attempted artifact: {self.format_size(pending_bytes)}; "
+                f"limit: {self.format_size(policy.max_total_bytes)}."
+            )
+
+    def cleanup_smuggle_temp_artifacts(self, *, remove_all: bool = False) -> int:
+        """Clean generated SMUGGLE artifacts and return the number removed."""
+        with self._smuggle_lock:
+            return self._cleanup_smuggle_temp_artifacts_locked(remove_all=remove_all)
+
+    def _cleanup_smuggle_temp_artifacts_locked(
+        self,
+        *,
+        pending_bytes: int = 0,
+        pending_files: int = 0,
+        remove_all: bool = False,
+    ) -> int:
+        """Apply age/count/byte retention to generated SMUGGLE files."""
+        artifacts = self._smuggle_temp_artifacts_locked()
+        policy = self._smuggle_temp_policy()
+        removed = 0
+
+        if remove_all:
+            for artifact in artifacts:
+                if self._remove_smuggle_temp_artifact_locked(artifact.path):
+                    removed += 1
+            return removed
+
+        max_age = policy.max_age_seconds
+        if max_age is not None:
+            now = time.time()
+            fresh_artifacts = []
+            for artifact in artifacts:
+                if now - artifact.mtime > max_age:
+                    if self._remove_smuggle_temp_artifact_locked(artifact.path):
+                        removed += 1
+                else:
+                    fresh_artifacts.append(artifact)
+            artifacts = fresh_artifacts
+
+        artifacts.sort(key=lambda artifact: artifact.mtime)
+        while artifacts and self._smuggle_temp_projection_exceeds_locked(
+            artifacts,
+            pending_bytes=pending_bytes,
+            pending_files=pending_files,
+        ):
+            artifact = artifacts.pop(0)
+            if self._remove_smuggle_temp_artifact_locked(artifact.path):
+                removed += 1
+
+        return removed
+
+    def _smuggle_temp_projection_exceeds_locked(
+        self,
+        artifacts: list[SmuggleTempArtifact],
+        *,
+        pending_bytes: int,
+        pending_files: int,
+    ) -> bool:
+        """Return True when retained artifacts plus pending file exceed policy."""
+        policy = self._smuggle_temp_policy()
+        file_count = len(artifacts) + pending_files
+        total_bytes = sum(artifact.size for artifact in artifacts) + pending_bytes
+        return (policy.max_file_count is not None and file_count > policy.max_file_count) or (
+            policy.max_total_bytes is not None and total_bytes > policy.max_total_bytes
+        )
+
+    def _smuggle_temp_usage_locked(self) -> SmuggleTempUsage:
+        """Return current generated SMUGGLE temp usage."""
+        artifacts = self._smuggle_temp_artifacts_locked()
+        return SmuggleTempUsage(
+            total_bytes=sum(artifact.size for artifact in artifacts),
+            file_count=len(artifacts),
+        )
+
+    def _smuggle_temp_artifacts_locked(self) -> list[SmuggleTempArtifact]:
+        """Return existing generated SMUGGLE temp artifacts."""
+        artifacts: list[SmuggleTempArtifact] = []
+        for path in self.upload_dir.glob("smuggle_*.html"):
+            try:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                stat_result = path.stat()
+            except OSError:
+                self._temp_smuggle_files.discard(str(path))
+                continue
+            artifacts.append(
+                SmuggleTempArtifact(
+                    path=path,
+                    size=stat_result.st_size,
+                    mtime=stat_result.st_mtime,
+                )
+            )
+        return artifacts
+
+    def _remove_smuggle_temp_artifact_locked(self, path: Path) -> bool:
+        """Remove one generated artifact and unregister it."""
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            return False
+        self._temp_smuggle_files.discard(str(path))
+        return True
 
     def _smuggle_too_large_response(self, source_size: int, source_size_limit: int) -> HTTPResponse:
         """Build a stable JSON 413 response for over-limit SMUGGLE sources."""

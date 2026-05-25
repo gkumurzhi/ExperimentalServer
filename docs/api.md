@@ -41,6 +41,13 @@ The receive layer enforces protocol framing before handler dispatch:
   `--upload-storage-limit MB`, `--upload-file-limit N`, and
   `--upload-reserve-free MB` limits. A value of `0` disables each aggregate
   limit.
+- Encrypted Notepad blobs under `notes/` are capped by
+  `--note-storage-limit MB` and `--note-count-limit N` (`256` MiB and `1000`
+  notes by default). A value of `0` disables each aggregate Notepad limit.
+- Generated one-shot SMUGGLE pages are retained under `uploads/` only within
+  `--smuggle-temp-age SECONDS`, `--smuggle-temp-file-limit N`, and
+  `--smuggle-temp-storage-limit MB` (`3600` seconds, `32` files, and `128` MiB
+  by default). A value of `0` disables the corresponding retention limit.
 - `Transfer-Encoding` is unsupported and rejected at the receive layer because
   the server does not decode chunked request bodies.
 - Invalid, negative, or conflicting duplicate `Content-Length` values are
@@ -379,12 +386,15 @@ shows a server-generated password CAPTCHA on that page.
 `X-Smuggle-URL` contains the same relative path as the JSON `url` field. A
 follow-up `GET` to that path returns the one-shot HTML page (`text/html`) with
 the file data embedded as base64. Temporary `smuggle_*.html` files are deleted
-after they are served by `GET`, `HEAD`, or a matching conditional request; any
-leftover temporary pages are also cleaned up when the server starts.
+after they are served by `GET`, `HEAD`, or a matching conditional request. The
+server also prunes retained temporary pages by age, count, and generated HTML
+bytes before admitting a new SMUGGLE page; leftover temporary pages are cleaned
+up when the server starts.
 
 SMUGGLE source files are capped before HTML generation. The effective cap is
 the lower of the SMUGGLE source cap (10 MiB by default) and the configured
-upload limit.
+upload limit. Generated-page retention failures return `507` JSON errors and do
+not publish a temporary URL.
 
 **Too large response (413):**
 ```json
@@ -412,12 +422,14 @@ Current note keys are session-bound, not durably recoverable. The browser UI and
 
 Notepad save requests have a Notepad-specific encrypted blob limit: `data`
 must decode to at most 1 MiB (1,048,576 bytes), which is at most 1,398,104
-base64 characters. This application limit is enforced for both `NOTE /notes`
-and WebSocket `save` messages, independent of generic transport caps such as
-HTTP `--max-size` and the WebSocket frame limit. A lower transport cap can
-still reject the request before Notepad validation runs. Notepad over-limit
-saves return `413` HTTP JSON errors or WebSocket `saved` operation errors with
-`status: 413`; they do not write note files.
+base64 characters. Aggregate encrypted blobs are also capped by
+`--note-storage-limit MB` and `--note-count-limit N` before any note temp files
+are created. This application limit is enforced for both `NOTE /notes` and
+WebSocket `save` messages, independent of generic transport caps such as HTTP
+`--max-size` and the WebSocket frame limit. A lower transport cap can still
+reject the request before Notepad validation runs. Per-note over-limit saves
+return `413`; aggregate quota failures return `507`. Both HTTP and WebSocket
+errors leave existing note files unchanged and do not write partial note state.
 
 ### NOTE /notes/key
 
@@ -499,9 +511,15 @@ NOTE /notes HTTP/1.1
       "size": 256
     }
   ],
-  "count": 1
+  "count": 1,
+  "limit": 1000,
+  "truncated": false
 }
 ```
+
+Listing work is bounded by the configured list limit, which follows
+`--note-count-limit` by default and falls back to `1000` when note count quota is
+disabled.
 
 ---
 
@@ -535,7 +553,7 @@ X-Session-Id: <sessionId>   (optional, audit-only; ignored when expired)
 }
 ```
 
-**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `413` Encrypted note data too large, `501` Secure Notepad crypto backend unavailable
+**Status codes:** `201` Created, `200` Updated, `400` Bad request, `404` Note not found (for update), `413` Encrypted note data too large, `507` Notepad aggregate quota exceeded, `501` Secure Notepad crypto backend unavailable
 
 ---
 

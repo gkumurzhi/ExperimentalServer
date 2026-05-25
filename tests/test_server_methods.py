@@ -4,6 +4,7 @@ import base64
 import gzip
 import json
 import logging
+import os
 import ssl
 import struct
 import threading
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin
+from src.handlers.smuggle import SmuggleTempPolicy
 from src.http import HTTPRequest, HTTPResponse
 from src.security.auth import AuthRateLimiter, BasicAuthenticator
 from src.server import ExperimentalHTTPServer
@@ -1217,6 +1219,135 @@ class TestServerHelpers:
         assert temp_path.exists()
         assert str(temp_path) in server._temp_smuggle_files
         assert "small.txt" in temp_path.read_text(encoding="utf-8")
+
+    def test_smuggle_temp_cleanup_removes_artifacts_over_max_age(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=10,
+            max_file_count=None,
+            max_total_bytes=None,
+        )
+        old_temp = server.upload_dir / "smuggle_old.html"
+        fresh_temp = server.upload_dir / "smuggle_fresh.html"
+        old_temp.write_text("old", encoding="utf-8")
+        fresh_temp.write_text("fresh", encoding="utf-8")
+        os.utime(old_temp, (80, 80))
+        os.utime(fresh_temp, (95, 95))
+        server._temp_smuggle_files.update({str(old_temp), str(fresh_temp)})
+        monkeypatch.setattr("src.handlers.smuggle.time.time", lambda: 100.0)
+
+        removed = server.cleanup_smuggle_temp_artifacts()
+
+        assert removed == 1
+        assert not old_temp.exists()
+        assert fresh_temp.exists()
+        assert str(old_temp) not in server._temp_smuggle_files
+        assert str(fresh_temp) in server._temp_smuggle_files
+
+    def test_smuggle_temp_cleanup_prunes_oldest_over_file_limit(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=None,
+            max_file_count=1,
+            max_total_bytes=None,
+        )
+        old_temp = server.upload_dir / "smuggle_old.html"
+        new_temp = server.upload_dir / "smuggle_new.html"
+        old_temp.write_text("old", encoding="utf-8")
+        new_temp.write_text("new", encoding="utf-8")
+        os.utime(old_temp, (80, 80))
+        os.utime(new_temp, (90, 90))
+        server._temp_smuggle_files.update({str(old_temp), str(new_temp)})
+
+        removed = server.cleanup_smuggle_temp_artifacts()
+
+        assert removed == 1
+        assert not old_temp.exists()
+        assert new_temp.exists()
+        assert str(old_temp) not in server._temp_smuggle_files
+        assert str(new_temp) in server._temp_smuggle_files
+
+    def test_smuggle_temp_cleanup_prunes_oldest_over_byte_limit(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=None,
+            max_file_count=None,
+            max_total_bytes=5,
+        )
+        old_temp = server.upload_dir / "smuggle_old.html"
+        new_temp = server.upload_dir / "smuggle_new.html"
+        old_temp.write_bytes(b"1234")
+        new_temp.write_bytes(b"5678")
+        os.utime(old_temp, (80, 80))
+        os.utime(new_temp, (90, 90))
+        server._temp_smuggle_files.update({str(old_temp), str(new_temp)})
+
+        removed = server.cleanup_smuggle_temp_artifacts()
+
+        assert removed == 1
+        assert not old_temp.exists()
+        assert new_temp.exists()
+        assert str(old_temp) not in server._temp_smuggle_files
+        assert str(new_temp) in server._temp_smuggle_files
+
+    def test_smuggle_rejects_temp_artifact_over_byte_limit_without_partial_file(
+        self,
+        server,
+        upload_dir,
+    ):
+        server.smuggle_source_size_limit = 64
+        server.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=None,
+            max_file_count=10,
+            max_total_bytes=1,
+        )
+        source_path = upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+
+        assert response.status_code == 507
+        body = json.loads(response.body)
+        assert body["status"] == 507
+        assert "SMUGGLE temp storage quota exceeded" in body["error"]
+        assert "X-Smuggle-URL" not in response.headers
+        assert server._temp_smuggle_files == set()
+        assert list(upload_dir.glob("smuggle_*.html")) == []
+
+    def test_smuggle_generation_prunes_existing_temp_artifact_for_file_limit(
+        self,
+        server,
+        upload_dir,
+    ):
+        server.smuggle_source_size_limit = 64
+        server.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=None,
+            max_file_count=1,
+            max_total_bytes=None,
+        )
+        old_temp = upload_dir / "smuggle_old.html"
+        old_temp.write_text("old", encoding="utf-8")
+        os.utime(old_temp, (80, 80))
+        server._temp_smuggle_files.add(str(old_temp))
+        source_path = upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        temp_path = upload_dir / body["url"].removeprefix("/uploads/")
+        assert not old_temp.exists()
+        assert temp_path.exists()
+        assert str(old_temp) not in server._temp_smuggle_files
+        assert server._temp_smuggle_files == {str(temp_path)}
 
     def test_smuggle_temp_get_streams_and_cleans_up_without_full_read(
         self,

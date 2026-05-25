@@ -156,6 +156,11 @@ exphttp [опции]
 | `--upload-storage-limit MB` | Общий лимит размера `uploads/` в MB (`0` = выключен) | `0` |
 | `--upload-file-limit N` | Общий лимит количества файлов в `uploads/` (`0` = выключен) | `0` |
 | `--upload-reserve-free MB` | Минимум свободного места на диске при commit загрузки в MB | `0` |
+| `--note-storage-limit MB` | Общий лимит encrypted blobs в `notes/` (`0` = выключен) | `256` |
+| `--note-count-limit N` | Общий лимит количества заметок (`0` = выключен) | `1000` |
+| `--smuggle-temp-age SECONDS` | Максимальный возраст временных SMUGGLE HTML (`0` = выключен) | `3600` |
+| `--smuggle-temp-file-limit N` | Лимит количества временных SMUGGLE HTML (`0` = выключен) | `32` |
+| `--smuggle-temp-storage-limit MB` | Лимит размера временных SMUGGLE HTML (`0` = выключен) | `128` |
 | `--max-header-size KB` | Макс. размер HTTP request headers в KiB | `64` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
@@ -560,6 +565,7 @@ curl http://localhost:8080/uploads/smuggle_0123abcd4567ef89.html -o smuggle.html
 
 - Временные HTML-файлы (`smuggle_*.html`) удаляются после первого GET/HEAD-запроса или совпавшего conditional-запроса
 - При перезапуске сервера все оставшиеся `smuggle_*.html` в `uploads/` очищаются автоматически
+- Перед созданием новой страницы сервер применяет retention policy для временных SMUGGLE HTML по возрасту, количеству файлов и общему размеру; если место освободить нельзя, возвращается JSON `507` без временного URL
 - Исходный файл для SMUGGLE ограничен меньшим из лимита SMUGGLE (по умолчанию 10 MiB) и общего лимита загрузки; превышение возвращает JSON `413` без создания временной HTML-страницы
 
 ## Утилита расшифровки
@@ -739,8 +745,10 @@ print(response.json())
 - **Лимиты запросов и диска** — `--max-header-size` для заголовков,
   `--max-size` для тела одного запроса, опциональные
   `--upload-storage-limit`, `--upload-file-limit` и `--upload-reserve-free`
-  для aggregate quota `uploads/`, отдельный 1 MiB decoded limit для Secure
-  Notepad blobs
+  для aggregate quota `uploads/`, `--note-storage-limit` и
+  `--note-count-limit` для encrypted blobs в `notes/`, отдельный 1 MiB decoded
+  limit для Secure Notepad blobs, а также age/count/byte retention для
+  временных SMUGGLE HTML
 - **Скрытые файлы** — любые path-сегменты с leading dot, включая dotfiles в `uploads/`, недоступны через GET и INFO
 - **User content hardening** — загруженные HTML/SVG отдаются как attachment, а ответы получают `X-Content-Type-Options: nosniff`
 - **CSP для UI** — встроенный HTML ограничивает scripts до `'self'`; inline
@@ -769,6 +777,10 @@ XOR-шифрование используется для **обфускации*
 - **Max upload request**: 100 MB (по умолчанию)
 - **Upload storage quota**: unlimited по умолчанию; настраивается через
   `--upload-storage-limit`, `--upload-file-limit`, `--upload-reserve-free`
+- **Notepad storage quota**: 256 MB и 1000 заметок по умолчанию; `0`
+  отключает соответствующий aggregate limit
+- **SMUGGLE temp retention**: 3600 секунд, 32 файла и 128 MB по умолчанию;
+  `0` отключает соответствующий retention limit
 - **TLS**: TLS 1.2+ с ECDHE+AESGCM шифрами
 - **Версия**: 2.0.0
 

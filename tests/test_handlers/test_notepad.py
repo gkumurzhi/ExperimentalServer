@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin
-from src.notepad_service import max_note_data_b64_chars
+from src.notepad_service import NoteStoragePolicy, max_note_data_b64_chars
 from src.security.keys import HAS_ECDH, ECDHKeyManager
 from tests.conftest import make_request
 
@@ -320,6 +320,73 @@ class TestNotepadSave:
         assert not meta_path.exists()
         assert list(server.notes_dir.iterdir()) == []
 
+    def test_create_rejects_note_count_quota_without_partial_state(self, server):
+        server.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=None,
+            max_note_count=1,
+            max_listed_notes=1,
+        )
+        first = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("First", b"one"))
+        )
+        first_id = json.loads(first.body)["id"]
+
+        second = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("Second", b"two"))
+        )
+
+        assert second.status_code == 507
+        data = json.loads(second.body)
+        assert data["status"] == 507
+        assert "note count quota exceeded" in data["error"]
+        assert sorted(path.name for path in server.notes_dir.iterdir()) == [
+            f"{first_id}.enc",
+            f"{first_id}.meta.json",
+        ]
+
+    def test_create_rejects_note_byte_quota_without_partial_state(self, server):
+        server.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=4,
+            max_note_count=10,
+            max_listed_notes=10,
+        )
+
+        response = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("Too Large", b"12345"))
+        )
+
+        assert response.status_code == 507
+        data = json.loads(response.body)
+        assert data["status"] == 507
+        assert "Notepad storage quota exceeded" in data["error"]
+        assert list(server.notes_dir.iterdir()) == []
+
+    def test_update_rejects_note_byte_quota_without_replacing_existing_note(self, server):
+        server.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=4,
+            max_note_count=10,
+            max_listed_notes=10,
+        )
+        created = server.handle_note(
+            make_request("NOTE", "/notes", body=_make_note_payload("Original", b"1234"))
+        )
+        note_id = json.loads(created.body)["id"]
+        enc_path = server.notes_dir / f"{note_id}.enc"
+        meta_path = server.notes_dir / f"{note_id}.meta.json"
+        original_meta = meta_path.read_text(encoding="utf-8")
+
+        response = server.handle_note(
+            make_request(
+                "NOTE",
+                "/notes",
+                body=_make_note_payload("Too Large", b"12345", note_id=note_id),
+            )
+        )
+
+        assert response.status_code == 507
+        assert enc_path.read_bytes() == b"1234"
+        assert meta_path.read_text(encoding="utf-8") == original_meta
+
 
 # ── List tests ─────────────────────────────────────────────────────
 
@@ -358,6 +425,37 @@ class TestNotepadList:
         assert resp.status_code == 200
         data = json.loads(resp.body)
         assert "notes" in data
+
+    def test_list_is_bounded_by_policy_limit(self, server, monkeypatch):
+        server.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=None,
+            max_note_count=None,
+            max_listed_notes=2,
+        )
+        for suffix in ("a", "b", "c"):
+            note_id = suffix * 32
+            (server.notes_dir / f"{note_id}.enc").write_bytes(suffix.encode())
+
+        service = server._get_notepad_service()
+        original_note_record = service._note_record
+        note_record_calls: list[str] = []
+
+        def tracked_note_record(note_id: str, enc_path: Path):
+            note_record_calls.append(note_id)
+            if len(note_record_calls) > 2:
+                pytest.fail("bounded list should not build summaries past the limit")
+            return original_note_record(note_id, enc_path)
+
+        monkeypatch.setattr(service, "_note_record", tracked_note_record)
+
+        resp = server.handle_note(make_request("NOTE", "/notes?list"))
+
+        assert resp.status_code == 200
+        data = json.loads(resp.body)
+        assert data["count"] == 2
+        assert data["limit"] == 2
+        assert data["truncated"] is True
+        assert len(note_record_calls) == 2
 
 
 # ── Load tests ─────────────────────────────────────────────────────

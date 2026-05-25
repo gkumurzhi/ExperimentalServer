@@ -27,6 +27,7 @@ from ..http import HTTPRequest, HTTPResponse
 from ..notepad_service import (
     NotepadService,
     NotepadServiceError,
+    NoteStoragePolicy,
     SaveNoteRequest,
     is_valid_note_id,
 )
@@ -52,6 +53,7 @@ class NotepadHandlersMixin(BaseHandler):
     # Set by ExperimentalHTTPServer.__init__
     _notes_lock: threading.Lock
     _notepad_service: NotepadService | None
+    note_storage_policy: NoteStoragePolicy
 
     # ── public entry point ────────────────────────────────────────
 
@@ -183,6 +185,7 @@ class NotepadHandlersMixin(BaseHandler):
                 self.notes_dir,
                 self._notes_lock,
                 session_exists=session_exists,
+                storage_policy=getattr(self, "note_storage_policy", NoteStoragePolicy()),
             )
             self._notepad_service = service
         return service

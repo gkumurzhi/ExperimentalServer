@@ -61,6 +61,11 @@ class TestCLIParser:
         assert args.upload_storage_limit == 0
         assert args.upload_file_limit == 0
         assert args.upload_reserve_free == 0
+        assert args.note_storage_limit == 256
+        assert args.note_count_limit == 1000
+        assert args.smuggle_temp_age == 3600
+        assert args.smuggle_temp_file_limit == 32
+        assert args.smuggle_temp_storage_limit == 128
         assert args.max_header_size == 64
         assert args.workers == 10
         assert args.cors_origin == ""
@@ -88,6 +93,11 @@ class TestCLIParser:
             ["--upload-storage-limit", "-1"],
             ["--upload-file-limit", "-1"],
             ["--upload-reserve-free", "-1"],
+            ["--note-storage-limit", "-1"],
+            ["--note-count-limit", "-1"],
+            ["--smuggle-temp-age", "-1"],
+            ["--smuggle-temp-file-limit", "-1"],
+            ["--smuggle-temp-storage-limit", "-1"],
             ["--max-header-size", "0"],
             ["--max-header-size", "-1"],
             ["--workers", "0"],
@@ -240,6 +250,16 @@ class TestCLIMain:
                 "25",
                 "--upload-reserve-free",
                 "500",
+                "--note-storage-limit",
+                "128",
+                "--note-count-limit",
+                "50",
+                "--smuggle-temp-age",
+                "120",
+                "--smuggle-temp-file-limit",
+                "5",
+                "--smuggle-temp-storage-limit",
+                "32",
                 "--max-header-size",
                 "128",
                 "-w",
@@ -258,6 +278,11 @@ class TestCLIMain:
             "upload_storage_limit": 1000 * 1024 * 1024,
             "upload_file_limit": 25,
             "upload_reserved_free_space": 500 * 1024 * 1024,
+            "note_storage_limit": 128 * 1024 * 1024,
+            "note_count_limit": 50,
+            "smuggle_temp_max_age": 120,
+            "smuggle_temp_file_limit": 5,
+            "smuggle_temp_storage_limit": 32 * 1024 * 1024,
             "max_header_size": 128 * 1024,
             "max_workers": 20,
             "quiet": True,
@@ -469,11 +494,22 @@ class TestServerConstructorValidation:
             upload_storage_limit=0,
             upload_file_limit=0,
             upload_reserved_free_space=0,
+            note_storage_limit=0,
+            note_count_limit=0,
+            smuggle_temp_max_age=0,
+            smuggle_temp_file_limit=0,
+            smuggle_temp_storage_limit=0,
         )
 
         assert server.upload_storage_policy.max_total_bytes is None
         assert server.upload_storage_policy.max_file_count is None
         assert server.upload_storage_policy.reserved_free_bytes == 0
+        assert server.note_storage_policy.max_total_bytes is None
+        assert server.note_storage_policy.max_note_count is None
+        assert server.note_storage_policy.max_listed_notes == 1000
+        assert server.smuggle_temp_policy.max_age_seconds is None
+        assert server.smuggle_temp_policy.max_file_count is None
+        assert server.smuggle_temp_policy.max_total_bytes is None
 
     @pytest.mark.parametrize(
         ("kwargs", "message"),
@@ -488,6 +524,17 @@ class TestServerConstructorValidation:
             (
                 {"upload_reserved_free_space": -1},
                 "upload_reserved_free_space must be at least 0",
+            ),
+            ({"note_storage_limit": -1}, "note_storage_limit must be at least 0"),
+            ({"note_count_limit": -1}, "note_count_limit must be at least 0"),
+            ({"smuggle_temp_max_age": -1}, "smuggle_temp_max_age must be at least 0"),
+            (
+                {"smuggle_temp_file_limit": -1},
+                "smuggle_temp_file_limit must be at least 0",
+            ),
+            (
+                {"smuggle_temp_storage_limit": -1},
+                "smuggle_temp_storage_limit must be at least 0",
             ),
             ({"max_header_size": 0}, "max_header_size must be greater than 0"),
             ({"max_header_size": -1}, "max_header_size must be greater than 0"),

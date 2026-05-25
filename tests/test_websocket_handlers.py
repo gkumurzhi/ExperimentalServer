@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from src.handlers import HandlerMixin, NotepadHandlersMixin
-from src.notepad_service import max_note_data_b64_chars
+from src.notepad_service import NoteStoragePolicy, max_note_data_b64_chars
 from src.security.keys import HAS_ECDH
 from src.server import ExperimentalHTTPServer
 from src.websocket import _MAX_FRAME_SIZE, WS_CLOSE, WS_TEXT, build_ws_frame, parse_ws_frame
@@ -427,6 +427,42 @@ class TestWSSave:
         assert msg["type"] == "list"
         assert msg["count"] == 1
         assert msg["notes"][0]["title"] == "Listed"
+
+    def test_save_rejects_note_count_quota_with_stable_error(self, ws_server, mock_socket):
+        ws_server.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=None,
+            max_note_count=1,
+            max_listed_notes=1,
+        )
+        first_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "First",
+                "data": base64.b64encode(b"one").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, first_payload)
+        first_id = mock_socket.last_json["id"]
+
+        second_payload = json.dumps(
+            {
+                "type": "save",
+                "opId": "quota-op-1",
+                "title": "Second",
+                "data": base64.b64encode(b"two").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, second_payload)
+
+        msg = mock_socket.last_json
+        assert msg["type"] == "saved"
+        assert msg["opId"] == "quota-op-1"
+        assert msg["status"] == 507
+        assert "note count quota exceeded" in msg["error"]
+        assert sorted(path.name for path in ws_server.notes_dir.iterdir()) == [
+            f"{first_id}.enc",
+            f"{first_id}.meta.json",
+        ]
 
 
 # ── Load tests ────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
 | STAGE-001 | CLOSED | HIGH | Upload storage policy and atomic commits | 2026-05-25 14:09:57 MSK | Upload quota policy, atomic publish, CLI/docs, and regression tests completed | `stage-reports/STAGE-001-20260525-134934.md` |
-| STAGE-002 | OPEN | HIGH | Notes and SMUGGLE storage policy | - | - | - |
+| STAGE-002 | CLOSED | HIGH | Notes and SMUGGLE storage policy | 2026-05-25 14:12:26 MSK | Notepad aggregate quotas, bounded listing, SMUGGLE temp retention, CLI/docs, and regression tests completed | `stage-reports/STAGE-002-20260525-141226.md` |
 | STAGE-003 | OPEN | HIGH | In-flight body memory budget | - | - | - |
 | STAGE-004 | OPEN | HIGH | Slow body and transfer deadlines | - | - | - |
 | STAGE-005 | OPEN | HIGH | Auth secret files and auth invariants | - | - | - |

@@ -19,6 +19,8 @@ logger = logging.getLogger("httpserver")
 
 NOTE_ID_LENGTH = 32
 MAX_NOTE_ENCRYPTED_BLOB_BYTES = 1024 * 1024
+DEFAULT_MAX_NOTES = 1000
+DEFAULT_MAX_NOTE_STORAGE_BYTES = 256 * 1024 * 1024
 
 
 def max_note_data_b64_chars() -> int:
@@ -34,11 +36,56 @@ def _note_blob_limit_label() -> str:
     return f"{MAX_NOTE_ENCRYPTED_BLOB_BYTES} bytes"
 
 
+def _format_note_bytes(size: int) -> str:
+    """Return a compact human-readable byte count for note quota messages."""
+    fsize = float(size)
+    for unit in ("B", "KB", "MB", "GB"):
+        if fsize < 1024:
+            return f"{fsize:.1f} {unit}"
+        fsize /= 1024
+    return f"{fsize:.1f} TB"
+
+
 def is_valid_note_id(note_id: str) -> bool:
     """Return ``True`` when *note_id* matches the stored-note identifier format."""
     return 1 <= len(note_id) <= NOTE_ID_LENGTH and all(
         char in "0123456789abcdef" for char in note_id
     )
+
+
+@dataclass(frozen=True, slots=True)
+class NoteStoragePolicy:
+    """Aggregate encrypted-note storage and listing limits."""
+
+    max_total_bytes: int | None = DEFAULT_MAX_NOTE_STORAGE_BYTES
+    max_note_count: int | None = DEFAULT_MAX_NOTES
+    max_listed_notes: int = DEFAULT_MAX_NOTES
+
+    def __post_init__(self) -> None:
+        if self.max_total_bytes is not None and self.max_total_bytes < 0:
+            raise ValueError("note_storage_limit must be at least 0")
+        if self.max_note_count is not None and self.max_note_count < 0:
+            raise ValueError("note_count_limit must be at least 0")
+        if self.max_listed_notes <= 0:
+            raise ValueError("note_list_limit must be greater than 0")
+
+    def describe_limit(self) -> str:
+        """Return a short human-readable description for startup output."""
+        parts: list[str] = []
+        if self.max_total_bytes is not None:
+            parts.append(f"max {_format_note_bytes(self.max_total_bytes)}")
+        if self.max_note_count is not None:
+            parts.append(f"max {self.max_note_count} notes")
+        parts.append(f"list {self.max_listed_notes}")
+        return ", ".join(parts)
+
+
+@dataclass(frozen=True, slots=True)
+class NoteStorageUsage:
+    """Current encrypted-note storage usage."""
+
+    total_bytes: int
+    note_count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,12 +137,16 @@ class ListNotesResult:
     """Successful list-notes result."""
 
     notes: list[NoteSummary]
+    limit: int
+    truncated: bool
 
     def to_dict(self) -> dict[str, object]:
         """Serialize the list result for JSON responses."""
         return {
             "notes": [note.to_dict() for note in self.notes],
             "count": len(self.notes),
+            "limit": self.limit,
+            "truncated": self.truncated,
         }
 
 
@@ -164,10 +215,12 @@ class NotepadService:
         notes_lock: threading.Lock,
         *,
         session_exists: Callable[[str], bool] | None = None,
+        storage_policy: NoteStoragePolicy | None = None,
     ) -> None:
         self._notes_dir = notes_dir
         self._notes_lock = notes_lock
         self._session_exists = session_exists
+        self._storage_policy = storage_policy or NoteStoragePolicy()
 
     @staticmethod
     def _write_note_temp_bytes(
@@ -336,19 +389,8 @@ class NotepadService:
                 ),
             )
 
-        note_id = request.note_id
-        is_new = False
-        if note_id:
-            _notes_dir, enc_path, meta_path = self._resolve_note_paths(note_id)
-            if not enc_path.exists():
-                if request.create_if_missing:
-                    is_new = True
-                else:
-                    raise NotepadServiceError(404, "Note not found for update")
-        else:
-            note_id = secrets.token_hex(16)
-            is_new = True
-            _notes_dir, enc_path, meta_path = self._resolve_note_paths(note_id)
+        note_id = request.note_id or secrets.token_hex(16)
+        _notes_dir, enc_path, meta_path = self._resolve_note_paths(note_id)
 
         now = datetime.now(timezone.utc).isoformat()
         meta: dict[str, object] = {
@@ -359,11 +401,6 @@ class NotepadService:
             "size": len(raw_data),
         }
 
-        if not is_new and meta_path.exists():
-            existing = self._note_record(note_id, enc_path)
-            if existing.created_at:
-                meta["created_at"] = existing.created_at
-
         if request.session_id and self._session_exists is not None:
             if self._session_exists(request.session_id):
                 meta["session"] = True
@@ -371,6 +408,30 @@ class NotepadService:
                 logger.debug("Ignoring unknown or expired note session: %s", request.session_id)
 
         with self._notes_lock:
+            is_new = False
+            if request.note_id:
+                if not enc_path.exists():
+                    if request.create_if_missing:
+                        is_new = True
+                    else:
+                        raise NotepadServiceError(404, "Note not found for update")
+            else:
+                is_new = True
+                while enc_path.exists():
+                    note_id = secrets.token_hex(16)
+                    _notes_dir, enc_path, meta_path = self._resolve_note_paths(note_id)
+                    meta["id"] = note_id
+
+            if not is_new and meta_path.exists():
+                existing = self._note_record(note_id, enc_path)
+                if existing.created_at:
+                    meta["created_at"] = existing.created_at
+
+            self._check_note_storage_accepts(
+                note_id,
+                len(raw_data),
+                replacing_existing=not is_new,
+            )
             try:
                 self._write_note_pair_atomic(note_id, enc_path, meta_path, raw_data, meta)
             except Exception as exc:
@@ -388,17 +449,24 @@ class NotepadService:
         return SaveNoteResult(note=saved_note, created=is_new)
 
     def list_notes(self) -> ListNotesResult:
-        """Return all notes sorted by ``updated_at`` descending."""
+        """Return a bounded note list sorted by ``updated_at`` descending."""
         notes_dir = self._get_notes_dir()
         notes: list[NoteSummary] = []
+        limit = self._storage_policy.max_listed_notes
+        truncated = False
+        examined = 0
 
         for enc_path in notes_dir.glob("*.enc"):
+            if examined >= limit:
+                truncated = True
+                break
+            examined += 1
             note_id = enc_path.stem
             if is_valid_note_id(note_id):
                 notes.append(self._note_record(note_id, enc_path))
 
         notes.sort(key=lambda note: note.updated_at, reverse=True)
-        return ListNotesResult(notes=notes)
+        return ListNotesResult(notes=notes, limit=limit, truncated=truncated)
 
     def load_note(self, note_id: str) -> LoadNoteResult:
         """Load a note's ciphertext and metadata."""
@@ -480,6 +548,59 @@ class NotepadService:
         notes_dir = self._notes_dir
         notes_dir.mkdir(parents=True, exist_ok=True)
         return notes_dir
+
+    def _current_note_usage(self, *, exclude_note_id: str | None = None) -> NoteStorageUsage:
+        """Return encrypted-note usage, optionally excluding one note being replaced."""
+        notes_dir = self._get_notes_dir()
+        total_bytes = 0
+        note_count = 0
+
+        for enc_path in notes_dir.glob("*.enc"):
+            note_id = enc_path.stem
+            if not is_valid_note_id(note_id) or note_id == exclude_note_id:
+                continue
+            try:
+                if not enc_path.is_file() or enc_path.is_symlink():
+                    continue
+                total_bytes += enc_path.stat().st_size
+                note_count += 1
+            except OSError:
+                continue
+
+        return NoteStorageUsage(total_bytes=total_bytes, note_count=note_count)
+
+    def _check_note_storage_accepts(
+        self,
+        note_id: str,
+        new_size: int,
+        *,
+        replacing_existing: bool,
+    ) -> None:
+        """Raise when adding or replacing a note would exceed aggregate policy."""
+        policy = self._storage_policy
+        usage = self._current_note_usage(exclude_note_id=note_id if replacing_existing else None)
+        projected_count = usage.note_count + 1
+        projected_bytes = usage.total_bytes + new_size
+
+        if policy.max_note_count is not None and projected_count > policy.max_note_count:
+            raise NotepadServiceError(
+                507,
+                (
+                    "Notepad note count quota exceeded. "
+                    f"Current notes: {usage.note_count}; limit: {policy.max_note_count}."
+                ),
+            )
+
+        if policy.max_total_bytes is not None and projected_bytes > policy.max_total_bytes:
+            raise NotepadServiceError(
+                507,
+                (
+                    "Notepad storage quota exceeded. "
+                    f"Current usage: {_format_note_bytes(usage.total_bytes)}; "
+                    f"attempted note: {_format_note_bytes(new_size)}; "
+                    f"limit: {_format_note_bytes(policy.max_total_bytes)}."
+                ),
+            )
 
     @staticmethod
     def _note_meta_path(notes_dir: Path, note_id: str) -> Path:
@@ -565,8 +686,12 @@ __all__ = [
     "ListNotesResult",
     "LoadNoteResult",
     "MAX_NOTE_ENCRYPTED_BLOB_BYTES",
+    "DEFAULT_MAX_NOTES",
+    "DEFAULT_MAX_NOTE_STORAGE_BYTES",
     "NotepadService",
     "NotepadServiceError",
+    "NoteStoragePolicy",
+    "NoteStorageUsage",
     "NoteSummary",
     "SaveNoteRequest",
     "SaveNoteResult",

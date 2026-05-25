@@ -1,7 +1,7 @@
 # STAGE-002 - Notes and SMUGGLE storage policy
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -53,11 +53,11 @@ Extend storage policy enforcement to Notepad and SMUGGLE artifacts, including bo
 6. Add tests for over-quota notes, SMUGGLE cleanup, clear behavior, and bounded listing.
 
 ## Acceptance criteria
-- [ ] Notepad saves reject writes that exceed configured note count or total bytes and leave no partial note state.
-- [ ] SMUGGLE temp artifacts are bounded by age/count/bytes and cleanup is exercised by tests.
-- [ ] Notepad listing no longer requires unbounded full-directory work before applying response limits.
-- [ ] Existing Notepad per-note size and rollback tests still pass.
-- [ ] Docs describe storage limits for uploads, notes, and SMUGGLE separately or via a clear shared policy.
+- [x] Notepad saves reject writes that exceed configured note count or total bytes and leave no partial note state.
+- [x] SMUGGLE temp artifacts are bounded by age/count/bytes and cleanup is exercised by tests.
+- [x] Notepad listing no longer requires unbounded full-directory work before applying response limits.
+- [x] Existing Notepad per-note size and rollback tests still pass.
+- [x] Docs describe storage limits for uploads, notes, and SMUGGLE separately or via a clear shared policy.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -76,5 +76,9 @@ Extend storage policy enforcement to Notepad and SMUGGLE artifacts, including bo
 - Rollback: Keep pagination/limits documented and configurable; preserve default response shape where possible.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 14:12:26 MSK.
 
+- Added configured aggregate Notepad encrypted-blob byte/count limits and bounded list responses with stable HTTP/WebSocket `507` quota errors.
+- Added configured SMUGGLE temp artifact age/count/byte retention, startup cleanup reuse, and admission rejection without publishing partial temp pages.
+- Added CLI/server constructor wiring, quota/retention regression tests, stale-doc/API mirror checks, and docs for upload, notes, and SMUGGLE storage limits.
+- Verification report: `stage-reports/STAGE-002-20260525-141226.md`.

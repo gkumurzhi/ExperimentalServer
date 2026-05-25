@@ -17,11 +17,18 @@ from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
 from .handlers import HandlerMixin
+from .handlers.smuggle import (
+    DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
+    DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
+    DEFAULT_SMUGGLE_TEMP_MAX_FILES,
+    SmuggleTempPolicy,
+)
 from .http import HTTPRequest, HTTPResponse
 from .http.cors import parse_cors_origins, resolve_cors_origin
 from .http.io import DEFAULT_MAX_HEADER_SIZE
 from .http.io import receive_request as _receive_request_io
 from .metrics import MetricsCollector
+from .notepad_service import DEFAULT_MAX_NOTE_STORAGE_BYTES, DEFAULT_MAX_NOTES, NoteStoragePolicy
 from .request_pipeline import RequestPipeline, ResponseBuildArgs
 from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
 from .security.tls_manager import TLSManager
@@ -86,6 +93,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         upload_storage_limit: int | None = None,
         upload_file_limit: int | None = None,
         upload_reserved_free_space: int = 0,
+        note_storage_limit: int | None = DEFAULT_MAX_NOTE_STORAGE_BYTES,
+        note_count_limit: int | None = DEFAULT_MAX_NOTES,
+        smuggle_temp_max_age: float | None = DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
+        smuggle_temp_file_limit: int | None = DEFAULT_SMUGGLE_TEMP_MAX_FILES,
+        smuggle_temp_storage_limit: int | None = DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
         max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
         max_workers: int = 10,
         quiet: bool = False,
@@ -127,6 +139,16 @@ class ExperimentalHTTPServer(HandlerMixin):
             raise ValueError("upload_file_limit must be at least 0")
         if upload_reserved_free_space < 0:
             raise ValueError("upload_reserved_free_space must be at least 0")
+        if note_storage_limit is not None and note_storage_limit < 0:
+            raise ValueError("note_storage_limit must be at least 0")
+        if note_count_limit is not None and note_count_limit < 0:
+            raise ValueError("note_count_limit must be at least 0")
+        if smuggle_temp_max_age is not None and smuggle_temp_max_age < 0:
+            raise ValueError("smuggle_temp_max_age must be at least 0")
+        if smuggle_temp_file_limit is not None and smuggle_temp_file_limit < 0:
+            raise ValueError("smuggle_temp_file_limit must be at least 0")
+        if smuggle_temp_storage_limit is not None and smuggle_temp_storage_limit < 0:
+            raise ValueError("smuggle_temp_storage_limit must be at least 0")
         if max_header_size <= 0:
             raise ValueError("max_header_size must be greater than 0")
         if max_workers <= 0:
@@ -141,6 +163,16 @@ class ExperimentalHTTPServer(HandlerMixin):
             max_total_bytes=upload_storage_limit or None,
             max_file_count=upload_file_limit or None,
             reserved_free_bytes=upload_reserved_free_space,
+        )
+        self.note_storage_policy = NoteStoragePolicy(
+            max_total_bytes=note_storage_limit or None,
+            max_note_count=note_count_limit or None,
+            max_listed_notes=note_count_limit or DEFAULT_MAX_NOTES,
+        )
+        self.smuggle_temp_policy = SmuggleTempPolicy(
+            max_age_seconds=smuggle_temp_max_age or None,
+            max_file_count=smuggle_temp_file_limit or None,
+            max_total_bytes=smuggle_temp_storage_limit or None,
         )
         self.max_header_size = max_header_size
         self.max_workers = max_workers
@@ -226,6 +258,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Directory for encrypted notepad blobs, kept separate from uploads/.
         self.notes_dir = self.root_dir / "notes"
         self.notes_dir.mkdir(exist_ok=True)
+        self._notepad_service = None
 
         # Clean up stale SMUGGLE files from previous sessions
         self._cleanup_old_smuggle_files()
@@ -485,13 +518,7 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _cleanup_old_smuggle_files(self) -> None:
         """Clean up stale SMUGGLE files from previous sessions."""
-        count = 0
-        for file_path in self.upload_dir.glob("smuggle_*.html"):
-            try:
-                file_path.unlink()
-                count += 1
-            except OSError:
-                pass
+        count = self.cleanup_smuggle_temp_artifacts(remove_all=True)
         if count > 0:
             logger.info(f"Cleaned up {count} stale SMUGGLE files")
 
@@ -526,6 +553,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
         print(f"  Max upload request: {self.max_upload_size // (1024 * 1024)} MB")
         print(f"  Upload storage: {self.upload_storage.describe_limit()}")
+        print(f"  Notepad limits: {self.note_storage_policy.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
         print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")
