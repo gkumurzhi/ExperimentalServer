@@ -228,6 +228,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional built wheel path or glob to inspect for packaged UI assets.",
     )
     parser.add_argument(
+        "--wheel-only",
+        action="store_true",
+        help="Only inspect --wheel artifacts; do not import or validate the source tree.",
+    )
+    parser.add_argument(
         "--skip-node-check",
         action="store_true",
         help="Skip node --check for environments that only inspect packaged resources.",
@@ -239,15 +244,20 @@ def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     args = build_parser().parse_args(argv)
     repo_root = args.repo_root.resolve()
-    sys.path.insert(0, str(repo_root))
     failures: list[str] = []
+    wheel_paths = expand_wheel_args(args.wheel)
 
-    asset_paths = check_source_tree(repo_root, failures)
-    check_importlib_resources(asset_paths, failures)
-    if not args.skip_node_check:
-        run_node_syntax_check(repo_root, failures)
+    if args.wheel_only and not wheel_paths:
+        failures.append("--wheel-only requires at least one --wheel path or glob")
 
-    for wheel_path in expand_wheel_args(args.wheel):
+    if not args.wheel_only:
+        sys.path.insert(0, str(repo_root))
+        asset_paths = check_source_tree(repo_root, failures)
+        check_importlib_resources(asset_paths, failures)
+        if not args.skip_node_check:
+            run_node_syntax_check(repo_root, failures)
+
+    for wheel_path in wheel_paths:
         check_wheel(wheel_path, failures)
 
     if failures:

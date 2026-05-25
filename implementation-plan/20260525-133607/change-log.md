@@ -47,3 +47,9 @@
 - Files changed: `.github/workflows/ci.yml`, `examples/docker/docker-compose.yml`, `examples/docker/secrets/.gitignore`, `README.md`, `SECURITY.md`, plan artifacts.
 - Verification: Compose default/auth-tls/acme config passed; Docker build passed; default Docker health smoke passed; Docker TLS/auth smoke passed; Compose auth-tls runtime health smoke passed; `python tools/check_stale_docs.py`, CI Docker smoke shell syntax check, and `git diff --check` passed.
 - Report: `stage-reports/STAGE-008-20260525-194815.md`
+
+## 2026-05-25 20:23:29 MSK - STAGE-009
+- Status: CLOSED
+- Files changed: `.github/workflows/release.yml`, `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `tools/browser_smoke.py`, `tools/check_static_ui_assets.py`, `constraints/ci.txt`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/contributing.md`, `docs/changelog.md`, generated docs mirrors, plan artifacts.
+- Verification: wheel/sdist build passed; isolated installed-wheel CLI/import smoke passed; wheel-only static UI check passed; installed-package browser smoke passed; pip-audit scan and CycloneDX SBOM generation passed after constraint pin refresh; workflow YAML parse, docs sync/stale guards, ruff on touched tools, targeted pytest, `git diff --check`, and verifier subagent review passed.
+- Report: `stage-reports/STAGE-009-20260525-200007.md`

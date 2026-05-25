@@ -957,6 +957,32 @@ Browser smoke является release-gating проверкой в CI. Паке
 `@playwright/cli` закреплен в `.github/workflows/ci.yml` и
 `tools/browser_smoke.py`; обновляйте эти pins вместе.
 
+### Release artifacts
+
+Workflow `Release Artifacts` запускается по тегам `v*` и вручную через
+`workflow_dispatch`. Он не публикует пакет в PyPI и не отправляет image в
+registry: артефакты записи остаются в GitHub Actions как `dist/*.whl`,
+`dist/*.tar.gz` и `dist/*.cdx.json`.
+
+Release lane собирает wheel и sdist из clean checkout, устанавливает wheel в
+новый venv вне source tree, проверяет `exphttp --version`, `exphttp --help`,
+import paths, static UI assets из самого wheel и browser smoke в режиме
+`tools/browser_smoke.py --installed-package`. Если import `src` резолвится
+в checkout, smoke падает.
+
+Workflow использует явные минимальные permissions для этой задачи:
+`contents: read`, `id-token: write`, `attestations: write`. `pip-audit`
+сканирует закрепленный `constraints/ci.txt`, формирует CycloneDX JSON SBOM, а
+GitHub artifact attestations подписывают wheel, sdist и SBOM. Продвижение в
+публичный индекс остается ручным решением maintainer-а после проверки
+артефактов и attestations.
+
+Rollback для Python-пакета выполняется установкой предыдущей проверенной
+версии wheel/sdist из release artifacts. Container image digest, SBOM,
+provenance и digest scan не настроены в этом lane, потому что registry
+координаты и намерение публиковать image еще не выбраны; при добавлении
+registry lane rollback должен выполняться на предыдущий проверенный digest.
+
 ### Проверка кода
 
 ```bash

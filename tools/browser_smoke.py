@@ -14,11 +14,9 @@ import tempfile
 import threading
 import time
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-
-from src.server import ExperimentalHTTPServer  # noqa: E402
 
 PLAYWRIGHT_CLI_PACKAGE = "@playwright/cli@0.1.9"
 
@@ -30,16 +28,54 @@ def _find_free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _path_is_under(path: Path, parent: Path) -> bool:
+    """Return True when *path* is equal to or below *parent*."""
+    path = path.resolve()
+    parent = parent.resolve()
+    return path == parent or path.is_relative_to(parent)
+
+
+def _remove_repo_import_paths() -> None:
+    """Remove checkout paths so installed-artifact smoke cannot import local src."""
+    filtered: list[str] = []
+    for entry in sys.path:
+        entry_path = Path(entry).resolve() if entry else Path.cwd().resolve()
+        if _path_is_under(entry_path, REPO_ROOT):
+            continue
+        filtered.append(entry)
+    sys.path[:] = filtered
+
+
+def _load_server_class(*, installed_package: bool) -> tuple[type[Any], Path]:
+    """Import ExperimentalHTTPServer from source or from the installed package."""
+    if installed_package:
+        _remove_repo_import_paths()
+    elif str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+    from src.server import ExperimentalHTTPServer
+
+    module = sys.modules[ExperimentalHTTPServer.__module__]
+    module_path = Path(getattr(module, "__file__", "")).resolve()
+    if installed_package and _path_is_under(module_path, REPO_ROOT):
+        raise RuntimeError(
+            "Installed-package browser smoke imported exphttp from the source checkout: "
+            f"{module_path}"
+        )
+    return ExperimentalHTTPServer, module_path
+
+
 class _LiveServer:
     """Manage a short-lived server instance for browser smoke checks."""
 
     def __init__(
         self,
+        server_cls: type[Any],
         root_dir: Path,
         *,
         disable_ecdh: bool = False,
     ) -> None:
-        self.server = ExperimentalHTTPServer(
+        self.server = server_cls(
             host="127.0.0.1",
             port=_find_free_port(),
             root_dir=str(root_dir),
@@ -132,8 +168,9 @@ def _parse_playwright_json(output: str) -> dict[str, object]:
     raise RuntimeError(f"Playwright CLI did not return a JSON object. Raw output: {output!r}")
 
 
-def run_browser_smoke() -> dict[str, object]:
+def run_browser_smoke(*, installed_package: bool = False) -> dict[str, object]:
     """Start temporary servers and drive the SPA through browser smoke flows."""
+    server_cls, server_module_path = _load_server_class(installed_package=installed_package)
     smoke_script = REPO_ROOT / "tools" / "browser_smoke.playwright.js"
     playwright = _playwright_command()
     session = f"exphttp-smoke-{os.getpid()}-{int(time.time())}"
@@ -162,8 +199,8 @@ def run_browser_smoke() -> dict[str, object]:
         opsec_upload_boundary_fixture.write_bytes(b"C" * 18000)
         opsec_upload_large_fixture.write_bytes(b"B" * 18001)
 
-        live = _LiveServer(normal_root)
-        unavailable_live = _LiveServer(unavailable_root, disable_ecdh=True)
+        live = _LiveServer(server_cls, normal_root)
+        unavailable_live = _LiveServer(server_cls, unavailable_root, disable_ecdh=True)
         try:
             live.start()
             unavailable_live.start()
@@ -223,7 +260,9 @@ def run_browser_smoke() -> dict[str, object]:
                 str(local_smoke_script),
                 cwd=REPO_ROOT,
             )
-            return _parse_playwright_json(raw_output)
+            result = _parse_playwright_json(raw_output)
+            result["serverModulePath"] = str(server_module_path)
+            return result
         finally:
             try:
                 _run_playwright(playwright, session, "close", cwd=REPO_ROOT)
@@ -236,10 +275,15 @@ def run_browser_smoke() -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description="Run the exphttp browser smoke flow")
-    parser.parse_args(argv)
+    parser.add_argument(
+        "--installed-package",
+        action="store_true",
+        help="Import exphttp from the active environment instead of the source checkout.",
+    )
+    args = parser.parse_args(argv)
 
     try:
-        result = run_browser_smoke()
+        result = run_browser_smoke(installed_package=args.installed_package)
     except Exception as exc:
         print(f"Browser smoke failed: {exc}", file=sys.stderr)
         return 1

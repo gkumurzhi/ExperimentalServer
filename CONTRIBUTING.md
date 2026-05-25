@@ -108,6 +108,31 @@ mkdocs build --strict
 
 Coverage gate in CI is 65 %; aim higher.
 
+## Release artifacts
+
+The `Release Artifacts` workflow runs on `v*` tags and manual
+`workflow_dispatch`. It is artifact-only: it does not publish to PyPI, GHCR, or
+any other registry.
+
+The release lane builds `dist/*.whl` and `dist/*.tar.gz`, installs the wheel in
+a fresh virtual environment outside the checkout, runs CLI/import probes, checks
+static UI assets from the built wheel, and runs browser smoke with
+`tools/browser_smoke.py --installed-package`. That installed-package mode fails
+if `src` imports resolve back to the source tree.
+
+The workflow uses explicit permissions: `contents: read` for checkout,
+`id-token: write` for OIDC, and `attestations: write` for GitHub artifact
+attestations. It also scans the pinned `constraints/ci.txt` dependency set with
+`pip-audit`, writes a CycloneDX JSON SBOM into `dist/`, and attests the wheel,
+sdist, and SBOM.
+
+Promote a release only from the uploaded workflow artifacts after reviewing the
+attestations. Roll back a Python release by reinstalling the previous verified
+wheel or sdist. Container image publication, digest scanning, SBOM, and
+provenance are intentionally not configured until the maintainer chooses
+registry coordinates and publish intent; when that lane exists, rollbacks should
+pin the previous verified image digest.
+
 ## Documentation ownership
 
 - `README.md` is the repository landing page and stays root-only.

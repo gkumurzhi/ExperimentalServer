@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Docs:** expanded `CONTRIBUTING.md` with Conventional Commits policy and PR checklist
 - **Docs:** `.github/PULL_REQUEST_TEMPLATE.md`
 - **Infrastructure:** multi-stage `Dockerfile` with non-root user and HEALTHCHECK, plus `.dockerignore`
+- **Infrastructure:** tag-gated release artifact workflow with wheel/sdist smoke, SBOM, and GitHub artifact attestations
 - **Tests:** 46 new tests (`test_metrics.py`, `test_handler_registry.py`, `test_security/test_tls_manager.py`, `test_http/test_io.py`, `test_property/` with Hypothesis)
 - **Deps:** new optional extras `[test]` (hypothesis, pytest-benchmark) and `[docs]` (mkdocs-material)
 - **TLS:** `--sslip` mode for issuing a valid Let's Encrypt certificate for the current public IPv4 via `sslip.io`
@@ -45,6 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - HEAD, PATCH, DELETE HTTP method handlers
 
 ### Security
+- Refresh pinned CI constraints for `idna`, `pymdown-extensions`, and `urllib3` advisories
 - Fix XSS in HTML smuggling — filenames escaped via `json.dumps()` for JS context, `innerHTML` replaced with `textContent` (B01)
 - Replace SHA-256 password hashing with PBKDF2-SHA256 (600K iterations) (B07)
 - Fix path traversal check — replace `startswith()` with `Path.relative_to()` (B06)

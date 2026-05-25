@@ -76,6 +76,9 @@ High-level assumptions:
 Advanced upload is a built-in transport convenience with optional payload
 obfuscation, not a replacement for TLS or authentication:
 
+- Advanced upload is enabled only by the `lab` feature profile. Prefer
+  `--profile serve` for read-only sharing and `--profile workspace` for normal
+  upload/delete workspaces.
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
 - Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`
@@ -91,21 +94,35 @@ When running the server outside a trusted lab:
 
 - Always use `--tls` with a real certificate (Let's Encrypt or internal CA).
 - Use `--auth random` only in an interactive terminal; for services,
-  containers, and CI pass an explicit strong `user:password` from a secret
-  manager.
+  containers, and CI mount a secret-manager file containing one
+  `user:password` line and pass it with `--auth-file`.
 - Use a dedicated `--dir` so `<dir>/uploads/` contains only files intended for this server.
+- Select the narrowest `--profile` that supports the workflow; avoid `lab` for
+  externally reachable services unless experimental methods are required.
 - Bind to `127.0.0.1` unless external access is explicitly required.
+- For Docker, keep the default Compose plain HTTP publication on host loopback
+  and use mounted secret files with `--auth-file` for TLS/auth profiles.
 - Place behind a reverse proxy with rate limiting and request-size limits.
-- Configure an exact `--cors-origin` for a trusted browser UI; avoid
-  `--cors-origin *` on internet-facing deployments.
+- Configure an exact `--cors-origin` for a trusted browser UI. Wildcard
+  `--cors-origin *` is read-only CORS and does not authorize browser writes or
+  WebSocket upgrades.
 
 ### External exposure baseline
 
 Before exposing the service to untrusted networks, require all of: real TLS,
 strong Basic Auth credentials, a dedicated data directory, firewall allowlists
 where possible, reverse-proxy rate limiting, reverse-proxy request/header/body
-size caps, monitoring of `/metrics`, and an exact browser-origin policy for any
-separate UI origin.
+size caps, an explicit `--body-memory-budget` sized for available RAM,
+explicit slow-body settings (`--body-idle-timeout`, `--body-timeout`, and
+optionally `--body-min-rate`), monitoring of `/metrics`, and an exact
+browser-origin policy for any separate UI origin. Keep
+`--stream-send-idle-timeout` and `--stream-send-timeout` enabled for exposed
+file downloads so slow readers cannot hold worker threads indefinitely.
+For containers, align Docker memory/CPU/PID/file-descriptor limits with
+`--workers`, `--max-size`, `--body-memory-budget`, and the upload/notepad/
+SMUGGLE storage quota flags. Protect ACME state volumes as secret certificate
+material and schedule controlled restarts before certificate expiry so
+startup-time renewal can run.
 
 ## Known Limitations
 

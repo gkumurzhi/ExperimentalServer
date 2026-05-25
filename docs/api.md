@@ -25,7 +25,20 @@ below.
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
 | WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`, `503`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
 | Advanced upload | Unknown methods carrying an advanced payload in the body, headers, chunked headers, or query string are routed to advanced upload by default. Unknown methods without an advanced payload return shared JSON `405`. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
-| Auth and request guards | Basic-auth failures, auth rate limits, and internal pipeline errors use JSON `{"error": "...", "status": NNN}`. Receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
+| Auth and request guards | Basic-auth failures, auth rate limits, internal pipeline errors, and aggregate body-memory budget exhaustion use JSON `{"error": "...", "status": NNN}`. Other receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
+
+---
+
+## Feature Profiles
+
+`--profile` selects the method and capability surface advertised by `PING` and
+CORS and enforced by the handler registry.
+
+| Profile | Capability surface |
+|---|---|
+| `serve` | Read-only/static/file-inspection methods: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. |
+| `workspace` | `serve` plus ordinary upload methods (`POST`, `PUT`, `PATCH`, `NONE`) and single-file `DELETE`; destructive clears and lab methods are disabled. |
+| `lab` | Full experimental surface: advanced upload fallback, `SMUGGLE`, `NOTE`, notepad WebSocket, upload clear, and note clear. |
 
 ---
 
@@ -37,6 +50,10 @@ The receive layer enforces protocol framing before handler dispatch:
   before the terminating blank line.
 - Request bodies are capped by `--max-size MB` (`100` MiB by default) using the
   declared `Content-Length` and the bytes actually read.
+- Concurrent in-flight request bodies are reserved against
+  `--body-memory-budget MB`. The default budget is `--workers * --max-size`.
+  Aggregate budget exhaustion returns `503` before the remaining body bytes are
+  read.
 - Aggregate disk usage under `uploads/` is controlled separately with optional
   `--upload-storage-limit MB`, `--upload-file-limit N`, and
   `--upload-reserve-free MB` limits. A value of `0` disables each aggregate
@@ -53,8 +70,9 @@ The receive layer enforces protocol framing before handler dispatch:
 - Invalid, negative, or conflicting duplicate `Content-Length` values are
   rejected. Duplicate identical `Content-Length` values are accepted.
 - Receive-layer framing failures may close the connection before an HTTP error
-  response is built. Rejections are counted in `metrics.receive_rejections` and
-  summarized under `metrics.receive`.
+  response is built, except aggregate body-memory budget exhaustion, which
+  returns a JSON `503`. Rejections are counted in `metrics.receive_rejections`
+  and summarized under `metrics.receive`.
 
 ---
 
@@ -269,6 +287,18 @@ PING / HTTP/1.1
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
   "access_scope": "uploads",
+  "profile": "lab",
+  "capabilities": {
+    "ordinary_upload": true,
+    "file_delete": true,
+    "clear_uploads": true,
+    "advanced_upload": true,
+    "smuggle": true,
+    "note_http": true,
+    "note_delete": true,
+    "note_clear": true,
+    "websocket_notes": true
+  },
   "advanced_upload": true,
   "metrics": {
     "uptime_seconds": 3600.5,
@@ -308,6 +338,12 @@ PING / HTTP/1.1
       "accepted": 150,
       "rejected": 1
     },
+    "body_memory": {
+      "max_bytes": 1048576000,
+      "current_bytes": 0,
+      "peak_bytes": 52428800,
+      "rejected": 0
+    },
     "request_latency_ms": {
       "count": 150,
       "total": 2450.75,
@@ -333,6 +369,10 @@ PING / HTTP/1.1
 }
 ```
 
+The `profile` and `capabilities` fields are the source of truth for UI
+affordances, handler registration, CORS preflight methods, and WebSocket
+availability. `advanced_upload` is retained as a compatibility boolean.
+
 The response also includes the header `X-Ping-Response: pong`. The same
 metrics object is available as JSON from `GET /metrics`.
 
@@ -345,6 +385,8 @@ bucket. Receive-layer drops before request dispatch are tracked by
 `connections` tracks worker-owned accepted sockets. `request_admission`
 tracks the bounded worker budget before submission. `request_latency_ms`
 contains in-process timing aggregates for processed request pipeline entries.
+`body_memory` tracks the aggregate declared request-body budget, current and
+peak reserved bytes, and aggregate-budget rejections.
 `timeouts` uses low-cardinality names for receive and WebSocket timeout
 signals. Accepted WebSocket upgrades are tracked through the `websocket`
 resource counters rather than `total_requests`, `status_counts`, or
@@ -659,8 +701,8 @@ Sec-WebSocket-Accept: <computed accept key>
 All WebSocket messages are UTF-8 JSON text frames. The client sends masked frames (required by RFC 6455); the server sends unmasked frames.
 
 Same-origin upgrades are allowed by default. Cross-origin upgrades require the
-`Origin` to match a configured `--cors-origin` value, unless CORS is configured
-as wildcard `*`.
+`Origin` to match an exact configured `--cors-origin` value. Wildcard
+`--cors-origin *` is read-only CORS and does not authorize WebSocket upgrades.
 
 **Client message types:**
 
@@ -702,10 +744,12 @@ CORS preflight handler. Returns allowed methods when CORS is enabled.
 
 **Response (204):** No body. If CORS is disabled, no
 `Access-Control-Allow-*` headers are emitted. If CORS is enabled,
-`Access-Control-Allow-Methods` lists built-in methods. A requested unknown
-method is added when it is a valid HTTP token, enabling advanced-upload
-preflights. Requested headers are reflected only when they are in the server
-allowlist (`Authorization`, `Content-Type`, `If-None-Match`,
+`Access-Control-Allow-Methods` lists profile-enabled methods for exact origins.
+For wildcard `--cors-origin *`, preflight stays read-only and lists only read
+methods. A requested unknown method is added only for exact-origin lab-profile
+advanced-upload preflights when it is a valid HTTP token. Requested headers are
+reflected only when they are in the server allowlist (`Authorization`,
+`Content-Type`, `If-None-Match`,
 `X-File-Name`, `X-Session-Id`, `X-Exphttp-No-Gzip`, `X-D`, `X-E`, `X-K`,
 `X-Kb64`, `X-N`, `X-H`, and numeric `X-D-N` chunk headers).
 
@@ -807,8 +851,8 @@ Requests with an `Origin` header must match the request host/scheme or a
 configured CORS origin. `Sec-Fetch-Site: cross-site` and `same-site` requests
 without `Origin` are rejected; with `Origin`, they require a configured CORS
 origin. Non-browser API clients that omit both `Origin` and `Sec-Fetch-Site`
-keep the existing behavior. Setting `--cors-origin *` explicitly opts into
-browser mutations from any origin.
+keep the existing behavior. Wildcard `--cors-origin *` still emits read CORS
+headers, but does not authorize browser mutations from arbitrary origins.
 
 Rejected browser-origin mutations return `403` JSON:
 

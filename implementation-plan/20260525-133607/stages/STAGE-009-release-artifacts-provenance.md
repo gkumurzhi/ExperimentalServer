@@ -1,7 +1,7 @@
 # STAGE-009 - Release artifacts and provenance lane
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -76,5 +76,11 @@ Create a tag-gated release lane that builds artifact-of-record wheel/sdist and, 
 - Rollback: Keep release workflow artifact-only until owner enables trusted publishing or registry credentials.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 20:23:29 MSK.
 
+- Added `.github/workflows/release.yml`, triggered by `v*` tags and manual dispatch, to build wheel/sdist artifacts of record, run isolated installed-wheel CLI/import/static/browser smoke checks, scan pinned dependencies, generate a CycloneDX SBOM, create GitHub artifact attestations, and upload dists/SBOM as workflow artifacts.
+- Added explicit minimal workflow permissions: CI/security use `contents: read`; release uses `contents: read`, `id-token: write`, and `attestations: write`.
+- Added installed-package browser smoke and wheel-only static UI checks so release validation does not import from the checkout.
+- Documented artifact promotion, rollback by wheel/sdist version, Python provenance/SBOM evidence, and the intentional deferral of container publish/digest/SBOM/provenance until maintainer publish intent exists.
+- Verification passed: build wheel/sdist, isolated wheel CLI/import smoke, wheel-only static UI check, installed-package browser smoke, pip-audit scan/SBOM, workflow YAML parse, docs guards, ruff on touched tools, targeted pytest, and verifier subagent review.
+- Report: `stage-reports/STAGE-009-20260525-200007.md`
