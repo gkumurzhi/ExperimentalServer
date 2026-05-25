@@ -10,8 +10,9 @@ import logging
 import secrets
 from typing import Literal, TypedDict
 
-from ..http import HTTPRequest, HTTPResponse, write_unique_file_exclusive
+from ..http import HTTPRequest, HTTPResponse
 from ..security.crypto import decrypt, verify_hmac
+from ..storage import UploadStorageQuotaExceeded
 from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
@@ -383,7 +384,10 @@ class AdvancedUploadHandlersMixin(BaseHandler):
             safe_filename = f"upload_{secrets.token_hex(6)}"
 
         try:
-            file_path = write_unique_file_exclusive(self.upload_dir / safe_filename, file_data)
+            file_path = self._get_upload_storage().publish_bytes(
+                self.upload_dir / safe_filename,
+                file_data,
+            )
             safe_filename = file_path.name
 
             logger.debug(
@@ -403,6 +407,10 @@ class AdvancedUploadHandlersMixin(BaseHandler):
             }
             response.set_body(json.dumps(result), "application/json")
             return response
+
+        except UploadStorageQuotaExceeded as e:
+            logger.warning("Advanced upload rejected by storage policy: %s", e)
+            return self._error_response(e.status_code, str(e))
 
         except Exception as e:
             logger.error(f"Advanced upload write failed: {e}")

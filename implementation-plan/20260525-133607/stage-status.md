@@ -2,7 +2,7 @@
 
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
-| STAGE-001 | OPEN | HIGH | Upload storage policy and atomic commits | - | - | - |
+| STAGE-001 | CLOSED | HIGH | Upload storage policy and atomic commits | 2026-05-25 14:09:57 MSK | Upload quota policy, atomic publish, CLI/docs, and regression tests completed | `stage-reports/STAGE-001-20260525-134934.md` |
 | STAGE-002 | OPEN | HIGH | Notes and SMUGGLE storage policy | - | - | - |
 | STAGE-003 | OPEN | HIGH | In-flight body memory budget | - | - | - |
 | STAGE-004 | OPEN | HIGH | Slow body and transfer deadlines | - | - | - |
@@ -13,4 +13,3 @@
 | STAGE-009 | OPEN | MEDIUM | Release artifacts and provenance lane | - | - | - |
 | STAGE-010 | OPEN | MEDIUM | Public package identity migration | - | - | - |
 | STAGE-011 | OPEN | MEDIUM | WebSocket operations and failure semantics | - | - | - |
-

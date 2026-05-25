@@ -1,7 +1,7 @@
 # STAGE-001 - Upload storage policy and atomic commits
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -77,5 +77,9 @@ Add a shared upload storage policy that rejects over-quota writes before commit 
 - Rollback: Keep new limits configurable and document defaults; revert the policy wiring while leaving atomic helper tests as guidance if needed.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-05-25 14:09:57 MSK.
 
+- Added shared upload storage policy/service with opt-in aggregate byte, file-count, and reserved-free-space limits.
+- Standard and advanced upload handlers now publish through hidden same-directory temp files and atomic no-clobber links.
+- Added CLI/server wiring, docs, quota/atomicity regression tests, and preserved concurrent unique-name behavior.
+- Verification passed for targeted upload/server/CLI tests and ruff checks. Full-suite pytest and mypy were limited by missing/corrupt local optional dependencies unrelated to this stage; details are in the stage report.

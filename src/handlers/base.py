@@ -13,6 +13,7 @@ from urllib.parse import unquote
 from ..config import HIDDEN_FILES
 from ..http import HTTPResponse, format_file_size
 from ..http.utils import resolve_descendant_path
+from ..storage import UploadStorageService
 
 if TYPE_CHECKING:
     import threading
@@ -110,6 +111,7 @@ class BaseHandler:
     root_dir: Path
     upload_dir: Path
     notes_dir: Path
+    upload_storage: UploadStorageService
     method_handlers: Mapping[str, "Handler"]
     advanced_upload_enabled: bool
     _temp_smuggle_files: set[str]
@@ -120,6 +122,16 @@ class BaseHandler:
     def format_size(size: int) -> str:
         """Format file size to human-readable string."""
         return format_file_size(size)
+
+    def _get_upload_storage(self) -> UploadStorageService:
+        """Return the shared upload storage service, creating a default for tests."""
+        storage = getattr(self, "upload_storage", None)
+        if isinstance(storage, UploadStorageService):
+            return storage
+
+        storage = UploadStorageService(self.upload_dir)
+        self.upload_storage = storage
+        return storage
 
     def _get_file_path(self, url_path: str, for_sandbox: bool = False) -> Path | None:
         """

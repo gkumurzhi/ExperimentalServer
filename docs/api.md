@@ -37,6 +37,10 @@ The receive layer enforces protocol framing before handler dispatch:
   before the terminating blank line.
 - Request bodies are capped by `--max-size MB` (`100` MiB by default) using the
   declared `Content-Length` and the bytes actually read.
+- Aggregate disk usage under `uploads/` is controlled separately with optional
+  `--upload-storage-limit MB`, `--upload-file-limit N`, and
+  `--upload-reserve-free MB` limits. A value of `0` disables each aggregate
+  limit.
 - `Transfer-Encoding` is unsupported and rejected at the receive layer because
   the server does not decode chunked request bodies.
 - Invalid, negative, or conflicting duplicate `Content-Length` values are
@@ -717,7 +721,7 @@ global `--max-size` cap before dispatch.
 - Header transport `X-D` and combined `X-D-0`, `X-D-1`, ... data are limited to 64 KB of encoded data by default.
 - URL query transport `?d=` is limited to 16 KB of encoded data by default.
 
-Over-limit advanced-upload requests return `413` JSON errors and do not write files. Larger uploads should use standard `POST`, `PUT`, `PATCH`, or `NONE` body uploads, which are governed by `--max-size`.
+Over-limit advanced-upload requests return `413` JSON errors and do not write files. Larger uploads should use standard `POST`, `PUT`, `PATCH`, or `NONE` body uploads, which are governed by `--max-size` per request and the optional aggregate upload storage policy before publish.
 
 **JSON body example:**
 

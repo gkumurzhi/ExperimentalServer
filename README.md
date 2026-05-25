@@ -152,7 +152,10 @@ exphttp [опции]
 | `-H, --host HOST` | Хост для привязки | `127.0.0.1` |
 | `-p, --port PORT` | Порт для прослушивания | `8080` |
 | `-d, --dir DIR` | Корневая директория | `.` |
-| `-m, --max-size MB` | Макс. размер загрузки в MB | `100` |
+| `-m, --max-size MB` | Макс. размер тела одного upload-запроса в MB | `100` |
+| `--upload-storage-limit MB` | Общий лимит размера `uploads/` в MB (`0` = выключен) | `0` |
+| `--upload-file-limit N` | Общий лимит количества файлов в `uploads/` (`0` = выключен) | `0` |
+| `--upload-reserve-free MB` | Минимум свободного места на диске при commit загрузки в MB | `0` |
 | `--max-header-size KB` | Макс. размер HTTP request headers в KiB | `64` |
 | `-w, --workers N` | Количество worker потоков | `10` |
 | `-q, --quiet` | Тихий режим (минимум логов) | выключен |
@@ -733,8 +736,11 @@ print(response.json())
 - **Browser-origin guard** — cross-origin браузерные мутации отклоняются, кроме явно разрешённых `--cors-origin`
 - **Доступ только к uploads/** — ограничение пользовательских файловых операций
 - **Таймауты** — защита от Slowloris (30s заголовки, 300s тело)
-- **Лимиты запросов** — `--max-header-size` для заголовков, `--max-size` для
-  тела, отдельный 1 MiB decoded limit для Secure Notepad blobs
+- **Лимиты запросов и диска** — `--max-header-size` для заголовков,
+  `--max-size` для тела одного запроса, опциональные
+  `--upload-storage-limit`, `--upload-file-limit` и `--upload-reserve-free`
+  для aggregate quota `uploads/`, отдельный 1 MiB decoded limit для Secure
+  Notepad blobs
 - **Скрытые файлы** — любые path-сегменты с leading dot, включая dotfiles в `uploads/`, недоступны через GET и INFO
 - **User content hardening** — загруженные HTML/SVG отдаются как attachment, а ответы получают `X-Content-Type-Options: nosniff`
 - **CSP для UI** — встроенный HTML ограничивает scripts до `'self'`; inline
@@ -760,7 +766,9 @@ XOR-шифрование используется для **обфускации*
 - **HTTP версия**: 1.1
 - **Кодировка**: UTF-8
 - **Worker threads**: 10 (по умолчанию)
-- **Max upload**: 100 MB (по умолчанию)
+- **Max upload request**: 100 MB (по умолчанию)
+- **Upload storage quota**: unlimited по умолчанию; настраивается через
+  `--upload-storage-limit`, `--upload-file-limit`, `--upload-reserve-free`
 - **TLS**: TLS 1.2+ с ECDHE+AESGCM шифрами
 - **Версия**: 2.0.0
 

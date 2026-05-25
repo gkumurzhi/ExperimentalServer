@@ -25,6 +25,7 @@ from .metrics import MetricsCollector
 from .request_pipeline import RequestPipeline, ResponseBuildArgs
 from .security.auth import AuthRateLimiter, BasicAuthenticator, generate_random_credentials
 from .security.tls_manager import TLSManager
+from .storage import UploadStoragePolicy, UploadStorageService
 from .websocket import (
     WS_BINARY,
     WS_CLOSE,
@@ -82,6 +83,9 @@ class ExperimentalHTTPServer(HandlerMixin):
         port: int = 8080,
         root_dir: str = ".",
         max_upload_size: int = 100 * 1024 * 1024,  # 100 MB
+        upload_storage_limit: int | None = None,
+        upload_file_limit: int | None = None,
+        upload_reserved_free_space: int = 0,
         max_header_size: int = DEFAULT_MAX_HEADER_SIZE,
         max_workers: int = 10,
         quiet: bool = False,
@@ -117,6 +121,12 @@ class ExperimentalHTTPServer(HandlerMixin):
             raise ValueError("port must be between 1 and 65535")
         if max_upload_size <= 0:
             raise ValueError("max_upload_size must be greater than 0")
+        if upload_storage_limit is not None and upload_storage_limit < 0:
+            raise ValueError("upload_storage_limit must be at least 0")
+        if upload_file_limit is not None and upload_file_limit < 0:
+            raise ValueError("upload_file_limit must be at least 0")
+        if upload_reserved_free_space < 0:
+            raise ValueError("upload_reserved_free_space must be at least 0")
         if max_header_size <= 0:
             raise ValueError("max_header_size must be greater than 0")
         if max_workers <= 0:
@@ -127,6 +137,11 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.root_dir = Path(root_dir).resolve()
         self.socket: socket.socket | None = None
         self.max_upload_size = max_upload_size
+        self.upload_storage_policy = UploadStoragePolicy(
+            max_total_bytes=upload_storage_limit or None,
+            max_file_count=upload_file_limit or None,
+            reserved_free_bytes=upload_reserved_free_space,
+        )
         self.max_header_size = max_header_size
         self.max_workers = max_workers
         if max_websocket_connections is None:
@@ -206,6 +221,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Directory for uploaded files
         self.upload_dir = self.root_dir / "uploads"
         self.upload_dir.mkdir(exist_ok=True)
+        self.upload_storage = UploadStorageService(self.upload_dir, self.upload_storage_policy)
 
         # Directory for encrypted notepad blobs, kept separate from uploads/.
         self.notes_dir = self.root_dir / "notes"
@@ -508,7 +524,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         print(f"  Root directory: {self.root_dir}")
         print(f"  File access: uploads/ only ({self.upload_dir})")
         print(f"  Notepad storage: notes/ ({self.notes_dir})")
-        print(f"  Max upload: {self.max_upload_size // (1024 * 1024)} MB")
+        print(f"  Max upload request: {self.max_upload_size // (1024 * 1024)} MB")
+        print(f"  Upload storage: {self.upload_storage.describe_limit()}")
         print(f"  Max headers: {self.max_header_size // 1024} KiB")
         print(f"  Methods: {', '.join(self.method_handlers.keys())}")
         print(f"  Advanced upload: {'enabled' if self.advanced_upload_enabled else 'disabled'}")

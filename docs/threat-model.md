@@ -59,7 +59,8 @@ trusted *after* it is validated at the boundary.
 | Threat | Mitigation |
 |--------|------------|
 | Slowloris / oversized headers | 30-second header read timeout, `--max-header-size KB` cap, and receive rejection metrics |
-| Large upload fills disk | `--max-size MB` enforced before and during read |
+| Large single upload exhausts request handling | `--max-size MB` enforced before and during read |
+| Repeated uploads fill disk | Optional aggregate `uploads/` policy: `--upload-storage-limit`, `--upload-file-limit`, and `--upload-reserve-free`; standard and advanced uploads publish through hidden same-directory temp files and atomic no-clobber links |
 | Worker pool exhaustion | Socket admission is bounded before worker submission; rejected admissions are reported in metrics |
 | Infinite keep-alive | `KEEP_ALIVE_MAX = 100` requests per connection, 15 s idle timeout |
 | WebSocket flood | Frame size limit; notepad writes behind `self._notes_lock`; ECDH sessions use TTL + LRU cleanup |

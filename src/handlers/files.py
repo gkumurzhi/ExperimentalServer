@@ -13,8 +13,9 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
-from ..http import HTTPRequest, HTTPResponse, sanitize_filename, write_unique_file_exclusive
+from ..http import HTTPRequest, HTTPResponse, sanitize_filename
 from ..http.cors import resolve_preflight_allow_headers, resolve_preflight_allow_methods
+from ..storage import UploadStorageQuotaExceeded
 from .base import BaseHandler, get_package_resource
 
 logger = logging.getLogger("httpserver")
@@ -416,7 +417,10 @@ class FileHandlersMixin(BaseHandler):
             return response
 
         try:
-            file_path = write_unique_file_exclusive(self.upload_dir / safe_filename, request.body)
+            file_path = self._get_upload_storage().publish_bytes(
+                self.upload_dir / safe_filename,
+                request.body,
+            )
             safe_filename = file_path.name
 
             logger.debug(f"Upload: {safe_filename} ({len(request.body)} bytes)")
@@ -437,6 +441,23 @@ class FileHandlersMixin(BaseHandler):
             }
 
             response.set_body(json.dumps(result, indent=2, ensure_ascii=False), "application/json")
+            return response
+
+        except UploadStorageQuotaExceeded as e:
+            logger.warning("Upload rejected by storage policy: %s", e)
+            response = HTTPResponse(e.status_code)
+            response.set_header("X-Upload-Status", "quota-exceeded")
+            response.set_body(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": str(e),
+                        "status": e.status_code,
+                    },
+                    indent=2,
+                ),
+                "application/json",
+            )
             return response
 
         except Exception as e:

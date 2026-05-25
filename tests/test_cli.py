@@ -58,6 +58,9 @@ class TestCLIParser:
         assert args.tls is False
         assert args.auth is None
         assert args.max_size == 100
+        assert args.upload_storage_limit == 0
+        assert args.upload_file_limit == 0
+        assert args.upload_reserve_free == 0
         assert args.max_header_size == 64
         assert args.workers == 10
         assert args.cors_origin == ""
@@ -82,6 +85,9 @@ class TestCLIParser:
             ["--port", "65536"],
             ["--max-size", "0"],
             ["--max-size", "-1"],
+            ["--upload-storage-limit", "-1"],
+            ["--upload-file-limit", "-1"],
+            ["--upload-reserve-free", "-1"],
             ["--max-header-size", "0"],
             ["--max-header-size", "-1"],
             ["--workers", "0"],
@@ -228,6 +234,12 @@ class TestCLIMain:
                 "--advanced-upload",
                 "-m",
                 "250",
+                "--upload-storage-limit",
+                "1000",
+                "--upload-file-limit",
+                "25",
+                "--upload-reserve-free",
+                "500",
                 "--max-header-size",
                 "128",
                 "-w",
@@ -243,6 +255,9 @@ class TestCLIMain:
             "port": 9090,
             "root_dir": "/srv/data",
             "max_upload_size": 250 * 1024 * 1024,
+            "upload_storage_limit": 1000 * 1024 * 1024,
+            "upload_file_limit": 25,
+            "upload_reserved_free_space": 500 * 1024 * 1024,
             "max_header_size": 128 * 1024,
             "max_workers": 20,
             "quiet": True,
@@ -447,6 +462,19 @@ class TestCLIMain:
 
 
 class TestServerConstructorValidation:
+    def test_zero_upload_storage_limits_disable_policy(self, temp_dir: Path):
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            upload_storage_limit=0,
+            upload_file_limit=0,
+            upload_reserved_free_space=0,
+        )
+
+        assert server.upload_storage_policy.max_total_bytes is None
+        assert server.upload_storage_policy.max_file_count is None
+        assert server.upload_storage_policy.reserved_free_bytes == 0
+
     @pytest.mark.parametrize(
         ("kwargs", "message"),
         [
@@ -455,6 +483,12 @@ class TestServerConstructorValidation:
             ({"port": 65536}, "port must be between 1 and 65535"),
             ({"max_upload_size": 0}, "max_upload_size must be greater than 0"),
             ({"max_upload_size": -1}, "max_upload_size must be greater than 0"),
+            ({"upload_storage_limit": -1}, "upload_storage_limit must be at least 0"),
+            ({"upload_file_limit": -1}, "upload_file_limit must be at least 0"),
+            (
+                {"upload_reserved_free_space": -1},
+                "upload_reserved_free_space must be at least 0",
+            ),
             ({"max_header_size": 0}, "max_header_size must be greater than 0"),
             ({"max_header_size": -1}, "max_header_size must be greater than 0"),
             ({"max_workers": 0}, "max_workers must be greater than 0"),

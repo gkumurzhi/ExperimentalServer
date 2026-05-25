@@ -100,7 +100,28 @@ Custom HTTP methods:
         type=_bounded_int("max size", minimum=1),
         default=100,
         metavar="MB",
-        help="Max upload size in MB (default: 100)",
+        help="Max per-request upload body size in MB (default: 100)",
+    )
+    limits.add_argument(
+        "--upload-storage-limit",
+        type=_bounded_int("upload storage limit", minimum=0),
+        default=0,
+        metavar="MB",
+        help="Aggregate uploads/ storage quota in MB; 0 disables (default: 0)",
+    )
+    limits.add_argument(
+        "--upload-file-limit",
+        type=_bounded_int("upload file limit", minimum=0),
+        default=0,
+        metavar="N",
+        help="Aggregate uploads/ file count quota; 0 disables (default: 0)",
+    )
+    limits.add_argument(
+        "--upload-reserve-free",
+        type=_bounded_int("upload reserve free", minimum=0),
+        default=0,
+        metavar="MB",
+        help="Minimum free disk space to preserve while committing uploads in MB (default: 0)",
     )
     limits.add_argument(
         "--max-header-size",
@@ -245,6 +266,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "port": args.port,
         "root_dir": args.dir,
         "max_upload_size": args.max_size * 1024 * 1024,
+        "upload_storage_limit": (
+            args.upload_storage_limit * 1024 * 1024 if args.upload_storage_limit else None
+        ),
+        "upload_file_limit": args.upload_file_limit or None,
+        "upload_reserved_free_space": args.upload_reserve_free * 1024 * 1024,
         "max_header_size": args.max_header_size * 1024,
         "max_workers": args.workers,
         "quiet": args.quiet,

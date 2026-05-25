@@ -1,21 +1,36 @@
 """Tests for file handler utilities."""
 
 import base64
+import errno
 import json
 import threading
 from pathlib import Path
 
+import pytest
+
+import src.storage as storage_module
 from src.handlers import HandlerMixin
 from src.http.utils import make_unique_filename, sanitize_filename
+from src.storage import UploadStoragePolicy, UploadStorageService
 from tests.conftest import make_request
 
 
 class UploadStubServer(HandlerMixin):
     """Minimal concrete class for upload handler tests."""
 
-    def __init__(self, root_dir: Path, upload_dir: Path):
+    def __init__(
+        self,
+        root_dir: Path,
+        upload_dir: Path,
+        *,
+        upload_storage_policy: UploadStoragePolicy | None = None,
+    ):
         self.root_dir = root_dir
         self.upload_dir = upload_dir
+        self.upload_storage = UploadStorageService(
+            upload_dir,
+            upload_storage_policy or UploadStoragePolicy(),
+        )
         self.notes_dir = root_dir / "notes"
         self.notes_dir.mkdir(exist_ok=True)
         self.cors_origin = None
@@ -83,6 +98,10 @@ def _force_first_two_exists_checks_to_miss(monkeypatch, target: Path) -> None:
         return original_exists(self)
 
     monkeypatch.setattr(Path, "exists", fake_exists)
+
+
+def _upload_temp_files(upload_dir: Path) -> list[Path]:
+    return sorted(path for path in upload_dir.iterdir() if path.name.startswith(".upload-tmp-"))
 
 
 class TestSanitizeFilename:
@@ -223,3 +242,112 @@ class TestExclusiveUploadWrites:
         saved_files = sorted(path for path in upload_dir.iterdir() if path.is_file())
         assert len(saved_files) == 2
         assert {path.read_bytes() for path in saved_files} == set(payloads)
+
+    def test_standard_upload_rejects_aggregate_quota_without_artifacts(
+        self,
+        temp_dir: Path,
+        upload_dir: Path,
+    ):
+        (upload_dir / "existing.bin").write_bytes(b"123456789")
+        server = UploadStubServer(
+            temp_dir,
+            upload_dir,
+            upload_storage_policy=UploadStoragePolicy(max_total_bytes=10),
+        )
+
+        response = server.handle_none(
+            make_request(
+                "POST",
+                "/",
+                headers={"X-File-Name": "blocked.txt"},
+                body=b"xx",
+            )
+        )
+
+        assert response.status_code == 507
+        assert json.loads(response.body)["status"] == 507
+        assert not (upload_dir / "blocked.txt").exists()
+        assert _upload_temp_files(upload_dir) == []
+
+    def test_advanced_upload_rejects_aggregate_quota_without_artifacts(
+        self,
+        temp_dir: Path,
+        upload_dir: Path,
+    ):
+        (upload_dir / "existing.bin").write_bytes(b"123456789")
+        server = UploadStubServer(
+            temp_dir,
+            upload_dir,
+            upload_storage_policy=UploadStoragePolicy(max_total_bytes=10),
+        )
+        body = json.dumps(
+            {
+                "d": base64.b64encode(b"xx").decode("ascii"),
+                "n": "blocked-advanced.txt",
+            }
+        ).encode("ascii")
+
+        response = server.handle_advanced_upload(make_request("XUPLOAD", "/", body=body))
+
+        assert response.status_code == 507
+        assert json.loads(response.body)["status"] == 507
+        assert not (upload_dir / "blocked-advanced.txt").exists()
+        assert _upload_temp_files(upload_dir) == []
+
+    def test_upload_publish_uses_hidden_same_directory_temp_file(
+        self,
+        temp_dir: Path,
+        upload_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        server = UploadStubServer(temp_dir, upload_dir)
+        original_link = storage_module.os.link
+        observed_temp_paths: list[Path] = []
+
+        def recording_link(src: str | bytes | Path, dst: str | bytes | Path) -> None:
+            observed_temp_paths.append(Path(src))
+            original_link(src, dst)
+
+        monkeypatch.setattr(storage_module.os, "link", recording_link)
+
+        response = server.handle_none(
+            make_request(
+                "POST",
+                "/",
+                headers={"X-File-Name": "atomic.txt"},
+                body=b"complete payload",
+            )
+        )
+
+        assert response.status_code == 201
+        assert observed_temp_paths
+        assert observed_temp_paths[0].parent == upload_dir
+        assert observed_temp_paths[0].name.startswith(".upload-tmp-")
+        assert not observed_temp_paths[0].exists()
+        assert (upload_dir / "atomic.txt").read_bytes() == b"complete payload"
+
+    def test_upload_publish_failure_removes_temp_and_final_artifacts(
+        self,
+        temp_dir: Path,
+        upload_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        server = UploadStubServer(temp_dir, upload_dir)
+
+        def failing_link(src: str | bytes | Path, dst: str | bytes | Path) -> None:
+            raise OSError(errno.EIO, "forced publish failure")
+
+        monkeypatch.setattr(storage_module.os, "link", failing_link)
+
+        response = server.handle_none(
+            make_request(
+                "POST",
+                "/",
+                headers={"X-File-Name": "failed.txt"},
+                body=b"payload",
+            )
+        )
+
+        assert response.status_code == 500
+        assert not (upload_dir / "failed.txt").exists()
+        assert _upload_temp_files(upload_dir) == []
