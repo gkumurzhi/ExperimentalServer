@@ -743,10 +743,12 @@ Hidden files inside `notes/` are preserved.
 
 ## WebSocket — /notes/ws
 
-Real-time notepad sync over WebSocket (RFC 6455). The server detects an
-upgrade request on any path starting with `/notes/ws` and performs the
-handshake inline, before the normal HTTP handler runs. The connection uses a
-60-second idle timeout; the server sends a ping frame when idle to keep the
+Legacy lab-only Notepad transport over WebSocket (RFC 6455). It is not a
+durable workspace-sync protocol: the server does not provide revision checks,
+conflict detection, replay, resume tokens, or collaborative merge. The server
+detects an upgrade request on any path starting with `/notes/ws` and performs
+the handshake inline, before the normal HTTP handler runs. The connection uses
+a 60-second idle timeout; the server sends a ping frame when idle to keep the
 connection alive. Active WebSocket connections are admitted against
 `--max-websocket-connections` (`--workers // 2` by default), and incomplete
 frames must finish within `--websocket-frame-idle-timeout` (`5` seconds by
@@ -773,7 +775,10 @@ Connection: Upgrade
 Sec-WebSocket-Accept: <computed accept key>
 ```
 
-All WebSocket messages are UTF-8 JSON text frames. The client sends masked frames (required by RFC 6455); the server sends unmasked frames.
+All WebSocket messages are UTF-8 JSON text frames. The client sends masked
+frames (required by RFC 6455); the server sends unmasked frames. Binary data
+frames are not part of the legacy contract and are closed before dispatch with
+WebSocket close code `1003` (`Binary frames are not supported`).
 
 Same-origin upgrades are allowed by default. Cross-origin upgrades require the
 `Origin` to match an exact configured `--cors-origin` value. Wildcard
@@ -786,8 +791,8 @@ Same-origin upgrades are allowed by default. Cross-origin upgrades require the
 | `save` | `title`, `data`, `noteId?`, `createIfMissing?`, `sessionId?`, `opId?` | Save a note (`sessionId` is optional audit-only state; `opId` is echoed for acknowledgement correlation) |
 | `load` | `id` | Load a note by ID |
 | `list` | — | List all notes |
-| `delete` | `id` | Delete a note |
-| `clear` | — | Clear all notes from the separate `notes/` directory |
+| `delete` | `id` | Delete a note; requires `note_delete` at message time |
+| `clear` | — | Clear all notes from the separate `notes/` directory; requires `note_clear` at message time |
 
 **Server response types:**
 
@@ -804,16 +809,24 @@ Domain errors for `save`, `load`, `delete`, and `clear` can keep the operation
 response type (`saved`, `loaded`, `deleted`, or `cleared`) while adding
 `error` and `status`. Invalid JSON, non-object messages, unknown message types,
 and invalid note IDs use `{"type": "error", "error": "..."}`.
+`delete` and `clear` are rechecked against `note_delete` and `note_clear` for
+each message; disabled destructive operations return
+`{"type": "error", "error": "...", "status": 403}` and do not mutate notes.
 Unexpected internal WebSocket failures are logged as errors, counted in
 `metrics.websocket.errors`, and closed with WebSocket code `1011` rather than
-normal close code `1000`.
+normal close code `1000`. If a JSON response cannot be sent, the send failure
+is logged, the connection is treated as failed, and the server attempts to close
+with `1011`; clients should treat the operation outcome as unknown and verify
+state after reconnect.
 
 For idempotent WebSocket saves, send `opId` so the client can correlate the
 `saved` acknowledgement and send a stable hex `noteId` with
 `createIfMissing: true` for first saves that may be retried after reconnect or
 HTTP fallback. Retrying the same `noteId` updates the original note instead of
 creating a duplicate. The server does not persist or deduplicate `opId`; it is
-only copied into the corresponding `saved` response when present.
+only copied into the corresponding `saved` response when present. There is no
+server-side conflict contract for concurrent writes: repeated writes to the
+same note ID use last-write-wins semantics at the encrypted-blob level.
 
 ---
 

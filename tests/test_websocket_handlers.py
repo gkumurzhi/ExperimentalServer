@@ -5,6 +5,7 @@ import json
 import logging
 import struct
 import threading
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -152,6 +153,37 @@ def mock_socket():
 
 
 class TestWSClientMasking:
+    def test_binary_frame_closes_unsupported_data_without_dispatch(
+        self,
+        temp_dir,
+        monkeypatch,
+    ):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        handled_payloads: list[bytes] = []
+        monkeypatch.setattr(
+            server,
+            "_handle_ws_message",
+            lambda _sock, payload: handled_payloads.append(payload),
+        )
+        server.running = True
+        sock = _WebSocketLoopSocket([_make_masked_ws_frame(0x02, b'{"type":"list"}')])
+        request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={"Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ=="},
+        )
+
+        server._handle_notepad_ws(sock, request)
+
+        assert handled_payloads == []
+        assert b"HTTP/1.1 101 Switching Protocols" in sock.sent[0]
+        close_frame = parse_ws_frame(sock.sent[-1])
+        assert close_frame is not None
+        assert close_frame[0] == WS_CLOSE
+        assert struct.unpack("!H", close_frame[1][:2])[0] == 1003
+        assert close_frame[1][2:] == b"Binary frames are not supported"
+
     def test_unmasked_frame_closes_protocol_error_without_dispatch(
         self,
         temp_dir,
@@ -607,6 +639,65 @@ class TestWSDelete:
         ws_server._handle_ws_message(mock_socket, payload)
         assert mock_socket.last_json["type"] == "error"
 
+    def test_delete_rejects_when_profile_disables_note_delete(
+        self,
+        ws_server,
+        mock_socket,
+    ):
+        ws_server.features = replace(
+            resolve_feature_profile("lab"),
+            profile="custom-ws-no-delete",
+            note_delete=False,
+        )
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Keep",
+                "data": base64.b64encode(b"keep me").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, save_payload)
+        note_id = mock_socket.last_json["id"]
+
+        delete_payload = json.dumps({"type": "delete", "id": note_id}).encode()
+        ws_server._handle_ws_message(mock_socket, delete_payload)
+
+        msg = mock_socket.last_json
+        assert msg["type"] == "error"
+        assert msg["status"] == 403
+        assert "Deleting notes is disabled" in msg["error"]
+        assert (ws_server.notes_dir / f"{note_id}.enc").exists()
+
+
+class TestWSClear:
+    def test_clear_rejects_when_profile_disables_note_clear(
+        self,
+        ws_server,
+        mock_socket,
+    ):
+        ws_server.features = replace(
+            resolve_feature_profile("lab"),
+            profile="custom-ws-no-clear",
+            note_clear=False,
+        )
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Keep",
+                "data": base64.b64encode(b"keep me").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, save_payload)
+        note_id = mock_socket.last_json["id"]
+
+        ws_server._handle_ws_message(mock_socket, json.dumps({"type": "clear"}).encode())
+
+        msg = mock_socket.last_json
+        assert msg["type"] == "error"
+        assert msg["status"] == 403
+        assert "Clearing notes is disabled" in msg["error"]
+        assert (ws_server.notes_dir / f"{note_id}.enc").exists()
+
 
 class TestNoteTransportParity:
     def test_http_and_ws_save_have_same_contract(self, ws_server, mock_socket):
@@ -703,5 +794,84 @@ class TestWSHelpers:
         result = ws_server._ws_run_note_operation("saved", _InvalidResult)
         assert result == {"error": "Invalid JSON response", "status": 500, "type": "saved"}
 
-    def test_ws_send_json_ignores_socket_send_failures(self) -> None:
-        NotepadHandlersMixin._ws_send_json(_FailingSocket(), {"type": "noop"})
+    def test_ws_send_json_reports_socket_send_failures(self, caplog) -> None:
+        with caplog.at_level(logging.WARNING, logger="httpserver"):
+            sent = NotepadHandlersMixin._ws_send_json(_FailingSocket(), {"type": "noop"})
+
+        assert sent is False
+        assert "WebSocket JSON send failed" in caplog.text
+
+    def test_side_effecting_save_surfaces_send_failure(
+        self,
+        ws_server,
+        caplog,
+    ):
+        payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Sentinel",
+                "data": base64.b64encode(b"saved before failure").decode(),
+            }
+        ).encode()
+
+        with caplog.at_level(logging.WARNING, logger="httpserver"):
+            with pytest.raises(ConnectionError, match="WebSocket JSON send failed"):
+                ws_server._handle_ws_message(_FailingSocket(), payload)
+
+        assert sorted(path.suffix for path in ws_server.notes_dir.iterdir()) == [
+            ".enc",
+            ".json",
+        ]
+        assert "WebSocket JSON send failed" in caplog.text
+
+    def test_side_effecting_delete_surfaces_send_failure(
+        self,
+        ws_server,
+        mock_socket,
+        caplog,
+    ):
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Delete",
+                "data": base64.b64encode(b"delete before failure").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, save_payload)
+        note_id = mock_socket.last_json["id"]
+
+        with caplog.at_level(logging.WARNING, logger="httpserver"):
+            with pytest.raises(ConnectionError, match="WebSocket JSON send failed"):
+                ws_server._handle_ws_message(
+                    _FailingSocket(),
+                    json.dumps({"type": "delete", "id": note_id}).encode(),
+                )
+
+        assert not (ws_server.notes_dir / f"{note_id}.enc").exists()
+        assert "WebSocket JSON send failed" in caplog.text
+
+    def test_side_effecting_clear_surfaces_send_failure(
+        self,
+        ws_server,
+        mock_socket,
+        caplog,
+    ):
+        save_payload = json.dumps(
+            {
+                "type": "save",
+                "title": "Clear",
+                "data": base64.b64encode(b"clear before failure").decode(),
+            }
+        ).encode()
+        ws_server._handle_ws_message(mock_socket, save_payload)
+        note_id = mock_socket.last_json["id"]
+
+        with caplog.at_level(logging.WARNING, logger="httpserver"):
+            with pytest.raises(ConnectionError, match="WebSocket JSON send failed"):
+                ws_server._handle_ws_message(
+                    _FailingSocket(),
+                    json.dumps({"type": "clear"}).encode(),
+                )
+
+        assert not (ws_server.notes_dir / f"{note_id}.enc").exists()
+        assert "WebSocket JSON send failed" in caplog.text

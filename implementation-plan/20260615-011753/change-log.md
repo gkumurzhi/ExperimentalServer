@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 17:30:16 +0300 - STAGE-011
+- Status: CLOSED
+- Files changed: `src/handlers/notepad.py`, `src/server.py`, `tests/test_websocket_handlers.py`, `API.md`, `docs/api.md`, `implementation-plan/20260615-011753/stages/STAGE-011-websocket-notepad-safety.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-011-20260615-170742.md`
+- Verification: Targeted WebSocket/security lane passed (`91 passed`); live server tests passed (`13 passed`); docs sync/stale checks, ruff check/format, mypy, `git diff --check`, explorer mapping, and reviewer diff review passed. `uv run --extra lint ...` was blocked by a pre-existing broken ignored `.venv` `acme` install, which was repaired before direct `.venv` lint/type verification.
+- Report: `stage-reports/STAGE-011-20260615-170742.md`
+
 ## 2026-06-15 17:02:55 +0300 - STAGE-010
 - Status: CLOSED
 - Files changed: `API.md`, `docs/api.md`, `README.md`, `implementation-plan/20260615-011753/stages/STAGE-010-api-contract-stability.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-010-20260615-165022.md`

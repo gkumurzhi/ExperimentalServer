@@ -289,12 +289,14 @@ class NotepadHandlersMixin(BaseHandler):
         try:
             msg = json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"})
+            if not self._ws_send_json(sock, {"type": "error", "error": "Invalid JSON"}):
+                raise ConnectionError("WebSocket JSON send failed") from None
             return
 
         msg_obj = self._coerce_json_object(msg)
         if msg_obj is None:
-            self._ws_send_json(sock, {"type": "error", "error": "Expected JSON object"})
+            if not self._ws_send_json(sock, {"type": "error", "error": "Expected JSON object"}):
+                raise ConnectionError("WebSocket JSON send failed")
             return
 
         msg_type = msg_obj.get("type")
@@ -308,26 +310,60 @@ class NotepadHandlersMixin(BaseHandler):
         elif msg_type == "list":
             result = self._get_notepad_service().list_notes().to_dict()
             result["type"] = "list"
-            self._ws_send_json(sock, result)
+            if not self._ws_send_json(sock, result):
+                raise ConnectionError("WebSocket JSON send failed")
         elif msg_type == "delete":
             note_id = msg_obj.get("id")
             if isinstance(note_id, str) and note_id and is_valid_note_id(note_id):
+                features = self._feature_set()
+                if not features.note_delete:
+                    if not self._ws_send_json(
+                        sock,
+                        {
+                            "type": "error",
+                            "error": (
+                                f"Deleting notes is disabled for the {features.profile} profile"
+                            ),
+                            "status": 403,
+                        },
+                    ):
+                        raise ConnectionError("WebSocket JSON send failed")
+                    return
                 result = self._ws_run_note_operation(
                     "deleted",
                     lambda: self._get_notepad_service().delete_note(note_id),
                 )
                 result["type"] = "deleted"
-                self._ws_send_json(sock, result)
+                if not self._ws_send_json(sock, result):
+                    raise ConnectionError("WebSocket JSON send failed")
             else:
-                self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+                if not self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"}):
+                    raise ConnectionError("WebSocket JSON send failed")
         elif msg_type == "clear":
+            features = self._feature_set()
+            if not features.note_clear:
+                if not self._ws_send_json(
+                    sock,
+                    {
+                        "type": "error",
+                        "error": f"Clearing notes is disabled for the {features.profile} profile",
+                        "status": 403,
+                    },
+                ):
+                    raise ConnectionError("WebSocket JSON send failed")
+                return
             result = self._ws_run_note_operation(
                 "cleared",
                 lambda: self._get_notepad_service().clear_notes(),
             )
-            self._ws_send_json(sock, result)
+            if not self._ws_send_json(sock, result):
+                raise ConnectionError("WebSocket JSON send failed")
         else:
-            self._ws_send_json(sock, {"type": "error", "error": f"Unknown type: {msg_type}"})
+            if not self._ws_send_json(
+                sock,
+                {"type": "error", "error": f"Unknown type: {msg_type}"},
+            ):
+                raise ConnectionError("WebSocket JSON send failed")
 
     def _ws_run_note_operation(
         self,
@@ -369,25 +405,30 @@ class NotepadHandlersMixin(BaseHandler):
         )
         if isinstance(op_id, str) and op_id:
             result["opId"] = op_id
-        self._ws_send_json(sock, result)
+        if not self._ws_send_json(sock, result):
+            raise ConnectionError("WebSocket JSON send failed")
 
     def _ws_handle_load(self, sock: socket.socket, msg: dict[str, object]) -> None:
         """Handle a WS load message."""
         note_id = msg.get("id")
         if not isinstance(note_id, str) or not note_id or not is_valid_note_id(note_id):
-            self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"})
+            if not self._ws_send_json(sock, {"type": "error", "error": "Invalid note ID"}):
+                raise ConnectionError("WebSocket JSON send failed")
             return
         result = self._ws_run_note_operation(
             "loaded",
             lambda: self._get_notepad_service().load_note(note_id),
         )
-        self._ws_send_json(sock, result)
+        if not self._ws_send_json(sock, result):
+            raise ConnectionError("WebSocket JSON send failed")
 
     @staticmethod
-    def _ws_send_json(sock: socket.socket, data: dict[str, object]) -> None:
+    def _ws_send_json(sock: socket.socket, data: dict[str, object]) -> bool:
         """Send a JSON message over WebSocket."""
         frame = build_ws_frame(json.dumps(data).encode("utf-8"))
         try:
             sock.sendall(frame)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("WebSocket JSON send failed: %s", exc)
+            return False
+        return True

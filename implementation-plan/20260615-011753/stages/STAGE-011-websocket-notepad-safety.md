@@ -1,7 +1,7 @@
 # STAGE-011 - WebSocket and Notepad safety
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -78,4 +78,16 @@ Apply bounded legacy WebSocket/Notepad safety fixes and documentation without pr
 - Rollback: keep capability checks, but revert send-failure handling to previous behavior and document the unresolved risk if tests show compatibility problems.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 17:30:16 +0300. WebSocket `delete` and `clear` now re-check
+`note_delete` and `note_clear` at message time, `_ws_send_json` reports and
+logs failed sends so side-effecting operations are no longer silently
+acknowledged, and `/notes/ws` rejects binary data frames with close code
+`1003`. Regression tests cover divergent custom profiles, binary policy, and
+send failures after save/delete/clear side effects. API docs now state legacy
+lab-only scope, text-only frame policy, per-message destructive capability
+checks, send-failure behavior, correlation-only `opId`, retry guidance, and
+last-write-wins/no-conflict semantics.
+
+Verification passed: targeted WebSocket/security pytest lane (`91 passed`),
+live server pytest lane (`13 passed`), docs sync/stale checks, ruff
+check/format, mypy, and `git diff --check`.

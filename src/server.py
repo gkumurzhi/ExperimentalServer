@@ -1211,7 +1211,11 @@ class ExperimentalHTTPServer(HandlerMixin):
                     if opcode == WS_PONG:
                         continue
 
-                    if opcode in (WS_TEXT, WS_BINARY):
+                    if opcode == WS_BINARY:
+                        send_close(1003, "Binary frames are not supported")
+                        return
+
+                    if opcode == WS_TEXT:
                         self._handle_ws_message(sock, payload)
 
         except Exception:
