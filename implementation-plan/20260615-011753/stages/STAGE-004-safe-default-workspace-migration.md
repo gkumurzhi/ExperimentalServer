@@ -1,7 +1,7 @@
 # STAGE-004 - Safe default workspace migration
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -77,4 +77,19 @@ If STAGE-002 approves the recommended path, migrate the new-user default profile
 - Rollback: restore the previous default value and docs, leaving explicit-profile tests in place where useful.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 13:59:42 +0300.
+
+- `DEFAULT_PROFILE` now resolves to `workspace`; default CLI/server startup and
+  `PING` report workspace capabilities.
+- Deprecated `--advanced-upload` now maps to `--profile lab` so old advanced
+  upload invocations keep the compatibility path after the default migration.
+- Default tests now prove ordinary upload/delete workflows continue while
+  advanced upload, SMUGGLE, NOTE, WebSocket notes, destructive clears, and
+  lab-only unknown-method behavior are disabled by default.
+- Explicit lab-profile tests cover advanced upload fallback, CORS unknown
+  methods, SMUGGLE/NOTE/WebSocket surface, upload clear, and note clear.
+- README/API/SECURITY/CHANGELOG and generated docs mirrors describe the
+  workspace default and explicit lab compatibility path.
+- Verification passed: targeted pytest lane (`250 passed`), docs checks,
+  compileall, default/lab capability payload check, `git diff --check`, and
+  subagent review after follow-up fixes.

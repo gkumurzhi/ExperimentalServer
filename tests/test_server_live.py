@@ -177,7 +177,8 @@ class TestLiveRequestHandling:
                 ping1 = json.loads(body1)
                 assert ping1["status"] == "pong"
                 assert ping1["access_scope"] == "uploads"
-                assert ping1["advanced_upload"] is True
+                assert ping1["profile"] == "workspace"
+                assert ping1["advanced_upload"] is False
 
                 sock.sendall(
                     (
@@ -193,7 +194,8 @@ class TestLiveRequestHandling:
                 ping2 = json.loads(body2)
                 assert ping2["status"] == "pong"
                 assert ping2["access_scope"] == "uploads"
-                assert ping2["advanced_upload"] is True
+                assert ping2["profile"] == "workspace"
+                assert ping2["advanced_upload"] is False
 
     def test_request_admission_rejects_when_single_worker_is_occupied(
         self,
@@ -317,9 +319,14 @@ class TestLiveRequestHandling:
                 metrics = live.server.get_metrics()
                 assert metrics["receive_rejections"]["body_idle_timeout"] == 1
                 assert metrics["timeouts"]["body_idle_timeout"] == 1
-                assert metrics["request_admission"]["active"] == 0  # type: ignore[index]
             finally:
                 first.close()
+
+            for _ in range(100):
+                if live.server.get_metrics()["request_admission"]["active"] == 0:  # type: ignore[index]
+                    break
+                time.sleep(0.02)
+            assert live.server.get_metrics()["request_admission"]["active"] == 0  # type: ignore[index]
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as second:
                 second.settimeout(2.0)
@@ -556,7 +563,7 @@ class TestLiveFeatureProfiles:
 
 
 class TestLiveAdvancedUploadRouting:
-    def test_advanced_upload_is_enabled_without_mode_flags(
+    def test_default_profile_allows_workspace_requests_but_disables_advanced_upload(
         self,
         temp_dir: Path,
     ) -> None:
@@ -572,7 +579,13 @@ class TestLiveAdvancedUploadRouting:
                 assert headers["server"].startswith("ExperimentalHTTPServer/")
                 ping = json.loads(body)
                 assert ping["status"] == "pong"
-                assert ping["advanced_upload"] is True
+                assert ping["profile"] == "workspace"
+                assert ping["advanced_upload"] is False
+                assert ping["capabilities"]["ordinary_upload"] is True
+                assert ping["capabilities"]["file_delete"] is True
+                assert ping["capabilities"]["smuggle"] is False
+                assert ping["capabilities"]["note_http"] is False
+                assert ping["capabilities"]["websocket_notes"] is False
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
@@ -585,6 +598,38 @@ class TestLiveAdvancedUploadRouting:
                 assert info["is_directory"] is True
                 assert info["path"] == "/"
                 assert "contents" in info
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"POST /workspace.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Content-Length: 9\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                        "workspace"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 201")
+                assert json.loads(body)["success"] is True
+                assert (temp_dir / "uploads" / "workspace.txt").read_bytes() == b"workspace"
+
+            with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
+                sock.settimeout(2.0)
+                sock.sendall(
+                    (
+                        f"DELETE /uploads/workspace.txt HTTP/1.1\r\n"
+                        f"Host: 127.0.0.1:{live.port}\r\n"
+                        "Connection: close\r\n"
+                        "\r\n"
+                    ).encode("ascii")
+                )
+                status, _headers, body = _recv_http_response(sock)
+                assert status.startswith("HTTP/1.1 200")
+                assert json.loads(body)["success"] is True
+                assert not (temp_dir / "uploads" / "workspace.txt").exists()
 
             payload = base64.b64encode(b"advanced live upload").decode("ascii")
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
@@ -601,18 +646,15 @@ class TestLiveAdvancedUploadRouting:
                     + request_body
                 )
                 status, _headers, body = _recv_http_response(sock)
-                result = json.loads(body)
-                assert status.startswith("HTTP/1.1 200")
-                assert result["ok"] is True
-                assert (temp_dir / "uploads" / "advanced.txt").read_bytes() == (
-                    b"advanced live upload"
-                )
+                assert status.startswith("HTTP/1.1 405")
+                assert b"Method 'SYNCDATA' not allowed" in body
+                assert not (temp_dir / "uploads" / "advanced.txt").exists()
 
-    def test_unknown_method_with_data_uses_advanced_upload_by_default(
+    def test_unknown_method_with_data_uses_advanced_upload_with_lab_profile(
         self,
         temp_dir: Path,
     ) -> None:
-        with _LiveServer(temp_dir) as live:
+        with _LiveServer(temp_dir, profile="lab") as live:
             payload = base64.b64encode(b"fallback upload").decode("ascii")
 
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
@@ -659,6 +701,7 @@ class TestLiveWebSocketNotes:
             max_workers=2,
             max_websocket_connections=1,
             websocket_frame_idle_timeout=5.0,
+            profile="lab",
         ) as live:
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as first:
                 first.settimeout(2.0)
@@ -700,7 +743,7 @@ class TestLiveWebSocketNotes:
                 assert close_frame[0] == WS_CLOSE
 
     def test_notes_websocket_supports_save_list_and_load_round_trip(self, temp_dir: Path) -> None:
-        with _LiveServer(temp_dir) as live:
+        with _LiveServer(temp_dir, profile="lab") as live:
             with socket.create_connection(("127.0.0.1", live.port), timeout=2.0) as sock:
                 sock.settimeout(2.0)
                 self._send_ws_handshake(sock, live.port)

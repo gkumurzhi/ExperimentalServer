@@ -4,9 +4,10 @@
 
 ## Context
 
-The server currently defaults to the `lab` feature profile for compatibility.
-That profile enables the full experimental surface, including advanced upload,
-`SMUGGLE`, `NOTE`, WebSocket notes, upload clearing, and note clearing.
+At the time of this decision, the server defaulted to the `lab` feature
+profile for compatibility. That profile enables the full experimental surface,
+including advanced upload, `SMUGGLE`, `NOTE`, WebSocket notes, upload
+clearing, and note clearing.
 
 The analysis for the 2026-06 implementation plan recommended a safer
 new-user path before changing runtime defaults or promoting distribution/API
@@ -22,15 +23,14 @@ The supported profile direction is:
 | Profile | First path |
 |---|---|
 | `serve` | Read-only sharing and inspection when uploads or mutations are not needed. |
-| `workspace` | Normal file workspace with ordinary uploads and single-file deletes; this is the intended future default for new users. |
+| `workspace` | Normal file workspace with ordinary uploads and single-file deletes; this is the default for new users after STAGE-004. |
 | `lab` | Explicit opt-in for experiments and compatibility with scripts that need advanced upload, `SMUGGLE`, `NOTE`, WebSocket notes, or clear operations. |
 
-The current runtime default remains `lab` until the default migration stage.
-Before that migration, documentation and release notes must tell operators to
-pin `--profile lab` for scripts that rely on implicit experimental behavior.
-The `lab` profile and the deprecated `--advanced-upload` alias remain
-available as compatibility paths; the default migration must not remove those
-capabilities.
+STAGE-004 changed the runtime default to `workspace`. Documentation and
+release notes must tell operators to pin `--profile lab` for scripts that rely
+on implicit experimental behavior. The `lab` profile and the deprecated
+`--advanced-upload` alias remain available as compatibility paths; the default
+migration must not remove those capabilities.
 
 External exposure is not a supported safe default. Binding to a public
 interface, enabling TLS, or enabling Basic Auth is not enough on its own for
@@ -55,8 +55,8 @@ rollback boundaries, and release automation belong to a later Docker stage.
 
 ### Positive
 
-- New users get a clear safe-by-default direction before the CLI default
-  changes.
+- New users now get the safer `workspace` default while the compatibility path
+  remains explicit.
 - Existing automation has an explicit compatibility path: pass
   `--profile lab` when experimental methods are required.
 - Reverse-proxy deployments cannot accidentally treat forwarded headers as a
@@ -66,17 +66,15 @@ rollback boundaries, and release automation belong to a later Docker stage.
 
 ### Negative
 
-- The documented future direction and the current runtime default temporarily
-  differ.
+- Scripts that rely on implicit `lab` behavior need an explicit profile flag
+  after the default migration.
 - Operators behind a reverse proxy must configure per-client controls in the
   proxy until trusted-proxy support exists in the application.
-- Scripts that rely on implicit `lab` behavior need a migration note and an
-  explicit profile flag before the default changes.
 
 ### Follow-up
 
 - STAGE-003 can centralize capability policy around this profile boundary.
-- STAGE-004 may change the CLI default only after compatibility notes are in
-  place and tests prove `--profile lab` preserves the legacy surface.
+- STAGE-004 changed the CLI default after compatibility notes were in place
+  and tests proved `--profile lab` preserves the legacy surface.
 - STAGE-008 may promote or defer Docker artifact support based on this
   operator-convenience status.

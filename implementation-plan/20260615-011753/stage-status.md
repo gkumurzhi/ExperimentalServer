@@ -5,7 +5,7 @@
 | STAGE-001 | CLOSED | MEDIUM | Docs mirror and release hygiene | 2026-06-15 12:50:25 +0300 | Docs mirrors synced, local docs guardrails added, release/install wording clarified. | `stage-reports/STAGE-001-20260615-124223.md` |
 | STAGE-002 | CLOSED | MEDIUM | Profile and exposure decision gate | 2026-06-15 13:04:45 +0300 | Profile/default ADR added; README, security, threat-model, and Docker status docs updated. | `stage-reports/STAGE-002-20260615-125438.md` |
 | STAGE-003 | CLOSED | MEDIUM | Capability policy boundary | 2026-06-15 13:26:08 +0300 | Shared FeatureSet policy helpers now drive registry, CORS, mutation guard, and WebSocket admission; explicit feature setup added to handler tests. | `stage-reports/STAGE-003-20260615-130908.md` |
-| STAGE-004 | OPEN | MEDIUM | Safe default workspace migration | - | - | - |
+| STAGE-004 | CLOSED | MEDIUM | Safe default workspace migration | 2026-06-15 13:59:42 +0300 | Default profile migrated to workspace; deprecated advanced-upload alias maps to lab; docs and tests cover default-safe behavior plus explicit lab compatibility. | `stage-reports/STAGE-004-20260615-133030.md` |
 | STAGE-005 | OPEN | MEDIUM | Notepad UI and accessibility hardening | - | - | - |
 | STAGE-006 | OPEN | MEDIUM | Profile-aware smoke and risk test gates | - | - | - |
 | STAGE-007 | OPEN | MEDIUM | Python 3.14 readiness | - | - | - |

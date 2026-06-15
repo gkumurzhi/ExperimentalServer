@@ -21,6 +21,7 @@ def _start_server(
         root_dir="/tmp",
         quiet=True,
         cors_origin=cors_origin,
+        profile="lab",
     )
     if disable_ecdh:
         server._ecdh_manager = None

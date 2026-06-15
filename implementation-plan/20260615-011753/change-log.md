@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 13:59:42 +0300 - STAGE-004
+- Status: CLOSED
+- Files changed: `src/features.py`, `src/cli.py`, `tests/test_cli.py`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_security/test_websocket_upgrade.py`, `README.md`, `API.md`, `SECURITY.md`, `CHANGELOG.md`, `docs/api.md`, `docs/security.md`, `docs/changelog.md`, `docs/ADR/ADR-006-profile-default-and-exposure.md`, `implementation-plan/20260615-011753/stages/STAGE-004-safe-default-workspace-migration.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-004-20260615-133030.md`
+- Verification: Baseline implicit-lab behavior recorded before migration; targeted STAGE-004 pytest lane passed (`250 passed`); docs mirror/stale checks passed; `python -m compileall src tests` passed; default/lab capability payload check passed; `git diff --check` passed; explorer and reviewer subagents completed, with reviewer gaps fixed before closure.
+- Report: `stage-reports/STAGE-004-20260615-133030.md`
+
 ## 2026-06-15 13:26:08 +0300 - STAGE-003
 - Status: CLOSED
 - Files changed: `src/features.py`, `src/http/cors.py`, `src/handlers/__init__.py`, `src/handlers/base.py`, `src/server.py`, `tests/test_handler_registry.py`, `tests/test_server_methods.py`, `tests/test_server_routing.py`, `tests/test_websocket_handlers.py`, `tests/test_handlers/test_files.py`, `tests/test_handlers/test_notepad.py`, `tests/test_handlers/test_handler_integration.py`, `implementation-plan/20260615-011753/stages/STAGE-003-capability-policy-boundary.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-003-20260615-130908.md`

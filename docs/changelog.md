@@ -8,7 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-No changes are queued beyond the 2026-06-15 docs/release remediation boundary.
+### Changed
+- **Behavior:** default feature profile is now `workspace`; use `--profile lab`
+  or the deprecated `--advanced-upload` alias for the legacy experimental
+  surface.
+
+### Security
+- **Default posture:** advanced upload, `SMUGGLE`, `NOTE`, WebSocket notes,
+  upload clear, and note clear are opt-in through the `lab` profile.
 
 ## [2026-06-15] - Docs and release remediation boundary
 

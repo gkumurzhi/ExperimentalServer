@@ -179,7 +179,7 @@ class TestDispatchHandler:
         resp = advanced_upload_server._dispatch_handler(req)
         assert resp.status_code == 405
 
-    def test_real_server_unknown_method_with_advanced_payload_uploads_by_default(
+    def test_real_server_unknown_method_with_advanced_payload_is_rejected_by_default(
         self,
         temp_dir,
     ):
@@ -193,11 +193,10 @@ class TestDispatchHandler:
             make_request("CONNECT", "/", headers={"X-D": payload, "X-N": "advanced.txt"})
         )
 
-        assert resp.status_code == 200
-        assert json.loads(resp.body)["ok"] is True
-        assert (server.upload_dir / "advanced.txt").read_bytes() == b"advanced upload"
+        assert resp.status_code == 405
+        assert not (server.upload_dir / "advanced.txt").exists()
 
-    def test_real_server_unknown_method_with_advanced_payload_uploads_with_compat_flag_absent(
+    def test_real_server_unknown_method_with_advanced_payload_uploads_with_lab_profile(
         self,
         temp_dir,
     ):
@@ -207,6 +206,7 @@ class TestDispatchHandler:
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),
             quiet=True,
+            profile="lab",
         )
 
         payload = base64.b64encode(b"advanced upload").decode("ascii")
@@ -220,6 +220,17 @@ class TestDispatchHandler:
 
 
 class TestFeatureProfiles:
+    def test_default_profile_uses_workspace_policy(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+
+        ping_data = json.loads(server._dispatch_handler(make_request("PING", "/")).body)
+
+        assert server.profile == "workspace"
+        assert ping_data["profile"] == "workspace"
+        assert ping_data["advanced_upload"] is False
+        assert ping_data["capabilities"] == resolve_feature_profile("workspace").capabilities()
+
     @pytest.mark.parametrize("profile", ["serve", "workspace", "lab"])
     def test_profile_policy_flows_through_public_surfaces(self, temp_dir, profile):
         (temp_dir / "index.html").write_text("<html>ok</html>")
@@ -493,6 +504,33 @@ class TestFeatureProfiles:
         assert "SMUGGLE" in allowed
         assert "XUPLOAD" in allowed
 
+    def test_lab_profile_preserves_clear_operations(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            profile="lab",
+        )
+        upload_file = server.upload_dir / "clear-me.txt"
+        upload_file.write_text("clear", encoding="utf-8")
+        note_file = server.notes_dir / "clear-me.enc"
+        note_file.write_bytes(b"opaque note")
+
+        upload_clear = server._dispatch_handler(make_request("DELETE", "/uploads?clear=1"))
+        note_clear = server._dispatch_handler(make_request("NOTE", "/notes?clear=1"))
+
+        assert upload_clear.status_code == 200
+        upload_data = json.loads(upload_clear.body)
+        assert upload_data["success"] is True
+        assert upload_data["cleared"] is True
+        assert not upload_file.exists()
+
+        assert note_clear.status_code == 200
+        note_data = json.loads(note_clear.body)
+        assert note_data["success"] is True
+        assert note_data["cleared"] is True
+        assert not note_file.exists()
+
 
 class TestWebSocketOriginValidation:
     def test_missing_origin_allowed(self, temp_dir):
@@ -701,12 +739,34 @@ class TestCorsContract:
                 cors_origin="*, https://app.example",
             )
 
-    def test_options_allows_unknown_method_by_default(self, temp_dir):
+    def test_options_rejects_unknown_advanced_method_by_default(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),
             quiet=True,
             cors_origin="https://app.example",
+        )
+        req = make_request(
+            "OPTIONS",
+            "/",
+            headers={"Access-Control-Request-Method": "XUPLOAD"},
+        )
+
+        response = server.handle_options(req)
+
+        allowed = response.headers["Access-Control-Allow-Methods"]
+        assert "POST" in allowed
+        assert "DELETE" in allowed
+        assert "XUPLOAD" not in allowed
+        assert "SMUGGLE" not in allowed
+
+    def test_options_allows_unknown_method_with_lab_profile(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            profile="lab",
         )
         req = make_request(
             "OPTIONS",
@@ -749,6 +809,7 @@ class TestCorsContract:
             root_dir=str(temp_dir),
             quiet=True,
             cors_origin="https://app.example",
+            profile="lab",
         )
         req = make_request(
             "OPTIONS",
@@ -1041,7 +1102,7 @@ class TestBrowserMutationGuard:
 
     def test_unknown_advanced_upload_payload_is_guarded(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
         req = make_request(
             "XUPLOAD",
             "/",
@@ -1763,7 +1824,7 @@ class TestServerHelpers:
         monkeypatch,
     ):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
         source_path = server.upload_dir / "small.txt"
         source_path.write_bytes(b"small payload")
         smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
@@ -1798,7 +1859,7 @@ class TestServerHelpers:
 
     def test_smuggle_temp_head_cleans_up_one_shot_artifact(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
         source_path = server.upload_dir / "small.txt"
         source_path.write_bytes(b"small payload")
         smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
@@ -1831,7 +1892,7 @@ class TestServerHelpers:
 
     def test_smuggle_temp_conditional_get_cleans_up_one_shot_artifact(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
-        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
         source_path = server.upload_dir / "small.txt"
         source_path.write_bytes(b"small payload")
         smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
@@ -1928,6 +1989,7 @@ class TestServerHelpers:
     def test_is_websocket_upgrade_attempt_detects_handshake_headers(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True)
+        lab_server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
 
         upgrade_request = make_request(
             "GET",
@@ -1940,7 +2002,8 @@ class TestServerHelpers:
         )
         plain_request = make_request("GET", "/")
 
-        assert server._is_websocket_upgrade_attempt(upgrade_request) is True
+        assert server._is_websocket_upgrade_attempt(upgrade_request) is False
+        assert lab_server._is_websocket_upgrade_attempt(upgrade_request) is True
         assert server._is_websocket_upgrade_attempt(plain_request) is False
 
     def test_post_process_response_adds_request_id_and_gzip_when_requested(self, temp_dir):
@@ -2279,7 +2342,8 @@ class TestServerHelpers:
         assert "[AUTH]    Basic Auth enabled" in output
         assert "File access: uploads/ only" in output
         assert "Max headers: 64 KiB" in output
-        assert "Advanced upload: enabled" in output
+        assert "Profile: workspace" in output
+        assert "Advanced upload: disabled" in output
         assert "Shutting down..." in output
         assert "Server stopped" in output
         assert listening_socket.bound == ("127.0.0.1", 8080)

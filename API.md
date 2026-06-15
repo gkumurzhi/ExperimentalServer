@@ -22,7 +22,7 @@ below.
 | SMUGGLE | Missing files return JSON `{"error": "File not found", "path": "<path>"}`. Source-size failures use JSON `{"error": "...", "status": 413, ...size fields...}`. |
 | NOTE HTTP | Validation, missing-note, and crypto-unavailable errors use JSON `{"error": "...", "status": NNN}`. `NOTE /notes/key` reports crypto availability in its normal `200` response. |
 | WebSocket upgrade and messages | Auth failures can return `401`/`429` JSON before WebSocket validation. HTTP upgrade rejections (`400`, `403`, `501`, `503`) use JSON `{"error": "...", "status": NNN}` before the WebSocket handshake. After upgrade, application-message errors are WebSocket JSON text frames such as `{"type": "error", "error": "..."}` or operation frames that may include `error` and `status`; protocol/frame failures close with WebSocket close frames instead. |
-| Advanced upload | Unknown methods carrying an advanced payload in the body, headers, chunked headers, or query string are routed to advanced upload by default. Unknown methods without an advanced payload return shared JSON `405`. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
+| Advanced upload | When the `lab` profile is enabled, unknown methods carrying an advanced payload in the body, headers, chunked headers, or query string are routed to advanced upload. The default `workspace` profile rejects those unknown methods with shared JSON `405`. Unknown lab-profile methods without an advanced payload also return shared JSON `405`. Some validation errors use JSON `{"error": "...", "status": 400}`. Missing advanced payloads after dispatch are legacy `400 text/plain` responses with an empty body. HMAC failures return JSON `{"ok": false, "err": "hmac"}`. Write failures return JSON `{"ok": false}`. |
 | Auth and request guards | Basic-auth failures, auth rate limits, internal pipeline errors, and aggregate body-memory budget exhaustion use JSON `{"error": "...", "status": NNN}`. Other receive-layer framing failures such as unsupported `Transfer-Encoding`, conflicting or invalid `Content-Length`, declared `Content-Length` over the configured upload cap, receive timeouts, or requests that exceed the receive hard cap may close the connection without an HTTP error body. |
 
 ---
@@ -30,7 +30,8 @@ below.
 ## Feature Profiles
 
 `--profile` selects the method and capability surface advertised by `PING` and
-CORS and enforced by the handler registry.
+CORS and enforced by the handler registry. The default profile is `workspace`;
+use `--profile lab` for the legacy experimental surface.
 
 | Profile | Capability surface |
 |---|---|
@@ -289,21 +290,21 @@ PING / HTTP/1.1
   "status": "pong",
   "server": "ExperimentalHTTPServer/2.0.0",
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
-  "supported_methods": ["GET", "HEAD", "POST", "PUT", "..."],
+  "supported_methods": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE"],
   "access_scope": "uploads",
-  "profile": "lab",
+  "profile": "workspace",
   "capabilities": {
     "ordinary_upload": true,
     "file_delete": true,
-    "clear_uploads": true,
-    "advanced_upload": true,
-    "smuggle": true,
-    "note_http": true,
-    "note_delete": true,
-    "note_clear": true,
-    "websocket_notes": true
+    "clear_uploads": false,
+    "advanced_upload": false,
+    "smuggle": false,
+    "note_http": false,
+    "note_delete": false,
+    "note_clear": false,
+    "websocket_notes": false
   },
-  "advanced_upload": true,
+  "advanced_upload": false,
   "metrics": {
     "uptime_seconds": 3600.5,
     "total_requests": 150,
@@ -767,9 +768,11 @@ reflected only when they are in the server allowlist (`Authorization`,
 
 ## Advanced Upload
 
-Advanced upload is enabled by default. Unknown, non-standard HTTP methods
-carrying advanced upload data are treated as upload requests. Writes are still
-limited to `uploads/`.
+Advanced upload is enabled only by the `lab` profile. The default `workspace`
+profile rejects unknown, non-standard HTTP methods even when they carry
+advanced upload data. Start with `--profile lab` or the deprecated
+`--advanced-upload` alias when compatibility with advanced-upload scripts is
+required. Writes are still limited to `uploads/`.
 
 The advanced upload endpoint accepts encoded payloads via JSON body, HTTP
 headers, or query parameters. Common fields are:

@@ -181,7 +181,7 @@ python -m exphttp [опции]
 | `--open` | Открыть в браузере после запуска | выключен |
 | `--json-log` | Структурированный JSON формат логов | выключен |
 | `--cors-origin ORIGIN` | Разрешить CORS; точный origin также допускает browser-origin mutations | выключен |
-| `--profile {serve,workspace,lab}` | Набор возможностей сервера | `lab` |
+| `--profile {serve,workspace,lab}` | Набор возможностей сервера | `workspace` |
 | `--advanced-upload` | Устаревший alias для `--profile lab` | - |
 | `--tls` | Включить HTTPS (самоподписный сертификат) | выключен |
 | `--cert FILE` | Путь к сертификату (PEM) | - |
@@ -202,16 +202,18 @@ python -m exphttp [опции]
 
 ### Профили возможностей
 
-Текущий CLI default остаётся `lab` для совместимости. Поддерживаемое
-направление для новых установок зафиксировано в
-[ADR-006](docs/ADR/ADR-006-profile-default-and-exposure.md): обычный первый
-выбор — `workspace`, а `lab` должен быть явным opt-in для экспериментов и
-legacy scripts.
+CLI default — `workspace`: обычная рабочая папка файлов с загрузкой и
+удалением отдельных файлов, но без экспериментальных lab-only возможностей.
+Поддерживаемое направление зафиксировано в
+[ADR-006](docs/ADR/ADR-006-profile-default-and-exposure.md): `lab` остаётся
+явным opt-in для экспериментов и legacy scripts. Если старый сценарий
+полагался на implicit `lab`, закрепите совместимость через `--profile lab`
+или устаревший alias `--advanced-upload`.
 
 | Профиль | Первый выбор для | Методы и возможности |
 |---------|------------------|----------------------|
 | `serve` | Read-only sharing или просмотр файлов без мутаций. | Только чтение: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. Загрузка, удаление, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
-| `workspace` | Нормальная рабочая папка файлов; планируемый будущий default для новых пользователей. | `serve` + обычная загрузка (`POST`, `PUT`, `PATCH`, `NONE`) и удаление отдельных файлов через `DELETE`. Очистка `uploads/`, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
+| `workspace` | Нормальная рабочая папка файлов; default для новых запусков. | `serve` + обычная загрузка (`POST`, `PUT`, `PATCH`, `NONE`) и удаление отдельных файлов через `DELETE`. Очистка `uploads/`, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
 | `lab` | Явные эксперименты и scripts, которым нужны нестандартные методы или полный legacy surface. | Совместимый экспериментальный режим: все методы, advanced upload, `SMUGGLE`, `NOTE`, WebSocket и операции очистки включены явно. |
 
 `PING` возвращает активный `profile`, `supported_methods` и карту
@@ -222,6 +224,9 @@ legacy scripts.
 ```bash
 # Стандартный запуск (localhost:8080)
 exphttp
+
+# Совместимость со старым experimental/lab surface
+exphttp --profile lab
 
 # HTTPS с самоподписным сертификатом
 exphttp --tls

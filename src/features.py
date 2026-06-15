@@ -20,7 +20,7 @@ WORKSPACE_METHODS: tuple[str, ...] = (
 )
 LAB_METHODS: tuple[str, ...] = WORKSPACE_METHODS + ("NOTE", "SMUGGLE")
 KNOWN_PROFILE_NAMES: tuple[str, ...] = ("serve", "workspace", "lab")
-DEFAULT_PROFILE = "lab"
+DEFAULT_PROFILE = "workspace"
 BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
     {
         "POST",

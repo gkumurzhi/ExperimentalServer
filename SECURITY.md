@@ -74,9 +74,9 @@ High-level assumptions:
 Advanced upload is a built-in transport convenience with optional payload
 obfuscation, not a replacement for TLS or authentication:
 
-- Advanced upload is enabled only by the `lab` feature profile. Prefer
-  `--profile serve` for read-only sharing and `--profile workspace` for normal
-  upload/delete workspaces.
+- Advanced upload is disabled by default and enabled only by the `lab` feature
+  profile. Prefer `--profile serve` for read-only sharing and the default
+  `--profile workspace` for normal upload/delete workspaces.
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
 - Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`

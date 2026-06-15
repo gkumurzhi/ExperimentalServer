@@ -79,7 +79,7 @@ class TestCLIParser:
         assert args.workers == 10
         assert args.cors_origin == ""
         assert args.advanced_upload is False
-        assert args.profile == "lab"
+        assert args.profile == "workspace"
         assert args.sslip is False
         assert args.public_ip is None
         assert args.acme_staging is False
@@ -223,6 +223,7 @@ class TestCLIParser:
     def test_advanced_upload_flag_is_accepted_for_compatibility(self):
         args = self.parser.parse_args(["--advanced-upload"])
         assert args.advanced_upload is True
+        assert args.profile == "lab"
 
     def test_profile_flag_selects_capability_profile(self):
         args = self.parser.parse_args(["--profile", "workspace"])
@@ -289,6 +290,11 @@ class TestCLIMain:
     def test_advanced_upload_alias_conflicts_with_safe_profiles(self):
         with pytest.raises(SystemExit) as exc_info:
             cli.main(["--advanced-upload", "--profile", "serve"])
+        assert exc_info.value.code == 2
+
+    def test_advanced_upload_alias_conflicts_when_profile_comes_first(self):
+        with pytest.raises(SystemExit) as exc_info:
+            cli.main(["--profile", "serve", "--advanced-upload"])
         assert exc_info.value.code == 2
 
     def test_main_starts_server_with_expected_config(self, monkeypatch):
@@ -407,6 +413,24 @@ class TestCLIMain:
             "profile": "lab",
             "started": True,
         }
+
+    def test_main_defaults_to_workspace_profile(self, monkeypatch):
+        captured: dict[str, object] = {}
+
+        class ServerStub:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def start(self):
+                captured["started"] = True
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", ServerStub)
+
+        result = cli.main([])
+
+        assert result == 0
+        assert captured["profile"] == "workspace"
+        assert captured["started"] is True
 
     def test_main_passes_auth_file_to_server(self, monkeypatch):
         captured: dict[str, object] = {}

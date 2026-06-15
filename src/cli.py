@@ -34,6 +34,38 @@ from .server import (
 _MIB = 1024 * 1024
 
 
+class _ProfileAction(argparse.Action):
+    """Track whether --profile was set explicitly for compatibility aliases."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        if not isinstance(values, str):
+            parser.error("--profile requires a profile name")
+        setattr(namespace, self.dest, values)
+        setattr(namespace, "profile_explicit", True)
+
+
+class _AdvancedUploadAction(argparse.Action):
+    """Map the deprecated --advanced-upload flag to the lab profile."""
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> None:
+        if getattr(namespace, "profile_explicit", False) and namespace.profile != "lab":
+            parser.error("--advanced-upload is a deprecated alias for --profile lab")
+        setattr(namespace, self.dest, True)
+        setattr(namespace, "profile", "lab")
+
+
 def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Callable[[str], int]:
     """Return an argparse type function for an integer with inclusive bounds."""
 
@@ -99,6 +131,7 @@ Custom HTTP methods:
     FETCH, INFO, PING, NONE, SMUGGLE    (+ standard GET, POST, PUT, OPTIONS)
         """,
     )
+    parser.set_defaults(profile=DEFAULT_PROFILE, profile_explicit=False, advanced_upload=False)
 
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
 
@@ -133,13 +166,14 @@ Custom HTTP methods:
     )
     modes.add_argument(
         "--advanced-upload",
-        action="store_true",
+        action=_AdvancedUploadAction,
+        nargs=0,
         help="Deprecated alias for --profile lab",
     )
     modes.add_argument(
         "--profile",
         choices=profile_names(),
-        default=DEFAULT_PROFILE,
+        action=_ProfileAction,
         help=(
             "Feature profile: serve=read-only, workspace=uploads/delete, "
             f"lab=experimental methods (default: {DEFAULT_PROFILE})"
