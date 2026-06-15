@@ -131,7 +131,13 @@ startup-time renewal can run.
 
 The repository Dockerfile and Compose file are local/operator examples, not a
 supported published image channel. Treat `exphttp:local` as a local build and
-review the Compose topology before adapting it to an exposed environment.
+review the Compose topology before adapting it to an exposed environment. The
+checked-in Docker commands use the app `workspace` profile explicitly; change
+to `serve` for read-only containers and use `lab` only in controlled labs with
+TLS/Auth, firewall controls, proxy-side throttling, and resource limits. The
+ACME Compose profile exposes public ports for HTTP-01 and HTTPS and requires a
+Basic Auth secret, but it is still an operator-owned topology rather than a
+supported internet service preset.
 
 ## Known Limitations
 

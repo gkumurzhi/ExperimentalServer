@@ -21,6 +21,7 @@ RUN PIP_CONSTRAINT=/build/constraints/ci.txt \
     pip install --upgrade pip build setuptools wheel
 
 COPY src ./src
+COPY exphttp ./exphttp
 
 RUN PIP_CONSTRAINT=/build/constraints/ci.txt \
     python -m build --wheel --no-isolation --outdir /build/dist
@@ -64,4 +65,4 @@ r = u.Request('http://127.0.0.1:8080/', method='PING'); \
 sys.exit(0 if u.urlopen(r, timeout=2).status == 200 else 1)"
 
 ENTRYPOINT ["exphttp"]
-CMD ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data"]
+CMD ["--host", "0.0.0.0", "--port", "8080", "--dir", "/data", "--profile", "workspace"]

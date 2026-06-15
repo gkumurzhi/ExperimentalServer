@@ -1,7 +1,7 @@
 # STAGE-008 - Docker and rollback boundary
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -53,10 +53,10 @@ Make Docker/profile examples and release rollback docs match the support boundar
 6. Add profile-specific Docker smoke only if example behavior changes.
 
 ## Acceptance criteria
-- [ ] Docker examples pass an explicit safe profile or clearly document intentional `lab` usage and required auth/TLS/firewall controls.
-- [ ] Release rollback docs point to artifacts that remain available for the documented rollback window.
-- [ ] The project states whether Docker is example/operator convenience or a supported registry artifact.
-- [ ] Docker smoke or docs are updated if Compose/example profile behavior changes.
+- [x] Docker examples pass an explicit safe profile or clearly document intentional `lab` usage and required auth/TLS/firewall controls.
+- [x] Release rollback docs point to artifacts that remain available for the documented rollback window.
+- [x] The project states whether Docker is example/operator convenience or a supported registry artifact.
+- [x] Docker smoke or docs are updated if Compose/example profile behavior changes.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -76,4 +76,14 @@ Make Docker/profile examples and release rollback docs match the support boundar
 - Rollback: restore previous Compose command and keep explicit warning/docs; leave release artifact retention changes if they are independently beneficial.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 16:08:11 +0300. Docker image and Compose commands now pass
+the app `--profile workspace` explicitly; auth/TLS and ACME Compose services do
+the same, and ACME requires the Basic Auth secret. The Dockerfile now copies
+the public `exphttp/` package into the build context so the container console
+entry point works. Release artifacts retain for 90 days, and README/
+CONTRIBUTING/SECURITY plus generated docs mirrors describe the Python rollback
+window, operator-owned container rollback boundary, Docker example status, lab
+controls, and 20s container shutdown budget. CI Docker smoke now asserts that
+PING reports `profile=workspace`. Verification passed for Compose config,
+auth-tls/acme Compose config, docs sync/stale checks, workflow YAML/static shell
+review, `git diff --check`, and local Docker build/run/PING smoke.

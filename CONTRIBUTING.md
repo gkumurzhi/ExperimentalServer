@@ -114,7 +114,8 @@ Coverage gate in CI is 65 %; aim higher.
 
 The `Release Artifacts` workflow runs on `v*` tags and manual
 `workflow_dispatch`. It is artifact-only: it does not publish to PyPI, GHCR, or
-any other registry.
+any other registry. Uploaded wheel, sdist, and SBOM artifacts are retained in
+GitHub Actions for 90 days.
 
 The release lane builds `dist/*.whl` and `dist/*.tar.gz`, installs the wheel in
 a fresh virtual environment outside the checkout, runs CLI/import probes, checks
@@ -130,10 +131,12 @@ sdist, and SBOM.
 
 Promote a release only from the uploaded workflow artifacts after reviewing the
 attestations. Roll back a Python release by reinstalling the previous verified
-wheel or sdist. Container image publication, digest scanning, SBOM, and
-provenance are intentionally not configured until the maintainer chooses
-registry coordinates and publish intent; when that lane exists, rollbacks should
-pin the previous verified image digest.
+wheel or sdist while it remains inside that 90-day artifact window. For older
+rollback targets, preserve the verified wheel/sdist outside GitHub Actions
+artifact retention or rebuild from the signed tag before promotion. Container
+image publication, digest scanning, SBOM, and provenance are intentionally not
+configured until the maintainer chooses registry coordinates and publish intent;
+when that lane exists, rollbacks should pin the previous verified image digest.
 
 ## Documentation ownership
 

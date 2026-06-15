@@ -1,3 +1,8 @@
+#
+# Compose service profiles (`auth-tls`, `acme`) choose container topology.
+# The exphttp app capability profile is the explicit `--profile workspace`
+# command argument below; use `serve` or `lab` only when that app surface is
+# intentional.
 services:
   exphttp:
     build:
@@ -36,9 +41,19 @@ services:
     # 10001. If you need a host bind mount instead, create it first and make it
     # writable by 10001:10001, then replace the volume line with:
     #   - ./data:/data
-    # The default image command serves /data over plain HTTP on :8080 and the
-    # Dockerfile healthcheck probes PING over plain HTTP at 127.0.0.1:8080.
-    # Use the auth-tls profile below when TLS/auth is required.
+    # The default Compose command serves /data over plain HTTP on :8080 with
+    # the safe workspace profile. The Dockerfile healthcheck probes PING over
+    # plain HTTP at 127.0.0.1:8080. Use the auth-tls profile below when
+    # TLS/auth is required.
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --dir
+      - /data
+      - --profile
+      - workspace
 
   exphttp-auth-tls:
     profiles:
@@ -71,6 +86,8 @@ services:
       - "8443"
       - --dir
       - /data
+      - --profile
+      - workspace
       - --tls
       - --auth-file
       - /run/secrets/exphttp_auth
@@ -119,11 +136,14 @@ services:
       # Contains ACME account keys, domain private keys, and cached certs.
       # Protect and back up this volume like certificate secret material.
       - exphttp-acme-state:/home/exphttp/.exphttp
+    secrets:
+      - exphttp_auth
     # Run with:
     #   docker compose --profile acme up --build exphttp-acme
     # Requirements: a globally routable IPv4, outbound access to
     # https://api.ipify.org unless --public-ip is set, and public port 80
-    # forwarded to this host.
+    # forwarded to this host. The exphttp_auth secret is required for Basic
+    # Auth on the HTTPS service.
     command:
       - --host
       - 0.0.0.0
@@ -131,6 +151,10 @@ services:
       - "8443"
       - --dir
       - /data
+      - --profile
+      - workspace
+      - --auth-file
+      - /run/secrets/exphttp_auth
       - --sslip
       - --acme-http-port
       - "8080"

@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 16:08:11 +0300 - STAGE-008
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `Dockerfile`, `examples/docker/docker-compose.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/contributing.md`, `docs/security.md`, `implementation-plan/20260615-011753/stages/STAGE-008-docker-rollback-boundary.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-008-20260615-154500.md`
+- Verification: Compose config for default/auth-tls/acme passed; docs sync and stale-doc checks passed; workflow YAML parse, Docker smoke shell syntax check, `git diff --check`, and local Docker build/run/PING smoke passed. The first optional Docker smoke exposed the Dockerfile's missing `exphttp/` package copy, which was fixed before closure.
+- Report: `stage-reports/STAGE-008-20260615-154500.md`
+
 ## 2026-06-15 15:39:55 +0300 - STAGE-007
 - Status: CLOSED
 - Files changed: `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `pyproject.toml`, `constraints/ci.txt`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/index.md`, `docs/changelog.md`, `docs/contributing.md`, `src/cli.py`, `src/handlers/__init__.py`, `implementation-plan/20260615-011753/stages/STAGE-007-python-314-readiness.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-007-20260615-150708.md`

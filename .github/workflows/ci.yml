@@ -357,11 +357,11 @@ jobs:
           probe_ping() {
             local url="$1"
             local output="$2"
-            shift 2
+            local expected_profile="$3"
+            shift 3
             for _ in {1..30}; do
-              if curl --noproxy '*' "$@" -fsS -X PING "${url}" | tee "${output}" \
-                && grep '"status": "pong"' "${output}"; then
-                return 0
+              if curl --noproxy '*' "$@" -fsS -X PING "${url}" | tee "${output}"; then
+                python -c 'import json, sys; data=json.load(open(sys.argv[1], encoding="utf-8")); status=data.get("status"); profile=data.get("profile"); assert status == "pong", f"unexpected PING status: {status!r}"; assert profile == sys.argv[2], f"unexpected PING profile: {profile!r}"' "${output}" "${expected_profile}" && return 0
               fi
               sleep 1
             done
@@ -376,7 +376,7 @@ jobs:
           http_cid="$(docker run -d -p 127.0.0.1::8080 exphttp:ci)"
           http_port="$(docker port "${http_cid}" 8080/tcp | awk -F: '{print $NF}')"
           wait_health "${http_cid}"
-          if ! probe_ping "http://127.0.0.1:${http_port}/" /tmp/ping.json; then
+          if ! probe_ping "http://127.0.0.1:${http_port}/" /tmp/ping.json workspace; then
             docker logs "${http_cid}"
             exit 1
           fi
@@ -392,6 +392,7 @@ jobs:
               --host 0.0.0.0 \
               --port 8443 \
               --dir /data \
+              --profile workspace \
               --tls \
               --auth-file /run/secrets/exphttp_auth
           )"
@@ -400,7 +401,7 @@ jobs:
             exit 1
           fi
           tls_port="$(docker port "${tls_cid}" 8443/tcp | awk -F: '{print $NF}')"
-          if ! probe_ping "https://127.0.0.1:${tls_port}/" /tmp/tls-ping.json -k -u ci:docker-smoke-password; then
+          if ! probe_ping "https://127.0.0.1:${tls_port}/" /tmp/tls-ping.json workspace -k -u ci:docker-smoke-password; then
             docker logs "${tls_cid}"
             exit 1
           fi
