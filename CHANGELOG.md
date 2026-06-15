@@ -10,10 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Behavior:** default feature profile is now `workspace`; use `--profile lab`
   or the deprecated `--advanced-upload` alias for the legacy experimental
   surface.
+- **Infrastructure:** Python 3.14 is now part of the constrained CI matrix,
+  package/security readiness smoke, package metadata, and support docs.
 
 ### Security
 - **Default posture:** advanced upload, `SMUGGLE`, `NOTE`, WebSocket notes,
   upload clear, and note clear are opt-in through the `lab` profile.
+- **Deps:** refresh the pinned CI `pip` tool to 26.1.2 so `pip-audit` stays
+  clean for the Python 3.14 readiness path.
 
 ## [2026-06-15] - Docs and release remediation boundary
 

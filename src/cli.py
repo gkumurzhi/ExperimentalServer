@@ -47,7 +47,7 @@ class _ProfileAction(argparse.Action):
         if not isinstance(values, str):
             parser.error("--profile requires a profile name")
         setattr(namespace, self.dest, values)
-        setattr(namespace, "profile_explicit", True)
+        namespace.profile_explicit = True
 
 
 class _AdvancedUploadAction(argparse.Action):
@@ -63,7 +63,7 @@ class _AdvancedUploadAction(argparse.Action):
         if getattr(namespace, "profile_explicit", False) and namespace.profile != "lab":
             parser.error("--advanced-upload is a deprecated alias for --profile lab")
         setattr(namespace, self.dest, True)
-        setattr(namespace, "profile", "lab")
+        namespace.profile = "lab"
 
 
 def _bounded_int(name: str, *, minimum: int, maximum: int | None = None) -> Callable[[str], int]:

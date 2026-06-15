@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 15:39:55 +0300 - STAGE-007
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `.github/workflows/security.yml`, `pyproject.toml`, `constraints/ci.txt`, `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `docs/index.md`, `docs/changelog.md`, `docs/contributing.md`, `src/cli.py`, `src/handlers/__init__.py`, `implementation-plan/20260615-011753/stages/STAGE-007-python-314-readiness.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-007-20260615-150708.md`
+- Verification: Python 3.14 constrained install, `pip check`, import smoke, full pytest (`851 passed`), dependency constraint check, `pip-audit`, package build, and installed-wheel smoke passed; clean Python 3.12 full pytest passed; docs sync/stale checks, ruff, mypy, workflow YAML parse, targeted post-ruff tests, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-007-20260615-150708.md`
+
 ## 2026-06-15 15:00:26 +0300 - STAGE-006
 - Status: CLOSED
 - Files changed: `.github/workflows/ci.yml`, `tools/browser_smoke.py`, `tools/browser_smoke.playwright.js`, `implementation-plan/20260615-011753/stages/STAGE-006-profile-aware-smoke-risk-test-gates.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-006-20260615-144027.md`

@@ -67,10 +67,8 @@ class HandlerMixin(
         if handler:
             return handler(request)
 
-        if (
-            self._feature_set().allows_advanced_upload_fallback(
-                has_payload=self._has_advanced_upload_payload(request)
-            )
+        if self._feature_set().allows_advanced_upload_fallback(
+            has_payload=self._has_advanced_upload_payload(request)
         ):
             return self.handle_advanced_upload(request)
 

@@ -1,7 +1,7 @@
 # STAGE-007 - Python 3.14 readiness
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -75,4 +75,10 @@ Add Python 3.14 readiness as a constrained CI/package-smoke path before widening
 - Rollback: revert only the 3.14 matrix/metadata/docs changes; keep findings in the stage report for a follow-up readiness attempt.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 15:39:55 +0300. Added Python 3.14 to constrained CI,
+added a dedicated Python 3.14 package/security readiness job, expanded
+`pip-audit` to Python 3.14, widened package metadata to `<3.15`, and updated
+support docs after local Python 3.14 evidence passed. The only dependency pin
+change was `pip` 26.1.1 -> 26.1.2 because `pip-audit` flagged
+`PYSEC-2026-196` during the readiness path; no broad dependency refresh or
+Python 3.10/3.11 deprecation was included.

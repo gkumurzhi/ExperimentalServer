@@ -30,8 +30,10 @@ Docker, security, docs, and reproducible local installs. Local `uv.lock` files
 are intentionally ignored; if you use uv locally, regenerate its lock from the
 current `pyproject.toml` and constraints file instead of committing it.
 
-Supported Python versions are 3.10 through 3.13. Package metadata caps the
-range below 3.14 until CI starts testing that interpreter.
+Supported Python versions are 3.10 through 3.14. Package metadata caps the
+range below 3.15. CI tests Python 3.14 in the constrained matrix and runs a
+dedicated readiness job for `pip check`, import smoke, wheel smoke, and
+`pip-audit` with `constraints/ci.txt`.
 
 In Windows PowerShell, set the constraint as an environment variable:
 

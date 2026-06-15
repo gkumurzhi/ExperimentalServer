@@ -1,6 +1,6 @@
 # Experimental HTTP Server
 
-![Python 3.10-3.13](https://img.shields.io/badge/Python-3.10--3.13-blue.svg)
+![Python 3.10-3.14](https://img.shields.io/badge/Python-3.10--3.14-blue.svg)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![Version](https://img.shields.io/badge/version-2.0.0-orange.svg)
 [![CI](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml/badge.svg)](https://github.com/gkumurzhi/ExperimentalServer/actions/workflows/ci.yml)
@@ -53,7 +53,7 @@ HTTP-сервер на Python с поддержкой произвольных H
 
 ## Требования
 
-- Python 3.10 — 3.13 (эта матрица проверяется в CI; используются type hints с `|` синтаксисом)
+- Python 3.10 — 3.14 (эта матрица проверяется в CI; используются type hints с `|` синтаксисом)
 - Runtime-зависимости из `pyproject.toml` (`cryptography`, `acme` и их транзитивные пакеты)
 - Typed package (PEP 561) — поддержка статической типизации
 
@@ -935,8 +935,10 @@ PIP_CONSTRAINT=constraints/ci.txt pip install -e ".[dev,lint,test]"
 пересобирайте lock из текущих `pyproject.toml` и constraints, но не
 коммитьте его.
 
-Поддерживаемая матрица Python остается 3.10-3.13. Метаданные пакета
-ограничены диапазоном `<3.14`, пока CI не начнет проверять Python 3.14.
+Поддерживаемая матрица Python — 3.10-3.14. Метаданные пакета ограничены
+диапазоном `<3.15`; CI проверяет Python 3.14 в constrained test matrix, а
+отдельный readiness job выполняет `pip check`, import smoke, wheel smoke и
+`pip-audit` с `constraints/ci.txt`.
 
 В Windows PowerShell задайте constraint как переменную окружения:
 

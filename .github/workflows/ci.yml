@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +70,71 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+
+  python314-readiness:
+    name: Python 3.14 package and security smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints/ci.txt
+
+      - name: Install readiness dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,lint,test]" build pip-audit
+
+      - name: Runtime and security smoke
+        run: |
+          set -euo pipefail
+          python -m pip check
+          python -m exphttp --help > /dev/null
+          python -c "import acme, cryptography, josepy; from OpenSSL import SSL"
+          python tools/check_dependency_constraints.py --constraints constraints/ci.txt
+          python -m pip_audit --strict --no-deps -r constraints/ci.txt
+
+      - name: Build package artifacts
+        run: |
+          set -euo pipefail
+          rm -rf dist
+          python -m build --sdist --wheel --outdir dist
+
+      - name: Installed wheel smoke
+        run: |
+          set -euo pipefail
+          smoke_venv="${RUNNER_TEMP}/exphttp-py314-wheel-smoke"
+          python -m venv "${smoke_venv}"
+          "${smoke_venv}/bin/python" -m pip install --upgrade pip
+          "${smoke_venv}/bin/pip" install dist/exphttp-*.whl
+          cd "${RUNNER_TEMP}"
+          "${smoke_venv}/bin/exphttp" --version
+          "${smoke_venv}/bin/exphttp" --help > /dev/null
+          "${smoke_venv}/bin/python" - <<'PY'
+          import inspect
+          import os
+          from pathlib import Path
+
+          import exphttp
+          from exphttp import ExperimentalHTTPServer
+
+          repo_root = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          module_paths = [
+              Path(inspect.getfile(exphttp)).resolve(),
+              Path(inspect.getfile(ExperimentalHTTPServer)).resolve(),
+          ]
+          for module_path in module_paths:
+              if module_path == repo_root or module_path.is_relative_to(repo_root):
+                  raise SystemExit(f"installed smoke imported from source tree: {module_path}")
+              print(f"installed import: {module_path}")
+          PY
 
   docs:
     name: Docs
