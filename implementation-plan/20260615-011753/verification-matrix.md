@@ -1,0 +1,15 @@
+# Verification Matrix
+
+| Stage | Required checks | Optional checks | Known blockers | Baseline needed? |
+|---|---|---|---|---|
+| STAGE-001 | `python tools/sync_docs.py --check`; `python tools/check_stale_docs.py`; docs/pre-commit hook review | `mkdocs build --strict` | Existing mirror drift must be regenerated during implementation. | No |
+| STAGE-002 | Decision/ADR review; `python tools/check_stale_docs.py`; `python tools/sync_docs.py --check` | `mkdocs build --strict` | Maintainer can override the recommended `workspace` direction before STAGE-004. | No |
+| STAGE-003 | `python -m pytest tests/test_handler_registry.py tests/test_server_methods.py tests/test_security/test_websocket_upgrade.py`; focused CORS/profile tests | `python -m pytest tests/test_request_pipeline.py tests/test_server_live.py` | Existing policy sprawl may require careful compatibility assertions. | No |
+| STAGE-004 | `python -m pytest tests/test_cli.py tests/test_server_methods.py tests/test_server_live.py`; profile compatibility tests | Browser smoke after STAGE-006 exists | Requires STAGE-002 approval and STAGE-003 shared policy. | Yes, existing lab behavior must be recorded before changing default. |
+| STAGE-005 | `python tools/check_static_ui_assets.py --repo-root .`; targeted UI tests/smoke assertions; Notepad handler tests if capability behavior changes | Full `python tools/browser_smoke.py` | Browser/Playwright dependencies may be absent locally. | No |
+| STAGE-006 | Targeted risk lanes for parser/auth/CORS/profile/storage/WS/Notepad; profile-aware browser smoke | Coverage report with stricter per-lane baselines | Needs STAGE-004/005 behavior to know expected disabled states. | Yes, record initial lane output before enforcing thresholds. |
+| STAGE-007 | Python 3.14 CI matrix; `pip check`; import/package smoke; security audit | Docker smoke on 3.14 base only if Docker policy changes | Local Python 3.14 may not be installed; CI can be the source of truth. | Yes, current 3.10-3.13 matrix is the comparison baseline. |
+| STAGE-008 | `docker compose -f examples/docker/docker-compose.yml config`; release workflow static review; docs sync checks | Docker build/smoke if Docker is available | Requires STAGE-002 Docker/profile stance. | No |
+| STAGE-009 | `python -m pytest tests/benchmarks --benchmark-only`; targeted no-limit quota-scan test; existing storage/info tests | Full benchmark comparison across Python versions | Benchmarks may be noisy across machines. | Yes, record first benchmark numbers in the stage report. |
+| STAGE-010 | `python tools/sync_docs.py --check`; API doc review; API-related tests if discovery fields change | Contract examples rendered in MkDocs | Product may decide not to pursue public API beyond v0 docs. | No |
+| STAGE-011 | `python -m pytest tests/test_websocket.py tests/test_websocket_handlers.py tests/test_security/test_websocket_upgrade.py`; docs sync checks | Slow-trickle WS test; browser smoke | Depends on STAGE-010 language for legacy `opId`/binary semantics. | No |
