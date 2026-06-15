@@ -10,6 +10,6 @@
 | STAGE-006 | CLOSED | MEDIUM | Profile-aware smoke and risk test gates | 2026-06-15 15:00:26 +0300 | Browser smoke now gates lab/full plus workspace and serve disabled states; CI exposes named risk lanes for parser/framing, auth, CORS/profile, storage/quota, and WebSocket/Notepad. | `stage-reports/STAGE-006-20260615-144027.md` |
 | STAGE-007 | CLOSED | MEDIUM | Python 3.14 readiness | 2026-06-15 15:39:55 +0300 | Python 3.14 added to constrained CI and package/security readiness; metadata/docs widened after local 3.14 smoke, audit, tests, and wheel install passed. | `stage-reports/STAGE-007-20260615-150708.md` |
 | STAGE-008 | CLOSED | MEDIUM | Docker and rollback boundary | 2026-06-15 16:08:11 +0300 | Docker image/Compose now use explicit workspace profile, release artifacts retain for 90 days, docs state Python rollback and operator-owned container boundary, and Docker smoke asserts workspace profile. | `stage-reports/STAGE-008-20260615-154500.md` |
-| STAGE-009 | OPEN | MEDIUM | Workspace performance baseline | - | - | - |
+| STAGE-009 | CLOSED | MEDIUM | Workspace performance baseline | 2026-06-15 16:40:18 +0300 | Workspace hot-path benchmarks added, no-limit upload quota scan removed, and local pytest-benchmark baselines recorded. | `stage-reports/STAGE-009-20260615-161853.md` |
 | STAGE-010 | OPEN | MEDIUM | API contract stability | - | - | - |
 | STAGE-011 | OPEN | MEDIUM | WebSocket and Notepad safety | - | - | - |

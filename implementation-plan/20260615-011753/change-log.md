@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 16:40:18 +0300 - STAGE-009
+- Status: CLOSED
+- Files changed: `src/storage.py`, `tests/test_handlers/test_files.py`, `tests/benchmarks/test_workspace_hot_paths.py`, `implementation-plan/20260615-011753/stages/STAGE-009-workspace-performance-baseline.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-009-20260615-161853.md`
+- Verification: Benchmark-only lane passed in a temporary environment with `pytest-benchmark 5.2.3`; base interpreter benchmark collection skips cleanly without the optional plugin; upload/storage/INFO tests, metrics/live tests, ruff, and `git diff --check` passed.
+- Report: `stage-reports/STAGE-009-20260615-161853.md`
+
 ## 2026-06-15 16:08:11 +0300 - STAGE-008
 - Status: CLOSED
 - Files changed: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `Dockerfile`, `examples/docker/docker-compose.yml`, `README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `docs/contributing.md`, `docs/security.md`, `implementation-plan/20260615-011753/stages/STAGE-008-docker-rollback-boundary.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-008-20260615-154500.md`

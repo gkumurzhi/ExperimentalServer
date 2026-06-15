@@ -176,23 +176,30 @@ class UploadStorageService:
         if size < 0:
             raise ValueError("upload size must be at least 0")
 
-        usage = self.current_usage()
-        total_after = usage.total_bytes + self._reserved_bytes + size
-        file_count_after = usage.file_count + self._reserved_files + 1
+        if self.policy.max_total_bytes is not None or self.policy.max_file_count is not None:
+            usage = self.current_usage()
+            total_after = usage.total_bytes + self._reserved_bytes + size
+            file_count_after = usage.file_count + self._reserved_files + 1
 
-        if self.policy.max_total_bytes is not None and total_after > self.policy.max_total_bytes:
-            raise UploadStorageQuotaExceeded(
-                "Upload storage quota exceeded. "
-                f"Current usage: {_format_bytes(usage.total_bytes)}; "
-                f"attempted upload: {_format_bytes(size)}; "
-                f"limit: {_format_bytes(self.policy.max_total_bytes)}."
-            )
+            if (
+                self.policy.max_total_bytes is not None
+                and total_after > self.policy.max_total_bytes
+            ):
+                raise UploadStorageQuotaExceeded(
+                    "Upload storage quota exceeded. "
+                    f"Current usage: {_format_bytes(usage.total_bytes)}; "
+                    f"attempted upload: {_format_bytes(size)}; "
+                    f"limit: {_format_bytes(self.policy.max_total_bytes)}."
+                )
 
-        if self.policy.max_file_count is not None and file_count_after > self.policy.max_file_count:
-            raise UploadStorageQuotaExceeded(
-                "Upload file count quota exceeded. "
-                f"Current files: {usage.file_count}; limit: {self.policy.max_file_count}."
-            )
+            if (
+                self.policy.max_file_count is not None
+                and file_count_after > self.policy.max_file_count
+            ):
+                raise UploadStorageQuotaExceeded(
+                    "Upload file count quota exceeded. "
+                    f"Current files: {usage.file_count}; limit: {self.policy.max_file_count}."
+                )
 
         if self.policy.reserved_free_bytes:
             required_free = self.policy.reserved_free_bytes

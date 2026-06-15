@@ -12,7 +12,12 @@ import src.storage as storage_module
 from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.http.utils import make_unique_filename, sanitize_filename
-from src.storage import UploadStoragePolicy, UploadStorageService
+from src.storage import (
+    UploadStoragePolicy,
+    UploadStorageQuotaExceeded,
+    UploadStorageService,
+    UploadStorageUsage,
+)
 from tests.conftest import make_request
 
 
@@ -104,6 +109,53 @@ def _force_first_two_exists_checks_to_miss(monkeypatch, target: Path) -> None:
 
 def _upload_temp_files(upload_dir: Path) -> list[Path]:
     return sorted(path for path in upload_dir.iterdir() if path.name.startswith(".upload-tmp-"))
+
+
+class TestUploadStorageQuotaScan:
+    """Regression coverage for aggregate usage scan decisions."""
+
+    def test_no_limit_policy_publishes_without_current_usage_scan(
+        self,
+        upload_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        service = UploadStorageService(upload_dir, UploadStoragePolicy())
+
+        def fail_current_usage() -> UploadStorageUsage:
+            raise AssertionError("current_usage should not run for no-limit upload policy")
+
+        monkeypatch.setattr(service, "current_usage", fail_current_usage)
+
+        published = service.publish_bytes(upload_dir / "fast-path.txt", b"payload")
+
+        assert published == upload_dir / "fast-path.txt"
+        assert published.read_bytes() == b"payload"
+        assert _upload_temp_files(upload_dir) == []
+
+    def test_aggregate_limit_policy_still_uses_current_usage(
+        self,
+        upload_dir: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        service = UploadStorageService(
+            upload_dir,
+            UploadStoragePolicy(max_total_bytes=10),
+        )
+        calls = 0
+
+        def fake_current_usage() -> UploadStorageUsage:
+            nonlocal calls
+            calls += 1
+            return UploadStorageUsage(total_bytes=9, file_count=1)
+
+        monkeypatch.setattr(service, "current_usage", fake_current_usage)
+
+        with pytest.raises(UploadStorageQuotaExceeded):
+            service.publish_bytes(upload_dir / "blocked.txt", b"xx")
+
+        assert calls == 1
+        assert not (upload_dir / "blocked.txt").exists()
+        assert _upload_temp_files(upload_dir) == []
 
 
 class TestSanitizeFilename:

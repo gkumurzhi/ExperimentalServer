@@ -1,7 +1,7 @@
 # STAGE-009 - Workspace performance baseline
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -54,11 +54,11 @@ Add benchmark coverage for workspace hot paths and remove the default no-limit u
 6. Record benchmark baselines and environment notes in the stage report rather than enforcing brittle thresholds immediately.
 
 ## Acceptance criteria
-- [ ] Benchmark files exist and can be collected by pytest.
-- [ ] Baseline benchmark results are recorded in the stage report with environment notes.
-- [ ] No-limit upload policy avoids unnecessary aggregate usage scans.
-- [ ] Existing quota behavior remains unchanged when upload limits are enabled.
-- [ ] `INFO` and Notepad benchmarks expose current behavior without changing API semantics.
+- [x] Benchmark files exist and can be collected by pytest.
+- [x] Baseline benchmark results are recorded in the stage report with environment notes.
+- [x] No-limit upload policy avoids unnecessary aggregate usage scans.
+- [x] Existing quota behavior remains unchanged when upload limits are enabled.
+- [x] `INFO` and Notepad benchmarks expose current behavior without changing API semantics.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -78,4 +78,4 @@ Add benchmark coverage for workspace hot paths and remove the default no-limit u
 - Rollback: keep the no-limit quota test/fix if correct, but mark heavy benchmarks as optional or reduce dataset size before closing.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 16:40:18 +0300. Added workspace hot-path benchmark coverage for upload quota scan, no-limit publish, INFO listing, Notepad save/list, chunked receive, and WebSocket slots; recorded local baseline numbers in `stage-reports/STAGE-009-20260615-161853.md`. `UploadStorageService._check_accepts()` now skips aggregate `current_usage()` scans when byte/file-count limits are disabled while preserving limited-policy behavior and reserved-free-space checks.
