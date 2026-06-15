@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+No changes are queued beyond the 2026-06-15 docs/release remediation boundary.
+
+## [2026-06-15] - Docs and release remediation boundary
+
 ### Added
 - **Infrastructure:** GitHub Actions CI (Python 3.10–3.13 matrix) with ruff/mypy/pytest and a 65 % coverage gate
 - **Infrastructure:** `security.yml` workflow running `pip-audit` and `bandit` weekly and on every PR

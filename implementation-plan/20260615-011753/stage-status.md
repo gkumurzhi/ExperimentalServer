@@ -2,7 +2,7 @@
 
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
-| STAGE-001 | OPEN | MEDIUM | Docs mirror and release hygiene | - | - | - |
+| STAGE-001 | CLOSED | MEDIUM | Docs mirror and release hygiene | 2026-06-15 12:50:25 +0300 | Docs mirrors synced, local docs guardrails added, release/install wording clarified. | `stage-reports/STAGE-001-20260615-124223.md` |
 | STAGE-002 | OPEN | MEDIUM | Profile and exposure decision gate | - | - | - |
 | STAGE-003 | OPEN | MEDIUM | Capability policy boundary | - | - | - |
 | STAGE-004 | OPEN | MEDIUM | Safe default workspace migration | - | - | - |

@@ -32,6 +32,18 @@ repos:
 
   - repo: local
     hooks:
+      - id: docs-mirror-check
+        name: docs mirror check
+        entry: python tools/sync_docs.py --check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: stale-docs-check
+        name: stale docs contract check
+        entry: python tools/check_stale_docs.py
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: static-ui-release-gates
         name: static UI release gates
         entry: python tools/check_static_ui_assets.py

@@ -1,7 +1,7 @@
 # STAGE-001 - Docs mirror and release hygiene
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -77,4 +77,10 @@ Make root-canonical docs and `docs/` mirrors consistent, then add a local guardr
 - Rollback: revert only the docs/pre-commit changes from this stage and rerun `python tools/sync_docs.py --check` to confirm the previous state.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed 2026-06-15 12:50:25 +0300.
+- Regenerated root-canonical docs mirrors with `python tools/sync_docs.py --write`.
+- Added local pre-commit guardrails for `python tools/sync_docs.py --check` and `python tools/check_stale_docs.py`.
+- Added a dated 2026-06-15 changelog boundary for docs/release remediation.
+- Clarified docs-site install wording so releases are described as verified GitHub Actions artifacts, not PyPI/GHCR/registry publication.
+- Required checks passed: `python tools/sync_docs.py --check`; `python tools/check_stale_docs.py`.
+- Local `pre-commit` and `mkdocs` executables were unavailable, so hook execution and optional strict docs build were recorded as skipped environment checks.

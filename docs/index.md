@@ -25,9 +25,15 @@ research, CTF practice, and controlled red/blue team exercises.
 
 ## Install
 
+For local development, install from a checkout:
+
 ```bash
-pip install exphttp
+pip install -e .
 ```
+
+Release workflows currently produce signed GitHub Actions artifacts only; the
+project does not publish to PyPI, GHCR, or another registry. To install a
+release build, use a verified wheel from the `Release Artifacts` workflow.
 
 The default install includes the runtime crypto and ACME dependencies used by
 TLS and Secure Notepad.
