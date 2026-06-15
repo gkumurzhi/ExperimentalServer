@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.http import HTTPRequest
 from tests.conftest import make_request
@@ -44,6 +45,7 @@ class StubServer(HandlerMixin):
         self.cors_origin = kwargs.get("cors_origin")
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
+        self.features = resolve_feature_profile("lab")
         self.advanced_upload_enabled = True
         self.method_handlers = self.build_method_handlers()
         self._temp_smuggle_files: set[str] = set()

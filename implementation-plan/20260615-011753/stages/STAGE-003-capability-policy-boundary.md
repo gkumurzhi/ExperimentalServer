@@ -1,7 +1,7 @@
 # STAGE-003 - Capability policy boundary
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -54,10 +54,10 @@ Create a small, tested policy boundary for profile-derived behavior so future de
 6. Run targeted tests and update architecture docs only if the new boundary changes the documented module map.
 
 ## Acceptance criteria
-- [ ] Profile-derived method exposure, CORS exposure, browser mutation policy, and WebSocket route admission use shared policy helpers.
-- [ ] Destructive operation checks remain capability-specific and preserve existing `lab` behavior.
-- [ ] Tests fail if a profile/capability change reaches `PING` but not CORS, registry, mutation guard, or WebSocket admission.
-- [ ] Handler tests no longer hide missing setup by relying on an implicit default-lab fallback where explicit features are needed.
+- [x] Profile-derived method exposure, CORS exposure, browser mutation policy, and WebSocket route admission use shared policy helpers.
+- [x] Destructive operation checks remain capability-specific and preserve existing `lab` behavior.
+- [x] Tests fail if a profile/capability change reaches `PING` but not CORS, registry, mutation guard, or WebSocket admission.
+- [x] Handler tests no longer hide missing setup by relying on an implicit default-lab fallback where explicit features are needed.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,4 +77,6 @@ Create a small, tested policy boundary for profile-derived behavior so future de
 - Rollback: revert the policy-boundary commit and rerun the pre-stage targeted profile tests to confirm old behavior returns.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 13:26:08 +0300. Added shared `FeatureSet` policy helpers for method registry exposure, CORS exposure, advanced-upload fallback, browser mutation classification, and notepad WebSocket route admission. Rewired server/CORS/handler registry usage, kept destructive-operation checks capability-specific in handlers, removed implicit default-lab masking from `BaseHandler._feature_set()`, and made policy-sensitive test stubs set explicit `lab` features.
+
+Verification passed: `python -m pytest tests/test_handler_registry.py tests/test_server_methods.py tests/test_security/test_websocket_upgrade.py`; `python -m pytest tests/test_request_pipeline.py tests/test_server_live.py`; `python -m pytest tests/test_server_routing.py tests/test_websocket_handlers.py tests/test_handlers/test_files.py tests/test_handlers/test_notepad.py tests/test_handlers/test_handler_integration.py`; `python -m compileall src tests`; targeted `ruff check`; `git diff --check`; reviewer subagent focused diff review.

@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import src.storage as storage_module
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.http.utils import make_unique_filename, sanitize_filename
 from src.storage import UploadStoragePolicy, UploadStorageService
@@ -36,6 +37,7 @@ class UploadStubServer(HandlerMixin):
         self.cors_origin = None
         self.sandbox_mode = False
         self.opsec_mode = False
+        self.features = resolve_feature_profile("lab")
         self.advanced_upload_enabled = True
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()

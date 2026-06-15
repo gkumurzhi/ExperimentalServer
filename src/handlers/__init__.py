@@ -50,7 +50,11 @@ class HandlerMixin(
             "SMUGGLE": self.handle_smuggle,
         }
         method_handlers.register_many(
-            {method: handlers[method] for method in features.methods if method in handlers}
+            {
+                method: handlers[method]
+                for method in features.registry_methods()
+                if method in handlers
+            }
         )
         return method_handlers
 
@@ -64,8 +68,9 @@ class HandlerMixin(
             return handler(request)
 
         if (
-            self._feature_set().allow_unknown_advanced_upload_methods
-            and self._has_advanced_upload_payload(request)
+            self._feature_set().allows_advanced_upload_fallback(
+                has_payload=self._has_advanced_upload_payload(request)
+            )
         ):
             return self.handle_advanced_upload(request)
 

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, cast
 from urllib.parse import unquote
 
 from ..config import HIDDEN_FILES
-from ..features import FeatureSet, resolve_feature_profile
+from ..features import FeatureSet
 from ..http import HTTPResponse, format_file_size
 from ..http.utils import resolve_descendant_path
 from ..storage import UploadStorageService
@@ -136,14 +136,12 @@ class BaseHandler:
         return storage
 
     def _feature_set(self) -> FeatureSet:
-        """Return the server feature set, defaulting old lightweight test stubs to lab."""
+        """Return the explicit server feature set."""
         features = getattr(self, "features", None)
         if isinstance(features, FeatureSet):
             return features
 
-        features = resolve_feature_profile(None)
-        self.features = features
-        return features
+        raise RuntimeError("handler requires an explicit FeatureSet")
 
     def _get_file_path(self, url_path: str, for_sandbox: bool = False) -> Path | None:
         """

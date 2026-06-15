@@ -21,6 +21,19 @@ WORKSPACE_METHODS: tuple[str, ...] = (
 LAB_METHODS: tuple[str, ...] = WORKSPACE_METHODS + ("NOTE", "SMUGGLE")
 KNOWN_PROFILE_NAMES: tuple[str, ...] = ("serve", "workspace", "lab")
 DEFAULT_PROFILE = "lab"
+BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
+    {
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "NONE",
+        "NOTE",
+        "SMUGGLE",
+    }
+)
+BROWSER_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "FETCH", "INFO", "PING"})
+WEBSOCKET_NOTES_PATH_PREFIX = "/notes/ws"
 
 
 @dataclass(frozen=True)
@@ -43,6 +56,45 @@ class FeatureSet:
     def allow_unknown_advanced_upload_methods(self) -> bool:
         """Return True when unknown-method advanced upload fallback is enabled."""
         return self.advanced_upload
+
+    def registry_methods(self) -> tuple[str, ...]:
+        """Return HTTP methods that should be registered for this profile."""
+        return self.methods
+
+    def cors_methods(self, *, read_only: bool = False) -> tuple[str, ...]:
+        """Return HTTP methods that should be advertised through CORS."""
+        return SERVE_METHODS if read_only else self.methods
+
+    def allows_unknown_cors_method(self, requested_method: str, *, read_only: bool = False) -> bool:
+        """Return True when CORS may echo an advanced upload method token."""
+        return (
+            not read_only
+            and self.allow_unknown_advanced_upload_methods
+            and bool(requested_method.strip())
+        )
+
+    def allows_advanced_upload_fallback(self, *, has_payload: bool) -> bool:
+        """Return True when an unknown method may route to advanced upload."""
+        return self.allow_unknown_advanced_upload_methods and has_payload
+
+    def requires_browser_mutation_guard(
+        self,
+        method: str,
+        *,
+        method_registered: bool,
+        has_advanced_upload_payload: bool,
+    ) -> bool:
+        """Return True when browser-origin mutation policy applies to a request."""
+        method_upper = method.upper()
+        if method_upper in BROWSER_PROTECTED_MUTATION_METHODS and method_registered:
+            return True
+        if method_upper in BROWSER_READ_ONLY_METHODS:
+            return False
+        return self.allows_advanced_upload_fallback(has_payload=has_advanced_upload_payload)
+
+    def websocket_route_enabled(self, path: str) -> bool:
+        """Return True when this profile admits the notepad WebSocket route."""
+        return self.websocket_notes and path.startswith(WEBSOCKET_NOTES_PATH_PREFIX)
 
     def capabilities(self) -> dict[str, bool]:
         """Return the public capability map exposed by PING and the UI."""

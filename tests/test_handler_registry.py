@@ -6,6 +6,7 @@ from typing import cast
 
 import pytest
 
+from src.handlers import HandlerMixin
 from src.handlers.registry import Handler, HandlerRegistry
 from src.http import HTTPRequest, HTTPResponse
 
@@ -19,6 +20,12 @@ def _other_handler(request: HTTPRequest) -> HTTPResponse:
 
 
 class TestHandlerRegistry:
+    def test_handler_mixin_requires_explicit_feature_set(self) -> None:
+        server = HandlerMixin()
+
+        with pytest.raises(RuntimeError, match="explicit FeatureSet"):
+            server.build_method_handlers()
+
     def test_register_and_lookup(self) -> None:
         reg = HandlerRegistry()
         reg.register("GET", _noop_handler)

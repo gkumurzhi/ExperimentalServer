@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.handlers.smuggle import SmuggleTempPolicy
 from src.http import HTTPRequest, HTTPResponse
@@ -41,6 +42,7 @@ class ServerStub(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
+        self.features = resolve_feature_profile("lab")
         self.advanced_upload_enabled = True
 
         self.authenticator = auth
@@ -218,6 +220,84 @@ class TestDispatchHandler:
 
 
 class TestFeatureProfiles:
+    @pytest.mark.parametrize("profile", ["serve", "workspace", "lab"])
+    def test_profile_policy_flows_through_public_surfaces(self, temp_dir, profile):
+        (temp_dir / "index.html").write_text("<html>ok</html>")
+        server = ExperimentalHTTPServer(
+            root_dir=str(temp_dir),
+            quiet=True,
+            cors_origin="https://app.example",
+            profile=profile,
+        )
+        features = server.features
+
+        ping_data = json.loads(server._dispatch_handler(make_request("PING", "/")).body)
+        assert ping_data["profile"] == features.profile
+        assert ping_data["capabilities"] == features.capabilities()
+        assert ping_data["supported_methods"] == list(features.registry_methods())
+        assert list(server.method_handlers.keys()) == list(features.registry_methods())
+
+        options = server.handle_options(
+            make_request(
+                "OPTIONS",
+                "/",
+                headers={"Access-Control-Request-Method": "XUPLOAD"},
+            )
+        )
+        expected_cors_methods = list(features.cors_methods())
+        if (
+            features.allows_unknown_cors_method("XUPLOAD")
+            and "XUPLOAD" not in expected_cors_methods
+        ):
+            expected_cors_methods.append("XUPLOAD")
+        assert server._cors_allow_methods_header().split(", ") == list(features.cors_methods())
+        assert options.headers["Access-Control-Allow-Methods"].split(", ") == expected_cors_methods
+
+        mutation_headers = {
+            "Host": "127.0.0.1:8080",
+            "Origin": "https://evil.example",
+        }
+        upload_request = make_request(
+            "POST",
+            "/policy-upload.txt",
+            headers=mutation_headers,
+            body=b"x",
+        )
+        upload_guarded = features.requires_browser_mutation_guard(
+            "POST",
+            method_registered="POST" in server.method_handlers,
+            has_advanced_upload_payload=False,
+        )
+        assert server._is_browser_protected_mutation(upload_request) is upload_guarded
+        assert server._is_browser_mutation_allowed(upload_request) is (not upload_guarded)
+
+        advanced_request = make_request(
+            "XUPLOAD",
+            "/",
+            headers={**mutation_headers, "X-D": base64.b64encode(b"x").decode("ascii")},
+        )
+        advanced_guarded = features.requires_browser_mutation_guard(
+            "XUPLOAD",
+            method_registered=False,
+            has_advanced_upload_payload=True,
+        )
+        assert server._is_browser_protected_mutation(advanced_request) is advanced_guarded
+        assert server._is_browser_mutation_allowed(advanced_request) is (not advanced_guarded)
+
+        websocket_request = make_request(
+            "GET",
+            "/notes/ws",
+            headers={
+                "Upgrade": "websocket",
+                "Connection": "Upgrade",
+                "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+                "Sec-WebSocket-Version": "13",
+            },
+        )
+        assert server._is_websocket_upgrade_attempt(websocket_request) is (
+            features.websocket_route_enabled("/notes/ws")
+        )
+
     def test_serve_profile_exposes_read_only_capabilities(self, temp_dir):
         (temp_dir / "index.html").write_text("<html>ok</html>")
         server = ExperimentalHTTPServer(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.notepad_service import NoteStoragePolicy, max_note_data_b64_chars
 from src.security.keys import HAS_ECDH, ECDHKeyManager
@@ -23,6 +24,7 @@ class NotepadStubServer(HandlerMixin):
         self.notes_dir.mkdir(exist_ok=True)
         self.sandbox_mode = kwargs.get("sandbox", False)
         self.opsec_mode = kwargs.get("opsec", False)
+        self.features = resolve_feature_profile("lab")
         self.advanced_upload_enabled = True
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()

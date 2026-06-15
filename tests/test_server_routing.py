@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin
 from src.handlers.base import get_package_resource
 from src.http import HTTPRequest, HTTPResponse
@@ -53,6 +54,7 @@ class StubServer(HandlerMixin):
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
         self._ecdh_manager = None
+        self.features = resolve_feature_profile("lab")
         self.advanced_upload_enabled = True
         self.method_handlers = self.build_method_handlers()
 

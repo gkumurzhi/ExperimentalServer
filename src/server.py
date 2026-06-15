@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
-from .features import DEFAULT_PROFILE, SERVE_METHODS, FeatureSet, resolve_feature_profile
+from .features import DEFAULT_PROFILE, FeatureSet, resolve_feature_profile
 from .handlers import HandlerMixin
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
@@ -60,18 +60,6 @@ DEFAULT_STREAM_SEND_IDLE_TIMEOUT = 5.0
 DEFAULT_STREAM_SEND_TIMEOUT = 300.0
 DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT = 5.0
 
-_BROWSER_PROTECTED_MUTATION_METHODS = frozenset(
-    {
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-        "NONE",
-        "NOTE",
-        "SMUGGLE",
-    }
-)
-_BROWSER_READ_ONLY_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "FETCH", "INFO", "PING"})
 _FETCH_METADATA_SAME_ORIGIN_VALUES = frozenset({"same-origin", "none"})
 
 
@@ -969,8 +957,7 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _cors_allow_methods_header(self) -> str:
         """Return the profile-derived CORS allow-methods header value."""
-        methods = SERVE_METHODS if self.cors_origins == ("*",) else self.features.methods
-        return ", ".join(methods)
+        return ", ".join(self.features.cors_methods(read_only=self.cors_origins == ("*",)))
 
     def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
         """Allow only same-origin or explicitly configured browser mutations.
@@ -996,12 +983,11 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _is_browser_protected_mutation(self, request: HTTPRequest) -> bool:
         """Return True when an HTTP request can change server-side state."""
-        method = request.method.upper()
-        if method in _BROWSER_PROTECTED_MUTATION_METHODS and method in self.method_handlers:
-            return True
-        if method in _BROWSER_READ_ONLY_METHODS:
-            return False
-        return self.features.advanced_upload and self._has_advanced_upload_payload(request)
+        return self.features.requires_browser_mutation_guard(
+            request.method,
+            method_registered=request.method in self.method_handlers,
+            has_advanced_upload_payload=self._has_advanced_upload_payload(request),
+        )
 
     def _is_browser_origin_allowed_for_mutation(
         self,
@@ -1066,9 +1052,9 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _is_websocket_upgrade_attempt(self, request: HTTPRequest) -> bool:
         """Return True when the request appears to target the WebSocket handshake path."""
-        if not self.features.websocket_notes:
+        if not self.features.websocket_route_enabled(request.path):
             return False
-        return request.path.startswith("/notes/ws") and any(
+        return any(
             (
                 request.headers.get("upgrade"),
                 request.headers.get("connection"),

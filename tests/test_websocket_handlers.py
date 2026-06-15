@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from src.features import resolve_feature_profile
 from src.handlers import HandlerMixin, NotepadHandlersMixin
 from src.notepad_service import NoteStoragePolicy, max_note_data_b64_chars
 from src.security.keys import HAS_ECDH
@@ -115,6 +116,7 @@ class WSServerStub(HandlerMixin):
         self._temp_smuggle_files: set[str] = set()
         self._smuggle_lock = threading.Lock()
         self._notes_lock = threading.Lock()
+        self.features = resolve_feature_profile("lab")
 
         self._ecdh_manager = None
         if HAS_ECDH:
