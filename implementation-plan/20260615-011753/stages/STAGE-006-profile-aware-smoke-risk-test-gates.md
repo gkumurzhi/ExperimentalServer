@@ -1,7 +1,7 @@
 # STAGE-006 - Profile-aware smoke and risk test gates
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -54,10 +54,10 @@ Add profile-aware browser smoke and named risk-specific test lanes so default-pr
 6. Run targeted lanes locally where feasible and leave CI as source of truth for browser/environment-dependent checks.
 
 ## Acceptance criteria
-- [ ] Browser smoke can run full lab behavior and minimal `serve`/`workspace` disabled-state behavior.
-- [ ] CI or contributor docs expose named risk lanes for parser/framing, auth, CORS/profile, storage/quota, and WebSocket/Notepad.
-- [ ] Profile-disabled UI expectations are asserted for the chosen default path.
-- [ ] Any new coverage threshold or no-regression rule has a recorded baseline.
+- [x] Browser smoke can run full lab behavior and minimal `serve`/`workspace` disabled-state behavior.
+- [x] CI or contributor docs expose named risk lanes for parser/framing, auth, CORS/profile, storage/quota, and WebSocket/Notepad.
+- [x] Profile-disabled UI expectations are asserted for the chosen default path.
+- [x] Any new coverage threshold or no-regression rule has a recorded baseline.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,4 +77,12 @@ Add profile-aware browser smoke and named risk-specific test lanes so default-pr
 - Rollback: keep full lab smoke unchanged, revert only new profile-mode assertions, and keep named pytest lanes as local commands until stable.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 15:00:26 +0300. `tools/browser_smoke.py` now accepts
+`--profile {lab,workspace,serve}` and `--mode {auto,full,disabled-state}`;
+`lab` remains the default full smoke path, while `workspace` and `serve`
+assert profile-disabled UI capability states. CI now exposes named risk-lane
+steps for parser/framing, auth, CORS/profile policy, storage/quota, and
+WebSocket/Notepad, and the release smoke job runs lab plus workspace/serve
+browser profile gates. No stricter coverage threshold or no-regression rule was
+added, so no new coverage baseline is required; initial lane pass counts are
+recorded in `stage-reports/STAGE-006-20260615-144027.md`.

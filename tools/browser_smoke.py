@@ -19,6 +19,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PLAYWRIGHT_CLI_PACKAGE = "@playwright/cli@0.1.9"
+SMOKE_PROFILES = ("lab", "workspace", "serve")
+SMOKE_MODES = ("auto", "full", "disabled-state")
 
 
 def _find_free_port() -> int:
@@ -73,6 +75,7 @@ class _LiveServer:
         server_cls: type[Any],
         root_dir: Path,
         *,
+        profile: str,
         disable_ecdh: bool = False,
     ) -> None:
         self.server = server_cls(
@@ -80,7 +83,7 @@ class _LiveServer:
             port=_find_free_port(),
             root_dir=str(root_dir),
             quiet=True,
-            profile="lab",
+            profile=profile,
         )
         if disable_ecdh:
             self.server._ecdh_manager = None
@@ -168,8 +171,25 @@ def _parse_playwright_json(output: str) -> dict[str, object]:
     raise RuntimeError(f"Playwright CLI did not return a JSON object. Raw output: {output!r}")
 
 
-def run_browser_smoke(*, installed_package: bool = False) -> dict[str, object]:
+def _resolve_smoke_mode(*, profile: str, mode: str) -> str:
+    """Return the concrete smoke mode for a profile."""
+    if mode == "auto":
+        return "full" if profile == "lab" else "disabled-state"
+    if mode == "full" and profile != "lab":
+        raise ValueError("--mode full requires --profile lab")
+    if mode == "disabled-state" and profile == "lab":
+        raise ValueError("--mode disabled-state requires --profile serve or --profile workspace")
+    return mode
+
+
+def run_browser_smoke(
+    *,
+    installed_package: bool = False,
+    profile: str = "lab",
+    mode: str = "auto",
+) -> dict[str, object]:
     """Start temporary servers and drive the SPA through browser smoke flows."""
+    smoke_mode = _resolve_smoke_mode(profile=profile, mode=mode)
     server_cls, server_module_path = _load_server_class(installed_package=installed_package)
     smoke_script = REPO_ROOT / "tools" / "browser_smoke.playwright.js"
     playwright = _playwright_command()
@@ -199,13 +219,20 @@ def run_browser_smoke(*, installed_package: bool = False) -> dict[str, object]:
         opsec_upload_boundary_fixture.write_bytes(b"C" * 18000)
         opsec_upload_large_fixture.write_bytes(b"B" * 18001)
 
-        live = _LiveServer(server_cls, normal_root)
-        unavailable_live = _LiveServer(server_cls, unavailable_root, disable_ecdh=True)
+        live = _LiveServer(server_cls, normal_root, profile=profile)
+        unavailable_live = (
+            _LiveServer(server_cls, unavailable_root, profile=profile, disable_ecdh=True)
+            if smoke_mode == "full"
+            else None
+        )
         try:
             live.start()
-            unavailable_live.start()
+            if unavailable_live is not None:
+                unavailable_live.start()
             url = f"http://127.0.0.1:{live.port}/"
-            unavailable_url = f"http://127.0.0.1:{unavailable_live.port}/"
+            unavailable_url = (
+                f"http://127.0.0.1:{unavailable_live.port}/" if unavailable_live is not None else ""
+            )
             smoke_source = smoke_script.read_text(encoding="utf-8").replace(
                 "__EXPHTTP_BASE_URL__",
                 json.dumps(url),
@@ -214,6 +241,16 @@ def run_browser_smoke(*, installed_package: bool = False) -> dict[str, object]:
             smoke_source = smoke_source.replace(
                 "__EXPHTTP_UNAVAILABLE_URL__",
                 json.dumps(unavailable_url),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_SMOKE_PROFILE__",
+                json.dumps(profile),
+                1,
+            )
+            smoke_source = smoke_source.replace(
+                "__EXPHTTP_SMOKE_MODE__",
+                json.dumps(smoke_mode),
                 1,
             )
             smoke_source = smoke_source.replace(
@@ -262,13 +299,16 @@ def run_browser_smoke(*, installed_package: bool = False) -> dict[str, object]:
             )
             result = _parse_playwright_json(raw_output)
             result["serverModulePath"] = str(server_module_path)
+            result["serverProfile"] = profile
+            result["smokeMode"] = smoke_mode
             return result
         finally:
             try:
                 _run_playwright(playwright, session, "close", cwd=REPO_ROOT)
             except Exception:
                 pass
-            unavailable_live.stop()
+            if unavailable_live is not None:
+                unavailable_live.stop()
             live.stop()
 
 
@@ -280,10 +320,29 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Import exphttp from the active environment instead of the source checkout.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=SMOKE_PROFILES,
+        default="lab",
+        help=(
+            "Server feature profile to smoke. The default lab profile runs the full flow; "
+            "serve/workspace run minimal disabled-state checks."
+        ),
+    )
+    parser.add_argument(
+        "--mode",
+        choices=SMOKE_MODES,
+        default="auto",
+        help="Smoke depth: auto selects full for lab and disabled-state for serve/workspace.",
+    )
     args = parser.parse_args(argv)
 
     try:
-        result = run_browser_smoke(installed_package=args.installed_package)
+        result = run_browser_smoke(
+            installed_package=args.installed_package,
+            profile=args.profile,
+            mode=args.mode,
+        )
     except Exception as exc:
         print(f"Browser smoke failed: {exc}", file=sys.stderr)
         return 1

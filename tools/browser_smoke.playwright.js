@@ -1,6 +1,8 @@
 async (page) => {
   const baseUrl = __EXPHTTP_BASE_URL__;
   const unavailableUrl = __EXPHTTP_UNAVAILABLE_URL__;
+  const smokeProfile = __EXPHTTP_SMOKE_PROFILE__;
+  const smokeMode = __EXPHTTP_SMOKE_MODE__;
   const uploadFilePath = __EXPHTTP_UPLOAD_FILE__;
   const opsecUploadUrlBoundaryFilePath = __EXPHTTP_OPSEC_UPLOAD_URL_BOUNDARY_FILE__;
   const opsecUploadFilePath = __EXPHTTP_OPSEC_UPLOAD_FILE__;
@@ -335,6 +337,185 @@ async (page) => {
     );
   }
 
+  const PROFILE_EXPECTATIONS = {
+    serve: {
+      methods: ["GET", "HEAD", "OPTIONS", "FETCH", "INFO", "PING"],
+      capabilities: {
+        ordinary_upload: false,
+        file_delete: false,
+        clear_uploads: false,
+        advanced_upload: false,
+        smuggle: false,
+        note_http: false,
+        note_delete: false,
+        note_clear: false,
+        websocket_notes: false,
+      },
+    },
+    workspace: {
+      methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE"],
+      capabilities: {
+        ordinary_upload: true,
+        file_delete: true,
+        clear_uploads: false,
+        advanced_upload: false,
+        smuggle: false,
+        note_http: false,
+        note_delete: false,
+        note_clear: false,
+        websocket_notes: false,
+      },
+    },
+  };
+
+  function assertStringSet(label, actualValues, expectedValues) {
+    const actual = actualValues.map((item) => String(item).toUpperCase()).sort();
+    const expected = expectedValues.map((item) => String(item).toUpperCase()).sort();
+    const missing = expected.filter((item) => !actual.includes(item));
+    const unexpected = actual.filter((item) => !expected.includes(item));
+    if (missing.length || unexpected.length) {
+      throw new Error(`${label} mismatch: missing=${missing.join(",")}; unexpected=${unexpected.join(",")}`);
+    }
+  }
+
+  async function fetchPingInfo() {
+    return page.evaluate(async () => {
+      const response = await sendCustomRequest("PING", SERVER_URL + "/");
+      const text = await response.text();
+      return JSON.parse(text);
+    });
+  }
+
+  async function assertProfilePing(expectedProfile) {
+    const expectations = PROFILE_EXPECTATIONS[expectedProfile];
+    if (!expectations) {
+      throw new Error(`No disabled-state expectations for profile ${expectedProfile}`);
+    }
+
+    await waitForPageCondition(
+      `capabilities loaded for ${expectedProfile}`,
+      ([expectedCapabilities]) => {
+        const caps = getServerCapabilities();
+        return Object.entries(expectedCapabilities).every(([name, expected]) => caps[name] === expected);
+      },
+      [expectations.capabilities],
+      10000
+    );
+
+    const info = await fetchPingInfo();
+    if (info.profile !== expectedProfile) {
+      throw new Error(`Expected profile ${expectedProfile}, got ${info.profile}`);
+    }
+
+    assertStringSet("supported_methods", info.supported_methods || [], expectations.methods);
+
+    const caps = info.capabilities || {};
+    Object.entries(expectations.capabilities).forEach(([name, expected]) => {
+      if (caps[name] !== expected) {
+        throw new Error(`Capability ${name} expected ${expected}, got ${caps[name]}`);
+      }
+    });
+
+    if (info.advanced_upload !== expectations.capabilities.advanced_upload) {
+      throw new Error(`advanced_upload compatibility field mismatch for ${expectedProfile}`);
+    }
+
+    return info;
+  }
+
+  async function assertRequestMethodAvailability(expectedMethods, timeout = 10000) {
+    await waitForPageCondition(
+      "request method controls reflect profile",
+      ([methods]) => {
+        const allowed = new Set(methods.map((method) => String(method).toUpperCase()));
+        const buttons = Array.from(document.querySelectorAll("[data-request-method]"));
+        return Boolean(
+          buttons.length > 0 &&
+          buttons.every((button) => {
+            const method = String(button.dataset.requestMethod || "").toUpperCase();
+            const enabled = allowed.has(method);
+            return (
+              button.disabled === !enabled &&
+              button.dataset.capabilityAvailable === (enabled ? "true" : "false")
+            );
+          })
+        );
+      },
+      [expectedMethods],
+      timeout
+    );
+  }
+
+  async function assertOrdinaryUploadCapability(expectedAvailable, timeout = 10000) {
+    await waitForPageCondition(
+      `ordinary upload capability ${expectedAvailable}`,
+      ([available]) => {
+        const fileInput = document.getElementById("fileInput");
+        const uploadBtn = document.getElementById("uploadBtn");
+        const dropZone = document.getElementById("dropZone");
+        const methodButtons = Array.from(document.querySelectorAll(".upload-method-btn[data-upload-method]"));
+        return Boolean(
+          fileInput &&
+          fileInput.disabled === !available &&
+          uploadBtn &&
+          uploadBtn.disabled &&
+          dropZone &&
+          dropZone.getAttribute("aria-disabled") === String(!available) &&
+          dropZone.tabIndex === (available ? 0 : -1) &&
+          methodButtons.length > 0 &&
+          methodButtons.every((button) =>
+            button.disabled === !available &&
+            button.dataset.capabilityAvailable === (available ? "true" : "false")
+          )
+        );
+      },
+      [expectedAvailable],
+      timeout
+    );
+  }
+
+  async function assertNotepadCapabilityDisabled(timeout = 10000) {
+    await waitForPageCondition(
+      "notepad capability disabled by profile",
+      () => {
+        const tab = document.getElementById("tab-notepad");
+        const titleInput = document.getElementById("notepadTitleInput");
+        const textarea = document.getElementById("notepadTextarea");
+        const deleteBtn = document.getElementById("notepadDeleteBtn");
+        const selectedDeleteBtn = document.getElementById("notepadDeleteSelectedBtn");
+        const clearBtn = document.getElementById("notepadClearBtn");
+        const transports = Array.from(document.querySelectorAll('input[name="notepadTransport"]'));
+        const indicator = document.getElementById("notepadSaveIndicator");
+        const noteList = document.getElementById("notepadNoteList");
+        const unavailableText = `${indicator?.textContent || ""} ${noteList?.textContent || ""}`;
+        return Boolean(
+          tab &&
+          tab.disabled &&
+          tab.classList.contains("is-capability-disabled") &&
+          titleInput &&
+          titleInput.disabled &&
+          textarea &&
+          textarea.disabled &&
+          deleteBtn &&
+          deleteBtn.disabled &&
+          deleteBtn.dataset.capabilityAvailable === "false" &&
+          selectedDeleteBtn &&
+          selectedDeleteBtn.disabled &&
+          selectedDeleteBtn.dataset.capabilityAvailable === "false" &&
+          clearBtn &&
+          clearBtn.disabled &&
+          clearBtn.dataset.capabilityAvailable === "false" &&
+          transports.length === 2 &&
+          transports.every((input) => input.disabled) &&
+          /Блокнот недоступен|Notepad unavailable/.test(unavailableText)
+        );
+      },
+      null,
+      timeout
+    );
+    await waitForConnectionStatus("disconnected", "http", timeout);
+  }
+
   async function waitForAdvancedUploadCapability(expectedAvailable, timeout = 10000) {
     await waitForPageCondition(
       `waitForAdvancedUploadCapability(${expectedAvailable})`,
@@ -410,7 +591,7 @@ async (page) => {
           uploadBtn.disabled === true &&
           notice &&
           notice.hidden === available &&
-          (available || noticeText.includes("--advanced-upload")) &&
+          (available || /--advanced-upload|feature is disabled|функция выключена/.test(noticeText)) &&
           disabledControlsOk &&
           dropZoneOk &&
           disabledDragoverOk &&
@@ -3173,9 +3354,43 @@ async (page) => {
     };
   }
 
+  async function runProfileDisabledPath() {
+    const expectations = PROFILE_EXPECTATIONS[smokeProfile];
+    if (!expectations) {
+      throw new Error(`Unsupported disabled-state smoke profile: ${smokeProfile}`);
+    }
+
+    await assertOutputLiveRegionContracts();
+    await assertStaticUiAssetsLoaded();
+    const pingInfo = await assertProfilePing(smokeProfile);
+    await assertRequestMethodAvailability(expectations.methods);
+    await assertOrdinaryUploadCapability(expectations.capabilities.ordinary_upload);
+    await waitForAdvancedUploadCapability(false);
+    await assertNotepadCapabilityDisabled();
+    await switchLanguage("en");
+    await assertNotepadCapabilityDisabled();
+
+    return {
+      ping: pingInfo.status,
+      profile: pingInfo.profile,
+      supportedMethods: pingInfo.supported_methods,
+      capabilities: pingInfo.capabilities,
+    };
+  }
+
   await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
   await waitForSpaReady();
   await installClipboardMock();
+  if (smokeMode === "disabled-state") {
+    const profileDisabledPath = await runProfileDisabledPath();
+    await assertNoBrowserIssues(`${smokeProfile} disabled-state path`);
+    return { profileDisabledPath };
+  }
+
+  if (smokeMode !== "full") {
+    throw new Error(`Unsupported browser smoke mode: ${smokeMode}`);
+  }
+
   await waitForAdvancedUploadCapability(true);
   const happyPath = await runHappyPath();
   await assertNoBrowserIssues("happy path");

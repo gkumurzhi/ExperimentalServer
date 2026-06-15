@@ -104,6 +104,60 @@ jobs:
           set -euo pipefail
           mkdocs build --strict
 
+  risk-lanes:
+    name: Risk lanes
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            constraints/ci.txt
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,test]"
+
+      - name: Risk lane - parser and framing
+        run: |
+          python -m pytest -q \
+            tests/test_property/test_request_parser.py \
+            tests/test_property/test_ws_frame_parser.py \
+            tests/test_http/test_content_length_smuggling.py \
+            tests/test_security/test_websocket_frame_limit.py
+
+      - name: Risk lane - auth
+        run: python -m pytest -q tests/test_security/test_auth.py
+
+      - name: Risk lane - CORS and profile policy
+        run: |
+          python -m pytest -q \
+            tests/test_handler_registry.py \
+            tests/test_request_pipeline.py \
+            tests/test_server_methods.py \
+            tests/test_security/test_websocket_upgrade.py
+
+      - name: Risk lane - storage and quota
+        run: |
+          python -m pytest -q \
+            tests/test_handlers/test_files.py \
+            tests/test_handlers/test_notepad.py
+
+      - name: Risk lane - WebSocket and Notepad
+        run: |
+          python -m pytest -q \
+            tests/test_websocket.py \
+            tests/test_websocket_handlers.py \
+            tests/test_handlers/test_notepad.py \
+            tests/test_security/test_websocket_upgrade.py
+
   cross-platform:
     name: Cross-platform smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -194,7 +248,9 @@ jobs:
       - name: Browser smoke
         run: |
           set -euo pipefail
-          python tools/browser_smoke.py
+          python tools/browser_smoke.py --profile lab --mode full
+          python tools/browser_smoke.py --profile workspace --mode disabled-state
+          python tools/browser_smoke.py --profile serve --mode disabled-state
 
       - name: Docker smoke
         run: |

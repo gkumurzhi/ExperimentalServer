@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 15:00:26 +0300 - STAGE-006
+- Status: CLOSED
+- Files changed: `.github/workflows/ci.yml`, `tools/browser_smoke.py`, `tools/browser_smoke.playwright.js`, `implementation-plan/20260615-011753/stages/STAGE-006-profile-aware-smoke-risk-test-gates.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-006-20260615-144027.md`
+- Verification: Browser smoke help, static UI check, JavaScript syntax check, ruff check/format check, lab full smoke, workspace disabled-state smoke, serve disabled-state smoke, and all named pytest risk lanes passed. The property lane needed a temporary `/tmp` Hypothesis install because the system Python is externally managed.
+- Report: `stage-reports/STAGE-006-20260615-144027.md`
+
 ## 2026-06-15 14:34:39 +0300 - STAGE-005
 - Status: CLOSED
 - Files changed: `src/data/index.html`, `src/data/static/ui/core.js`, `src/data/static/ui/features.css`, `src/data/static/ui/notepad.js`, `tools/browser_smoke.playwright.js`, `implementation-plan/20260615-011753/stages/STAGE-005-notepad-ui-accessibility-hardening.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-005-20260615-140638.md`
