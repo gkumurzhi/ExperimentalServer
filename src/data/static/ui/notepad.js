@@ -16,6 +16,7 @@ let wsIntentionalClose = false;
 // Unsaved changes flag
 let notepadIsDirty = false;
 let notepadStatusState = 'connecting';
+let notepadStatusDetail = '';
 let notepadListCache = [];
 let notepadListMode = 'notes';
 let notepadEditorInstanceId = 0;
@@ -58,6 +59,47 @@ function isNotepadWebSocketEnabled() {
         || isServerCapabilityEnabled('websocket_notes');
 }
 
+function isNotepadDeleteEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('note_delete');
+}
+
+function isNotepadClearEnabled() {
+    return typeof isServerCapabilityEnabled !== 'function'
+        || isServerCapabilityEnabled('note_clear');
+}
+
+function notepadCanDeleteCurrent() {
+    return notepadAvailable && isNotepadDeleteEnabled() && Boolean(notepadCurrentId);
+}
+
+function notepadCanDeleteSelected() {
+    return notepadAvailable && isNotepadDeleteEnabled() && notepadSelectedIds.size > 0;
+}
+
+function notepadCanClear() {
+    return notepadAvailable && isNotepadClearEnabled();
+}
+
+function notepadSyncDestructiveControls() {
+    const deleteEnabled = isNotepadDeleteEnabled();
+    const clearEnabled = isNotepadClearEnabled();
+
+    if (notepadDeleteBtnEl) {
+        notepadDeleteBtnEl.disabled = !notepadCanDeleteCurrent();
+        notepadDeleteBtnEl.dataset.capabilityAvailable = deleteEnabled ? 'true' : 'false';
+    }
+    if (notepadDeleteSelectedBtnEl) {
+        notepadDeleteSelectedBtnEl.disabled = !notepadCanDeleteSelected();
+        notepadDeleteSelectedBtnEl.dataset.capabilityAvailable = deleteEnabled ? 'true' : 'false';
+        notepadDeleteSelectedBtnEl.dataset.count = String(notepadSelectedIds.size);
+    }
+    if (notepadClearBtnEl) {
+        notepadClearBtnEl.disabled = !notepadCanClear();
+        notepadClearBtnEl.dataset.capabilityAvailable = clearEnabled ? 'true' : 'false';
+    }
+}
+
 function refreshNotepadCapability() {
     const enabled = isNotepadHttpEnabled();
     const wsEnabled = isNotepadWebSocketEnabled();
@@ -83,6 +125,11 @@ function refreshNotepadCapability() {
     }
     if (!enabled && !notepadInitDone) {
         notepadMarkUnavailable('unavailableServer');
+    }
+    if (notepadAvailable && notepadListMode === 'notes') {
+        notepadRenderList(notepadListCache);
+    } else {
+        notepadSyncDestructiveControls();
     }
 }
 
@@ -212,19 +259,14 @@ if (notepadNoteListEl) {
 function notepadSetEditingEnabled(enabled) {
     notepadTitleInput.disabled = !enabled;
     notepadTextarea.disabled = !enabled;
-    notepadDeleteBtnEl.disabled = !enabled || !notepadCurrentId;
-    notepadDeleteSelectedBtnEl.disabled = !enabled || notepadSelectedIds.size === 0;
-    notepadClearBtnEl.disabled = !enabled;
     notepadTransportInputs.forEach(input => {
         input.disabled = !enabled;
     });
+    notepadSyncDestructiveControls();
 }
 
 function notepadUpdateSelectedDeleteButton() {
-    if (notepadDeleteSelectedBtnEl) {
-        notepadDeleteSelectedBtnEl.disabled = !notepadAvailable || notepadSelectedIds.size === 0;
-        notepadDeleteSelectedBtnEl.dataset.count = String(notepadSelectedIds.size);
-    }
+    notepadSyncDestructiveControls();
 }
 
 function notepadRenderUnavailable(message) {
@@ -303,6 +345,31 @@ function notepadGetStatusText(state) {
         'reconnecting': 'notepadReconnecting',
     };
     return t(stateKeyMap[state] || state);
+}
+
+function notepadBuildStatusText(state, detail = '') {
+    const baseText = notepadGetStatusText(state);
+    const detailText = String(detail || '').trim();
+    return detailText ? `${baseText}: ${detailText}` : baseText;
+}
+
+function notepadErrorMessageFromResponse(response, responseText = '', result = null) {
+    const errorText = result && typeof result.error === 'string' ? result.error.trim() : '';
+    const messageText = result && typeof result.message === 'string' ? result.message.trim() : '';
+    const bodyText = String(responseText || '').trim();
+    const statusText = response
+        ? `${response.status || ''} ${response.statusText || ''}`.trim()
+        : '';
+
+    return errorText || messageText || bodyText || statusText || t('error');
+}
+
+function notepadTryParseJson(text) {
+    try {
+        return JSON.parse(text);
+    } catch (error) {
+        return null;
+    }
 }
 
 function notepadMarkUnavailable(state) {
@@ -405,8 +472,9 @@ async function notepadConfirmDirtyTransition(options = {}) {
     return false;
 }
 
-function notepadSetStatus(state) {
+function notepadSetStatus(state, detail = '') {
     notepadStatusState = state;
+    notepadStatusDetail = String(detail || '').trim();
     const stateClassMap = {
         'connecting': '',
         'connected': 'saved',
@@ -428,7 +496,7 @@ function notepadSetStatus(state) {
     };
     const stateClass = stateClassMap[state] || '';
     notepadSaveIndicator.className = 'save-indicator ' + stateClass;
-    notepadSaveIndicator.textContent = notepadGetStatusText(state);
+    notepadSaveIndicator.textContent = notepadBuildStatusText(state, notepadStatusDetail);
 }
 
 function notepadSetConnStatus(cls, title) {
@@ -439,6 +507,24 @@ function notepadSetConnStatus(cls, title) {
     notepadConnStatus.setAttribute('aria-label', title);
     if (notepadConnStatusText) {
         notepadConnStatusText.textContent = title;
+    }
+}
+
+function notepadFocusStableControl(preferredEl = null) {
+    const candidates = [
+        preferredEl,
+        notepadRefreshBtnEl,
+        notepadNewBtnEl,
+        notepadTitleInput,
+    ];
+    const target = candidates.find(el =>
+        el &&
+        el.isConnected &&
+        !el.disabled &&
+        typeof el.focus === 'function'
+    );
+    if (target) {
+        target.focus();
     }
 }
 
@@ -469,7 +555,7 @@ function notepadRefreshLocale() {
     }
 
     if (notepadInitDone) {
-        notepadSetStatus(notepadStatusState);
+        notepadSetStatus(notepadStatusState, notepadStatusDetail);
     }
 
     if (!notepadInitDone) {
@@ -894,7 +980,7 @@ async function notepadFallbackWsSave(opId) {
         );
     } catch (error) {
         console.error('[Notepad] Save fallback error:', error);
-        notepadSetStatus('error');
+        notepadSetStatus('error', error.message);
     }
     entry.completed = true;
     entry.resolve(success);
@@ -910,7 +996,7 @@ function notepadApplySaveSuccess(snapshot, result, options = {}) {
         if (notepadPendingCreateNoteId && result.id === notepadPendingCreateNoteId) {
             notepadPendingCreateNoteId = null;
         }
-        notepadDeleteBtnEl.disabled = false;
+        notepadSyncDestructiveControls();
 
         if (snapshot.dirtyVersion === notepadDirtyVersion) {
             notepadMarkClean();
@@ -956,7 +1042,7 @@ function notepadHandleWsMessage(msg, rawText = '') {
             if (entry) {
                 notepadCompletePendingWsSave(entry, false);
             }
-            notepadSetStatus('error');
+            notepadSetStatus('error', msg.error || msg.message || t('notepadSaveError'));
         }
     } else if (msg.type === 'loaded') {
         notepadHandleLoadResult(msg);
@@ -968,7 +1054,7 @@ function notepadHandleWsMessage(msg, rawText = '') {
         notepadApplyClearResult(msg);
     } else if (msg.type === 'error') {
         console.error('[Notepad WS] Server error:', msg.error);
-        notepadSetStatus('error');
+        notepadSetStatus('error', msg.error || msg.message || t('error'));
     }
 }
 
@@ -999,14 +1085,14 @@ async function notepadSaveSnapshotViaHttp(snapshot, dataB64, options = {}) {
     const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes', body, headers);
     const respText = await response.text();
     notepadTraceHttpComplete(trace, '/notes', response, respText, response.ok ? 'complete' : 'error');
-    const result = JSON.parse(respText);
+    const result = notepadTryParseJson(respText);
 
-    if (result.success) {
+    if (response.ok && result && result.success) {
         notepadApplySaveSuccess(snapshot, result, options);
         return true;
     }
 
-    notepadSetStatus('error');
+    notepadSetStatus('error', notepadErrorMessageFromResponse(response, respText, result));
     return false;
 }
 
@@ -1050,7 +1136,7 @@ async function notepadRunSave(options = {}) {
         return await notepadSaveSnapshotViaHttp(preparedSnapshot, dataB64, options);
     } catch (e) {
         console.error('[Notepad] Save error:', e);
-        notepadSetStatus('error');
+        notepadSetStatus('error', e.message);
         return false;
     }
 }
@@ -1067,10 +1153,15 @@ async function notepadRefreshList() {
         const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes?list');
         const text = await response.text();
         notepadTraceHttpComplete(trace, '/notes?list', response, text, response.ok ? 'complete' : 'error');
-        const result = JSON.parse(text);
+        const result = notepadTryParseJson(text);
+        if (!response.ok) {
+            notepadSetStatus('loadError', notepadErrorMessageFromResponse(response, text, result));
+            return;
+        }
         notepadRenderList(result.notes || []);
     } catch (e) {
         console.error('[Notepad] List error:', e);
+        notepadSetStatus('loadError', e.message);
     }
 }
 
@@ -1093,15 +1184,16 @@ function notepadRenderList(notes) {
     });
     notepadUpdateSelectedDeleteButton();
 
+    const deleteEnabled = isNotepadDeleteEnabled();
     listEl.innerHTML = notes.map(note => {
         const isActive = note.id === notepadCurrentId;
-        const isSelected = notepadSelectedIds.has(note.id);
+        const isSelected = deleteEnabled && notepadSelectedIds.has(note.id);
         const date = notepadFormatListDate(note.updated_at);
         const encodedNoteId = encodeURIComponent(note.id);
         const selectLabel = esc(`${t('selectNoteLabel')}: ${note.title || t('notepadUntitled')}`);
         return '<div class="note-row' + (isActive ? ' active' : '') + (isSelected ? ' is-selected' : '') + '">' +
             '<label class="note-select" title="' + selectLabel + '" aria-label="' + selectLabel + '">' +
-            '<input type="checkbox" data-note-select data-note-id="' + encodedNoteId + '"' + (isSelected ? ' checked' : '') + '>' +
+            '<input type="checkbox" data-note-select data-note-id="' + encodedNoteId + '"' + (isSelected ? ' checked' : '') + (deleteEnabled ? '' : ' disabled') + '>' +
             '<span aria-hidden="true"></span>' +
             '</label>' +
             '<button type="button" class="note-item' + (isActive ? ' active' : '') + '" data-note-id="' + encodedNoteId + '"' +
@@ -1141,14 +1233,14 @@ async function notepadLoadNote(id, triggerEl = null) {
         const response = await sendCustomRequest('NOTE', SERVER_URL + path);
         const text = await response.text();
         notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
-        const result = JSON.parse(text);
+        const result = notepadTryParseJson(text);
 
         if (!notepadIsActiveLoad(loadRequestId)) {
             return;
         }
 
-        if (response.status === 404) {
-            notepadSetStatus('loadError');
+        if (!response.ok) {
+            notepadSetStatus('loadError', notepadErrorMessageFromResponse(response, text, result));
             return;
         }
 
@@ -1158,7 +1250,7 @@ async function notepadLoadNote(id, triggerEl = null) {
             return;
         }
         console.error('[Notepad] Load error:', e);
-        notepadSetStatus('loadError');
+        notepadSetStatus('loadError', e.message);
     }
 }
 
@@ -1184,15 +1276,15 @@ async function notepadHandleLoadResult(result, options = {}) {
         notepadTitleInput.value = result.title || '';
         notepadTextarea.value = plaintext;
         notepadCharCount.textContent = notepadFormatCharCount(plaintext.length);
-        notepadDeleteBtnEl.disabled = false;
+        notepadSyncDestructiveControls();
         notepadSetStatus('loaded');
         notepadRefreshList();
     } catch (e) {
         console.error('[Notepad] Decrypt/load error:', e);
         if (e.name === 'OperationError' || (e.message && e.message.includes('decrypt'))) {
-            notepadSetStatus('decryptError');
+            notepadSetStatus('decryptError', e.message);
         } else {
-            notepadSetStatus('loadError');
+            notepadSetStatus('loadError', e.message);
         }
     }
 }
@@ -1203,7 +1295,7 @@ function notepadApplyNewNoteState() {
     notepadTitleInput.value = '';
     notepadTextarea.value = '';
     notepadCharCount.textContent = notepadFormatCharCount(0);
-    notepadDeleteBtnEl.disabled = true;
+    notepadSyncDestructiveControls();
     if (!notepadInitDone) {
         notepadSetStatus('connecting');
     } else if (!notepadAvailable) {
@@ -1229,7 +1321,7 @@ async function notepadNewNote(options = {}) {
 }
 
 async function notepadDeleteNote() {
-    if (!notepadCurrentId) return;
+    if (!notepadCanDeleteCurrent()) return;
     const noteTitle = notepadTitleInput.value.trim() || t('notepadUntitled');
     const confirmed = await showConfirmDialog({
         title: t('notepadDeleteBtn'),
@@ -1250,22 +1342,18 @@ async function notepadDeleteNote() {
             const response = await sendCustomRequest('NOTE', SERVER_URL + path);
             const text = await response.text();
             notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
-            let result = null;
-            try {
-                result = JSON.parse(text);
-            } catch (error) {
-                result = null;
-            }
+            const result = notepadTryParseJson(text);
 
             if (response.ok && result && result.success) {
                 notepadApplyNewNoteState();
                 return;
             }
 
-            notepadSetStatus('error');
+            const message = notepadErrorMessageFromResponse(response, text, result);
+            notepadSetStatus('error', message);
             await showNoticeDialog({
                 title: t('notepadDeleteError'),
-                message: (result && result.error) || text || `${response.status} ${response.statusText || t('error')}`.trim(),
+                message,
                 details: noteTitle,
                 triggerEl: notepadDeleteBtnEl,
             });
@@ -1273,7 +1361,7 @@ async function notepadDeleteNote() {
         }
     } catch (e) {
         console.error('[Notepad] Delete error:', e);
-        notepadSetStatus('error');
+        notepadSetStatus('error', e.message);
         await showNoticeDialog({
             title: t('notepadDeleteError'),
             message: e.message,
@@ -1289,11 +1377,11 @@ function notepadResetEditorAfterDelete() {
     notepadTitleInput.value = '';
     notepadTextarea.value = '';
     notepadCharCount.textContent = notepadFormatCharCount(0);
-    notepadDeleteBtnEl.disabled = true;
+    notepadSyncDestructiveControls();
 }
 
 async function notepadDeleteSelectedNotes() {
-    if (!notepadAvailable || notepadSelectedIds.size === 0) return;
+    if (!notepadCanDeleteSelected()) return;
 
     const selectedIds = Array.from(notepadSelectedIds);
     const selectedTitles = selectedIds.map(noteId => {
@@ -1321,17 +1409,12 @@ async function notepadDeleteSelectedNotes() {
             const response = await sendCustomRequest('NOTE', SERVER_URL + path);
             const text = await response.text();
             notepadTraceHttpComplete(trace, path, response, text, response.ok ? 'complete' : 'error');
-            let result = null;
-            try {
-                result = JSON.parse(text);
-            } catch (error) {
-                result = null;
-            }
+            const result = notepadTryParseJson(text);
 
             if (response.ok && result && result.success) {
                 notepadSelectedIds.delete(noteId);
             } else {
-                const message = (result && result.error) || text || `${response.status} ${response.statusText || t('error')}`.trim();
+                const message = notepadErrorMessageFromResponse(response, text, result);
                 errors.push(`${noteId}: ${message}`);
             }
         } catch (e) {
@@ -1346,7 +1429,7 @@ async function notepadDeleteSelectedNotes() {
     await notepadRefreshList();
 
     if (errors.length) {
-        notepadSetStatus('error');
+        notepadSetStatus('error', errors.join('; '));
         await showNoticeDialog({
             title: t('notepadDeleteError'),
             message: errors.join('\n'),
@@ -1357,11 +1440,12 @@ async function notepadDeleteSelectedNotes() {
     }
 
     notepadSetStatus('selectedDeleted');
+    notepadFocusStableControl(notepadRefreshBtnEl);
 }
 
-function notepadApplyClearResult(result) {
+function notepadApplyClearResult(result, options = {}) {
     if (!result || !result.success) {
-        notepadSetStatus('error');
+        notepadSetStatus('error', result && result.error ? result.error : '');
         return false;
     }
 
@@ -1370,11 +1454,14 @@ function notepadApplyClearResult(result) {
     notepadResetEditorAfterDelete();
     notepadRenderList([]);
     notepadSetStatus('cleared');
+    if (options.focus) {
+        notepadFocusStableControl(notepadRefreshBtnEl);
+    }
     return true;
 }
 
 async function notepadClearNotes() {
-    if (!notepadAvailable) return;
+    if (!notepadCanClear()) return;
 
     const confirmed = await showConfirmDialog({
         title: t('notepadClearBtn'),
@@ -1391,27 +1478,23 @@ async function notepadClearNotes() {
         const response = await sendCustomRequest('NOTE', SERVER_URL + '/notes?clear=1');
         const text = await response.text();
         notepadTraceHttpComplete(trace, '/notes?clear=1', response, text, response.ok ? 'complete' : 'error');
-        let result = null;
-        try {
-            result = JSON.parse(text);
-        } catch (error) {
-            result = null;
-        }
+        const result = notepadTryParseJson(text);
 
-        if (response.ok && notepadApplyClearResult(result)) {
+        if (response.ok && notepadApplyClearResult(result, { focus: true })) {
             return;
         }
 
-        notepadSetStatus('error');
+        const message = notepadErrorMessageFromResponse(response, text, result);
+        notepadSetStatus('error', message);
         await showNoticeDialog({
             title: t('notepadClearError'),
-            message: (result && result.error) || text || `${response.status} ${response.statusText || t('error')}`.trim(),
+            message,
             details: '/notes',
             triggerEl: notepadClearBtnEl,
         });
     } catch (e) {
         console.error('[Notepad] Clear error:', e);
-        notepadSetStatus('error');
+        notepadSetStatus('error', e.message);
         await showNoticeDialog({
             title: t('notepadClearError'),
             message: e.message,

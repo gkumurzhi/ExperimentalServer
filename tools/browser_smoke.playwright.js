@@ -499,6 +499,8 @@ async (page) => {
     charCountText,
     themeLabel,
     notepadTitleMetadataHintText,
+    notepadEphemeralWarningText,
+    notepadTextareaLabelText,
   }) {
     await waitForText(page.locator("#tab-upload"), uploadTabText);
     await waitForText(page.locator("#tab-files"), filesTabText);
@@ -511,6 +513,19 @@ async (page) => {
     await waitForText(page.locator("#notepadCharCount"), charCountText);
     if (notepadTitleMetadataHintText) {
       await waitForText(page.locator("#notepadTitleMetadataHint"), notepadTitleMetadataHintText);
+    }
+    if (notepadEphemeralWarningText) {
+      await waitForText(page.locator("#notepadEphemeralWarning"), notepadEphemeralWarningText);
+    }
+    if (notepadTextareaLabelText) {
+      await waitForPageCondition(
+        "notepad textarea label translated",
+        ([expectedText]) => {
+          const label = document.getElementById("notepadTextareaLabel");
+          return Boolean(label && label.textContent.trim() === expectedText);
+        },
+        [notepadTextareaLabelText]
+      );
     }
     await waitForPageCondition(
       `theme button translated (${themeLabel})`,
@@ -884,6 +899,37 @@ async (page) => {
         );
       },
       null,
+      timeout
+    );
+  }
+
+  async function assertNotepadAccessibilityContracts(expectedWarningText, expectedLabelText, timeout = 10000) {
+    await waitForPageCondition(
+      "assertNotepadAccessibilityContracts",
+      ([warningText, labelText]) => {
+        const titleInput = document.getElementById("notepadTitleInput");
+        const textarea = document.getElementById("notepadTextarea");
+        const label = document.getElementById("notepadTextareaLabel");
+        const warning = document.getElementById("notepadEphemeralWarning");
+        if (!titleInput || !textarea || !label || !warning) {
+          return false;
+        }
+
+        const textareaLabels = Array.from(textarea.labels || []);
+        const describedBy = String(textarea.getAttribute("aria-describedby") || "").split(/\s+/);
+        const titleDescribedBy = String(titleInput.getAttribute("aria-describedby") || "").split(/\s+/);
+        const warningStyle = window.getComputedStyle(warning);
+        return (
+          label.textContent.trim() === labelText &&
+          textareaLabels.includes(label) &&
+          warning.textContent.includes(warningText) &&
+          warningStyle.display !== "none" &&
+          warningStyle.visibility !== "hidden" &&
+          describedBy.includes("notepadEphemeralWarning") &&
+          titleDescribedBy.includes("notepadEphemeralWarning")
+        );
+      },
+      [expectedWarningText, expectedLabelText],
       timeout
     );
   }
@@ -2244,6 +2290,120 @@ async (page) => {
     }
   }
 
+  async function setNotepadCapabilityOverrides(baseCapabilities, overrides) {
+    await page.evaluate(
+      ([capabilities, nextOverrides]) => {
+        setServerCapabilitiesFromPing({
+          capabilities: {
+            ...capabilities,
+            ...nextOverrides,
+          },
+        });
+      },
+      [baseCapabilities, overrides]
+    );
+  }
+
+  async function assertNotepadDestructiveCapabilityStates(timeout = 10000) {
+    const baseCapabilities = await page.evaluate(() => getServerCapabilities());
+    try {
+      await setNotepadCapabilityOverrides(baseCapabilities, {
+        note_delete: false,
+        note_clear: true,
+      });
+      await waitForPageCondition(
+        "notepad delete disabled while clear enabled",
+        () => {
+          const deleteBtn = document.getElementById("notepadDeleteBtn");
+          const selectedDeleteBtn = document.getElementById("notepadDeleteSelectedBtn");
+          const clearBtn = document.getElementById("notepadClearBtn");
+          const selectors = Array.from(document.querySelectorAll("[data-note-select]"));
+          return Boolean(
+            deleteBtn &&
+            selectedDeleteBtn &&
+            clearBtn &&
+            deleteBtn.disabled &&
+            selectedDeleteBtn.disabled &&
+            !clearBtn.disabled &&
+            deleteBtn.dataset.capabilityAvailable === "false" &&
+            selectedDeleteBtn.dataset.capabilityAvailable === "false" &&
+            clearBtn.dataset.capabilityAvailable === "true" &&
+            selectors.length > 0 &&
+            selectors.every((selector) => selector.disabled)
+          );
+        },
+        null,
+        timeout
+      );
+
+      await setNotepadCapabilityOverrides(baseCapabilities, {
+        note_delete: true,
+        note_clear: false,
+      });
+      await waitForPageCondition(
+        "notepad delete enabled while clear disabled",
+        () => {
+          const deleteBtn = document.getElementById("notepadDeleteBtn");
+          const selectedDeleteBtn = document.getElementById("notepadDeleteSelectedBtn");
+          const clearBtn = document.getElementById("notepadClearBtn");
+          const selectors = Array.from(document.querySelectorAll("[data-note-select]"));
+          return Boolean(
+            deleteBtn &&
+            selectedDeleteBtn &&
+            clearBtn &&
+            !deleteBtn.disabled &&
+            selectedDeleteBtn.disabled &&
+            clearBtn.disabled &&
+            deleteBtn.dataset.capabilityAvailable === "true" &&
+            selectedDeleteBtn.dataset.capabilityAvailable === "true" &&
+            clearBtn.dataset.capabilityAvailable === "false" &&
+            selectors.length > 0 &&
+            selectors.every((selector) => !selector.disabled)
+          );
+        },
+        null,
+        timeout
+      );
+    } finally {
+      await setNotepadCapabilityOverrides(baseCapabilities, {});
+    }
+  }
+
+  async function assertNotepadSaveErrorSurfacesDetail(originalText, timeout = 15000) {
+    const detail = "Notepad storage quota exceeded. Browser smoke quota detail.";
+    await page.evaluate(([targetDetail]) => {
+      window.__exphttpOriginalSendCustomRequest = sendCustomRequest;
+      sendCustomRequest = async (method, url, body, headers = {}) => {
+        if (method === "NOTE" && String(url).endsWith("/notes") && body) {
+          return new Response(
+            JSON.stringify({ error: targetDetail, status: 413 }),
+            {
+              status: 413,
+              statusText: "Payload Too Large",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+        return window.__exphttpOriginalSendCustomRequest(method, url, body, headers);
+      };
+    }, [detail]);
+
+    try {
+      await page.locator("#notepadTextarea").fill(`${originalText}\nquota failure probe`);
+      await waitForText(page.locator("#notepadSaveIndicator"), detail, timeout);
+    } finally {
+      await page.evaluate(() => {
+        if (window.__exphttpOriginalSendCustomRequest) {
+          sendCustomRequest = window.__exphttpOriginalSendCustomRequest;
+          delete window.__exphttpOriginalSendCustomRequest;
+        }
+      });
+    }
+
+    await page.locator("#notepadTextarea").fill(originalText);
+    await waitForText(page.locator("#notepadSaveIndicator"), /Сохранено|Saved/, timeout);
+  }
+
   async function clickNoteByTitle(title) {
     await page.locator(".note-item", { hasText: title }).click();
     await waitForValue("#notepadTitleInput", title);
@@ -2470,17 +2630,20 @@ async (page) => {
         const deleteBtn = document.getElementById("notepadDeleteBtn");
         const noteList = document.getElementById("notepadNoteList");
         const indicator = document.getElementById("notepadSaveIndicator");
+        const refreshBtn = document.getElementById("notepadRefreshBtn");
         return Boolean(
           titleInput &&
           textarea &&
           deleteBtn &&
           noteList &&
           indicator &&
+          refreshBtn &&
           titleInput.value === "" &&
           textarea.value === "" &&
           deleteBtn.disabled &&
           /Нет заметок|No notes/.test(noteList.innerText) &&
-          /Заметки очищены|Notes cleared/.test(indicator.innerText)
+          /Заметки очищены|Notes cleared/.test(indicator.innerText) &&
+          document.activeElement === refreshBtn
         );
       },
       null,
@@ -2517,14 +2680,17 @@ async (page) => {
         const noteList = document.getElementById("notepadNoteList");
         const titleInput = document.getElementById("notepadTitleInput");
         const textarea = document.getElementById("notepadTextarea");
+        const refreshBtn = document.getElementById("notepadRefreshBtn");
         return Boolean(
           noteList &&
           titleInput &&
           textarea &&
+          refreshBtn &&
           !noteList.innerText.includes(removedTitle) &&
           noteList.innerText.includes(remainingTitle) &&
           titleInput.value === "" &&
-          textarea.value === ""
+          textarea.value === "" &&
+          document.activeElement === refreshBtn
         );
       },
       [deleteTitle, keepTitle],
@@ -2764,7 +2930,13 @@ async (page) => {
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
       notepadTitleMetadataHintText: "Заголовок видим серверу как метаданные.",
+      notepadEphemeralWarningText: "Сессии не сохраняются при перезагрузке сервера",
+      notepadTextareaLabelText: "Текст заметки",
     });
+    await assertNotepadAccessibilityContracts(
+      "Сессии не сохраняются при перезагрузке сервера",
+      "Текст заметки"
+    );
     await switchLanguage("en");
     await assertLocaleSnapshot({
       uploadTabText: "Upload to server",
@@ -2774,7 +2946,13 @@ async (page) => {
       charCountText: "0 chars",
       themeLabel: "Toggle theme",
       notepadTitleMetadataHintText: "The title is server-visible metadata.",
+      notepadEphemeralWarningText: "Sessions are lost on server restart",
+      notepadTextareaLabelText: "Note text",
     });
+    await assertNotepadAccessibilityContracts(
+      "Sessions are lost on server restart",
+      "Note text"
+    );
     await switchLanguage("ru");
     await assertLocaleSnapshot({
       uploadTabText: "Загрузка",
@@ -2784,6 +2962,8 @@ async (page) => {
       charCountText: "0 симв.",
       themeLabel: "Переключить тему",
       notepadTitleMetadataHintText: "Заголовок видим серверу как метаданные.",
+      notepadEphemeralWarningText: "Сессии не сохраняются при перезагрузке сервера",
+      notepadTextareaLabelText: "Текст заметки",
     });
 
     const noteTitle = "Browser Smoke Note";
@@ -2808,6 +2988,9 @@ async (page) => {
       throw new Error(`Loaded note text mismatch: ${loadedText}`);
     }
 
+    await assertNotepadDestructiveCapabilityStates();
+    await assertNotepadSaveErrorSurfacesDetail(noteText);
+
     await page.locator("#notepadDeleteBtn").click();
     await confirmAppDialog(noteTitle, 10000);
     await waitForPageCondition(
@@ -2817,6 +3000,7 @@ async (page) => {
         const textarea = document.getElementById("notepadTextarea");
         const deleteBtn = document.getElementById("notepadDeleteBtn");
         const noteList = document.getElementById("notepadNoteList");
+        const titleInputFocused = document.activeElement === titleInput;
         return Boolean(
           titleInput &&
           textarea &&
@@ -2825,7 +3009,8 @@ async (page) => {
           titleInput.value === "" &&
           textarea.value === "" &&
           deleteBtn.disabled &&
-          !noteList.innerText.includes(targetTitle)
+          !noteList.innerText.includes(targetTitle) &&
+          titleInputFocused
         );
       },
       [noteTitle],

@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 14:34:39 +0300 - STAGE-005
+- Status: CLOSED
+- Files changed: `src/data/index.html`, `src/data/static/ui/core.js`, `src/data/static/ui/features.css`, `src/data/static/ui/notepad.js`, `tools/browser_smoke.playwright.js`, `implementation-plan/20260615-011753/stages/STAGE-005-notepad-ui-accessibility-hardening.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-005-20260615-140638.md`
+- Verification: Static UI asset check passed; targeted Notepad/WebSocket handler lane passed (`90 passed`); browser smoke passed with warning, label, capability, error-detail, and focus assertions; `node --check` on touched JavaScript and `git diff --check` passed.
+- Report: `stage-reports/STAGE-005-20260615-140638.md`
+
 ## 2026-06-15 13:59:42 +0300 - STAGE-004
 - Status: CLOSED
 - Files changed: `src/features.py`, `src/cli.py`, `tests/test_cli.py`, `tests/test_server_methods.py`, `tests/test_server_live.py`, `tests/test_security/test_websocket_upgrade.py`, `README.md`, `API.md`, `SECURITY.md`, `CHANGELOG.md`, `docs/api.md`, `docs/security.md`, `docs/changelog.md`, `docs/ADR/ADR-006-profile-default-and-exposure.md`, `implementation-plan/20260615-011753/stages/STAGE-004-safe-default-workspace-migration.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-004-20260615-133030.md`

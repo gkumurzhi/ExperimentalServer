@@ -418,7 +418,7 @@
                         <div class="notepad-toolbar">
                             <div class="notepad-title-field">
                                 <label for="notepadTitleInput" class="sr-only" data-i18n="notepadTitlePlaceholder">Заголовок (видим серверу)</label>
-                                <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Заголовок (видим серверу)" maxlength="200" aria-describedby="notepadTitleMetadataHint" disabled>
+                                <input type="text" id="notepadTitleInput" data-i18n-placeholder="notepadTitlePlaceholder" placeholder="Заголовок (видим серверу)" maxlength="200" aria-describedby="notepadTitleMetadataHint notepadEphemeralWarning" disabled>
                                 <p class="notepad-metadata-note" id="notepadTitleMetadataHint" data-i18n="notepadTitleMetadataHint">Текст заметки шифруется. Заголовок видим серверу как метаданные.</p>
                             </div>
                             <button class="btn-note btn--sm" id="notepadNewBtn" data-i18n="notepadNewBtn">Новая</button>
@@ -441,6 +441,8 @@
                             </div>
                         </div>
 
+                        <p class="notepad-ephemeral-warning" id="notepadEphemeralWarning" role="status" aria-live="polite" aria-atomic="true" data-i18n="notepadEphemeralWarning">Сессии не сохраняются при перезагрузке сервера</p>
+
                         <div class="notepad-container">
                             <div class="notepad-sidebar">
                                 <div class="notepad-sidebar-header">
@@ -456,7 +458,8 @@
                                 </div>
                             </div>
                             <div class="notepad-editor">
-                                <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Текст... (шифруется)" disabled></textarea>
+                                <label for="notepadTextarea" class="sr-only" id="notepadTextareaLabel" data-i18n="notepadTextareaLabel">Текст заметки</label>
+                                <textarea class="notepad-textarea" id="notepadTextarea" data-i18n-placeholder="notepadTextareaPlaceholder" placeholder="Текст... (шифруется)" aria-describedby="notepadEphemeralWarning" disabled></textarea>
                                 <div class="notepad-status-bar">
                                     <span class="save-indicator" id="notepadSaveIndicator" data-i18n="notepadConnecting" role="status" aria-live="polite" aria-atomic="true">Подключение...</span>
                                     <span id="notepadCharCount">0 chars</span>

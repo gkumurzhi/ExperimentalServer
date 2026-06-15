@@ -1153,6 +1153,17 @@
     line-height: 1.35;
 }
 
+.notepad-ephemeral-warning {
+    margin: 0 0 var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--accent-tertiary) 42%, transparent);
+    border-radius: var(--radius-sm);
+    color: var(--accent-tertiary);
+    background: color-mix(in srgb, var(--accent-tertiary) 12%, transparent);
+    font-size: 0.82rem;
+    line-height: 1.4;
+}
+
 @media (min-width: 1101px) {
     .notepad-toolbar {
         align-items: center;

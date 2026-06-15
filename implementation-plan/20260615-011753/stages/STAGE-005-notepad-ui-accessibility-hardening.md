@@ -1,7 +1,7 @@
 # STAGE-005 - Notepad UI and accessibility hardening
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -53,11 +53,11 @@ Make the bundled static UI honor fine-grained Notepad capabilities and surface N
 6. Add smoke assertions for warning text, labels, destructive capability states, and focus recovery where practical.
 
 ## Acceptance criteria
-- [ ] Notepad delete and clear controls obey `note_delete` and `note_clear` independently.
-- [ ] The Notepad ephemeral/recovery warning is visible and accessible.
-- [ ] `notepadTextarea` has an explicit accessible label.
-- [ ] Notepad quota/server errors surface useful text through visible/status UI.
-- [ ] Destructive confirm success paths leave focus on a stable control or have a tested focus behavior.
+- [x] Notepad delete and clear controls obey `note_delete` and `note_clear` independently.
+- [x] The Notepad ephemeral/recovery warning is visible and accessible.
+- [x] `notepadTextarea` has an explicit accessible label.
+- [x] Notepad quota/server errors surface useful text through visible/status UI.
+- [x] Destructive confirm success paths leave focus on a stable control or have a tested focus behavior.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -77,4 +77,4 @@ Make the bundled static UI honor fine-grained Notepad capabilities and surface N
 - Rollback: revert static UI and smoke changes from this stage and rerun `python tools/check_static_ui_assets.py --repo-root .`.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 14:34:39 +0300. Static Notepad UI now renders a visible ephemeral-session warning, labels the note textarea, gates delete/selected-delete/clear controls with `note_delete`/`note_clear`, surfaces detailed save/quota/server errors in the visible status region, and anchors destructive success focus. Verification passed: `python tools/check_static_ui_assets.py --repo-root .`, `python -m pytest tests/test_handlers/test_notepad.py tests/test_websocket_handlers.py`, `python tools/browser_smoke.py`, `node --check` on touched JavaScript, and `git diff --check`.
