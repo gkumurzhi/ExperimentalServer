@@ -102,20 +102,25 @@ When running the server outside a trusted lab:
 - Bind to `127.0.0.1` unless external access is explicitly required.
 - For Docker, keep the default Compose plain HTTP publication on host loopback
   and use mounted secret files with `--auth-file` for TLS/auth profiles.
-- Place behind a reverse proxy with rate limiting and request-size limits.
+- Place behind a reverse proxy with per-client rate limiting and request-size
+  limits when the service is exposed beyond localhost or a trusted lab.
 - Configure an exact `--cors-origin` for a trusted browser UI. Wildcard
   `--cors-origin *` is read-only CORS and does not authorize browser writes or
   WebSocket upgrades.
+- Basic Auth rate limiting in the app keys failures by the direct TCP peer IP
+  address from the accepted socket. The app does not trust `Forwarded` or
+  `X-Forwarded-For` headers, so proxied deployments need proxy-side per-client
+  auth/request throttling unless a future trusted-proxy model is added.
 
 ### External exposure baseline
 
 Before exposing the service to untrusted networks, require all of: real TLS,
 strong Basic Auth credentials, a dedicated data directory, firewall allowlists
-where possible, reverse-proxy rate limiting, reverse-proxy request/header/body
-size caps, an explicit `--body-memory-budget` sized for available RAM,
-explicit slow-body settings (`--body-idle-timeout`, `--body-timeout`, and
-optionally `--body-min-rate`), monitoring of `/metrics`, and an exact
-browser-origin policy for any separate UI origin. Keep
+where possible, reverse-proxy per-client throttling, reverse-proxy
+request/header/body size caps, an explicit `--body-memory-budget` sized for
+available RAM, explicit slow-body settings (`--body-idle-timeout`,
+`--body-timeout`, and optionally `--body-min-rate`), monitoring of `/metrics`,
+and an exact browser-origin policy for any separate UI origin. Keep
 `--stream-send-idle-timeout` and `--stream-send-timeout` enabled for exposed
 file downloads so slow readers cannot hold worker threads indefinitely.
 For containers, align Docker memory/CPU/PID/file-descriptor limits with
@@ -123,6 +128,10 @@ For containers, align Docker memory/CPU/PID/file-descriptor limits with
 SMUGGLE storage quota flags. Protect ACME state volumes as secret certificate
 material and schedule controlled restarts before certificate expiry so
 startup-time renewal can run.
+
+The repository Dockerfile and Compose file are local/operator examples, not a
+supported published image channel. Treat `exphttp:local` as a local build and
+review the Compose topology before adapting it to an exposed environment.
 
 ## Known Limitations
 

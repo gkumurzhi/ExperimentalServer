@@ -7,6 +7,10 @@ socket it listens on. Everything outside is untrusted input; everything
 inside the process (configuration, certificate files, uploaded binaries) is
 trusted *after* it is validated at the boundary.
 
+Behind a reverse proxy, the application treats the proxy connection as the
+direct TCP peer. It does not currently trust `Forwarded` or `X-Forwarded-For`
+headers as client identity.
+
 ## Assets
 
 | Asset | Why it matters |
@@ -66,7 +70,12 @@ trusted *after* it is validated at the boundary.
 | Worker pool exhaustion | Socket admission is bounded before worker submission; rejected admissions are reported in metrics |
 | Infinite keep-alive | `KEEP_ALIVE_MAX = 100` requests per connection, 15 s idle timeout |
 | WebSocket flood | Frame size limit; notepad writes behind `self._notes_lock`; ECDH sessions use TTL + LRU cleanup |
-| Auth brute force | `AuthRateLimiter` blocks IPs after repeated failures |
+| Auth brute force | `AuthRateLimiter` blocks the direct TCP peer IP after repeated failures |
+
+The app-side Basic Auth limiter keys on the accepted socket's peer address.
+For proxied deployments, this is normally the reverse proxy address, not the
+end-user address. Operators must enforce proxy-side per-client throttling and
+request-size limits unless a future trusted-proxy model is added.
 
 **Explicitly out of scope:** sophisticated DDoS (volumetric, amplification,
 resource-exhaustion from thousands of authenticated clients). Deploy behind

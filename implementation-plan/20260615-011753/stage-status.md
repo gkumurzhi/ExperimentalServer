@@ -3,7 +3,7 @@
 | Stage | Status | Priority | Title | Last attempt | Result | Report |
 |---|---|---|---|---|---|---|
 | STAGE-001 | CLOSED | MEDIUM | Docs mirror and release hygiene | 2026-06-15 12:50:25 +0300 | Docs mirrors synced, local docs guardrails added, release/install wording clarified. | `stage-reports/STAGE-001-20260615-124223.md` |
-| STAGE-002 | OPEN | MEDIUM | Profile and exposure decision gate | - | - | - |
+| STAGE-002 | CLOSED | MEDIUM | Profile and exposure decision gate | 2026-06-15 13:04:45 +0300 | Profile/default ADR added; README, security, threat-model, and Docker status docs updated. | `stage-reports/STAGE-002-20260615-125438.md` |
 | STAGE-003 | OPEN | MEDIUM | Capability policy boundary | - | - | - |
 | STAGE-004 | OPEN | MEDIUM | Safe default workspace migration | - | - | - |
 | STAGE-005 | OPEN | MEDIUM | Notepad UI and accessibility hardening | - | - | - |

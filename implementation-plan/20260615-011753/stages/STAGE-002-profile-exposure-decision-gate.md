@@ -1,7 +1,7 @@
 # STAGE-002 - Profile and exposure decision gate
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -54,11 +54,11 @@ Record the supported profile/default, external exposure, reverse-proxy, Docker, 
 6. Run docs checks and update planning status/report.
 
 ## Acceptance criteria
-- [ ] An ADR or equivalent decision document states the default-profile direction and compatibility plan.
-- [ ] README/docs include a first-path profile table for `serve`, `workspace`, and `lab`.
-- [ ] SECURITY/threat docs explicitly say app-side auth rate limiting keys on direct TCP peer IP.
-- [ ] Proxied deployments require proxy-side per-client throttling unless a future trusted-proxy model is added.
-- [ ] Docker status is documented as example/operator convenience or supported artifact.
+- [x] An ADR or equivalent decision document states the default-profile direction and compatibility plan.
+- [x] README/docs include a first-path profile table for `serve`, `workspace`, and `lab`.
+- [x] SECURITY/threat docs explicitly say app-side auth rate limiting keys on direct TCP peer IP.
+- [x] Proxied deployments require proxy-side per-client throttling unless a future trusted-proxy model is added.
+- [x] Docker status is documented as example/operator convenience or supported artifact.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -78,4 +78,12 @@ Record the supported profile/default, external exposure, reverse-proxy, Docker, 
 - Rollback: revise the ADR to preserve `lab` default and mark STAGE-004 as a no-default-flip hardening stage before closing dependent stages.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 13:04:45 +0300. Added ADR-006 to record the `workspace`
+default direction, current `lab` compatibility path, unsupported external
+exposure stance, direct-peer auth throttling semantics, proxy-side per-client
+throttling requirement, and Docker operator-convenience status. Updated the
+README profile/exposure/Docker guidance, SECURITY plus generated
+`docs/security.md`, and the threat model. Verification passed with
+`python tools/sync_docs.py --check` and `python tools/check_stale_docs.py`;
+optional `mkdocs build --strict` was skipped because `mkdocs` is unavailable
+locally.

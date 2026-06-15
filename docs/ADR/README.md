@@ -21,3 +21,4 @@ supersedes the old one.
 | [ADR-003](ADR-003-cryptography-optional.md) | accepted | Runtime crypto and ACME dependencies |
 | [ADR-004](ADR-004-uploads-relative-to.md) | accepted | Uploads-only enforcement via `Path.relative_to` |
 | [ADR-005](ADR-005-threadpool-over-asyncio.md) | accepted | Concurrency model: ThreadPoolExecutor, not asyncio |
+| [ADR-006](ADR-006-profile-default-and-exposure.md) | accepted | Profile default and exposure policy |

@@ -202,11 +202,17 @@ python -m exphttp [опции]
 
 ### Профили возможностей
 
-| Профиль | Методы и возможности |
-|---------|----------------------|
-| `serve` | Только чтение: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. Загрузка, удаление, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
-| `workspace` | `serve` + обычная загрузка (`POST`, `PUT`, `PATCH`, `NONE`) и удаление отдельных файлов через `DELETE`. Очистка `uploads/`, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
-| `lab` | Совместимый экспериментальный режим: все методы, advanced upload, `SMUGGLE`, `NOTE`, WebSocket и операции очистки включены явно. |
+Текущий CLI default остаётся `lab` для совместимости. Поддерживаемое
+направление для новых установок зафиксировано в
+[ADR-006](docs/ADR/ADR-006-profile-default-and-exposure.md): обычный первый
+выбор — `workspace`, а `lab` должен быть явным opt-in для экспериментов и
+legacy scripts.
+
+| Профиль | Первый выбор для | Методы и возможности |
+|---------|------------------|----------------------|
+| `serve` | Read-only sharing или просмотр файлов без мутаций. | Только чтение: `GET`, `HEAD`, `OPTIONS`, `FETCH`, `INFO`, `PING`. Загрузка, удаление, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
+| `workspace` | Нормальная рабочая папка файлов; планируемый будущий default для новых пользователей. | `serve` + обычная загрузка (`POST`, `PUT`, `PATCH`, `NONE`) и удаление отдельных файлов через `DELETE`. Очистка `uploads/`, `NOTE`, `SMUGGLE`, WebSocket и advanced upload отключены. |
+| `lab` | Явные эксперименты и scripts, которым нужны нестандартные методы или полный legacy surface. | Совместимый экспериментальный режим: все методы, advanced upload, `SMUGGLE`, `NOTE`, WebSocket и операции очистки включены явно. |
 
 `PING` возвращает активный `profile`, `supported_methods` и карту
 `capabilities`; CORS preflight и браузерный UI используют эти же данные.
@@ -252,7 +258,10 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth-file ./auth.txt -m 200
   `--auth-file`, reverse proxy с rate limiting и request-size limits,
   мониторинг, firewall allowlist и точный `--cors-origin` для доверенного
   браузерного UI. Не используйте
-  `--cors-origin *` для публичного браузерного интерфейса.
+  `--cors-origin *` для публичного браузерного интерфейса. App-side Basic
+  Auth rate limiting считает неудачи по direct TCP peer IP; за reverse proxy
+  настройте proxy-side per-client throttling, потому что приложение пока не
+  доверяет `Forwarded`/`X-Forwarded-For`.
 
 ## HTTP-методы
 
@@ -434,6 +443,11 @@ exphttp --letsencrypt --domain example.com --acme-staging
 Если явно запрошен `--letsencrypt` или `--sslip`, ошибка ACME не заменяется самоподписанным сертификатом: запуск завершится ошибкой, чтобы не снижать уровень защиты молча. Wildcard-сертификаты и DNS-01 challenge в этой версии не поддерживаются.
 
 ### Docker и sslip/ACME
+
+`Dockerfile` и `examples/docker/docker-compose.yml` — operator convenience
+для локальных builds и topology experiments, а не поддерживаемый published
+artifact track. Примеры собирают локальный image `exphttp:local`; политика
+публикации образов и rollback границы отложены до отдельного Docker stage.
 
 `examples/docker/docker-compose.yml` по умолчанию оставляет прежний безопасный
 plain HTTP путь: сервис `exphttp` публикует порт только на
