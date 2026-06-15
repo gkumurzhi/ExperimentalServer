@@ -1,7 +1,7 @@
 # STAGE-010 - API contract stability
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -51,11 +51,11 @@ Document the current API as a legacy v0 contract with clear stability, discovery
 6. Keep v1 as opt-in future scope and list the smallest proposed surface without implementing it.
 
 ## Acceptance criteria
-- [ ] `API.md` declares current behavior legacy v0 and states compatibility promises.
-- [ ] Docs explain `PING`/capabilities as discovery and how capability keys may evolve.
-- [ ] Docs clarify retry/idempotency limits, note ID behavior, and WebSocket `opId` semantics.
-- [ ] Docs distinguish transport closes from HTTP error responses.
-- [ ] v1 is described as future opt-in work, not implemented behavior.
+- [x] `API.md` declares current behavior legacy v0 and states compatibility promises.
+- [x] Docs explain `PING`/capabilities as discovery and how capability keys may evolve.
+- [x] Docs clarify retry/idempotency limits, note ID behavior, and WebSocket `opId` semantics.
+- [x] Docs distinguish transport closes from HTTP error responses.
+- [x] v1 is described as future opt-in work, not implemented behavior.
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -75,4 +75,4 @@ Document the current API as a legacy v0 contract with clear stability, discovery
 - Rollback: revert API docs to legacy-only language and move detailed v1 design into backlog.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+Closed 2026-06-15 17:02:55 +0300. Added a legacy v0 contract-stability section to `API.md`, synced `docs/api.md`, and linked/summarized the stance in `README.md`. README examples now mark lab-only advanced upload, SMUGGLE, upload clear, and note clear usage. Verification passed: `python tools/sync_docs.py --check`, `python tools/check_stale_docs.py`, and `python -m pytest tests/test_server_methods.py tests/test_websocket_handlers.py tests/test_handlers/test_notepad.py`.

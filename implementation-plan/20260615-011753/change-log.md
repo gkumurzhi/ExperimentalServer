@@ -1,5 +1,11 @@
 # Change Log
 
+## 2026-06-15 17:02:55 +0300 - STAGE-010
+- Status: CLOSED
+- Files changed: `API.md`, `docs/api.md`, `README.md`, `implementation-plan/20260615-011753/stages/STAGE-010-api-contract-stability.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-010-20260615-165022.md`
+- Verification: `python tools/sync_docs.py --check`, `python tools/check_stale_docs.py`, and `python -m pytest tests/test_server_methods.py tests/test_websocket_handlers.py tests/test_handlers/test_notepad.py` passed.
+- Report: `stage-reports/STAGE-010-20260615-165022.md`
+
 ## 2026-06-15 16:40:18 +0300 - STAGE-009
 - Status: CLOSED
 - Files changed: `src/storage.py`, `tests/test_handlers/test_files.py`, `tests/benchmarks/test_workspace_hot_paths.py`, `implementation-plan/20260615-011753/stages/STAGE-009-workspace-performance-baseline.md`, `implementation-plan/20260615-011753/stage-status.md`, `implementation-plan/20260615-011753/change-log.md`, `implementation-plan/20260615-011753/stage-reports/STAGE-009-20260615-161853.md`
