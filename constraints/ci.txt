@@ -14,7 +14,7 @@ cfgv==3.5.0
 charset-normalizer==3.4.7
 click==8.3.2
 colorama==0.4.6
-coverage==7.13.4
+coverage==7.14.0
 cryptography==48.0.0
 cyclonedx-python-lib==11.7.0
 defusedxml==0.7.1
