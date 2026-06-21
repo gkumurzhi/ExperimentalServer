@@ -1,7 +1,7 @@
 # STAGE-001 - SMUGGLE artifact runtime contract
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -49,9 +49,9 @@ Make generated `SMUGGLE` artifacts execute correctly in the supported `lab` brow
 3. Extend browser smoke and server tests to cover the plain and encrypted artifact path plus disabled-profile expectations.
 
 ## Acceptance criteria
-- [ ] Opening a generated plain artifact in the supported `lab` flow completes its advertised action instead of stalling on the loading text
-- [ ] The encrypted artifact path is positively verified, not only its rejection/limit cases
-- [ ] Existing `workspace` and `serve` disabled-state behavior remains unchanged
+- [x] Opening a generated plain artifact in the supported `lab` flow completes its advertised action instead of stalling on the loading text
+- [x] The encrypted artifact path is positively verified, not only its rejection/limit cases
+- [x] Existing `workspace` and `serve` disabled-state behavior remains unchanged
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -69,4 +69,5 @@ Make generated `SMUGGLE` artifacts execute correctly in the supported `lab` brow
 - Rollback: revert the artifact-specific runtime/CSP change and keep only any non-invasive test additions
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 17:55:06 +0300`; report: `stage-reports/STAGE-001-20260621-174355.md`.
+- Artifact-scoped CSP restored the browser flow, encrypted responses now expose verification metadata, and the lab/full plus disabled-state smoke checks passed.

@@ -1,7 +1,7 @@
 # STAGE-002 - Renderer seam and contract tests
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -47,9 +47,9 @@ Stabilize the public renderer contract behind focused tests and a small internal
 3. Clean up the misleading `crypto_js_src` behavior by honoring it or removing it intentionally, then pin the chosen contract in tests.
 
 ## Acceptance criteria
-- [ ] `generate_smuggling_html()` has direct regression coverage for plain and encrypted output
-- [ ] The encrypted renderer no longer silently ignores `crypto_js_src`
-- [ ] Handler-level SMUGGLE tests still pass without changing the external JSON/temp-artifact contract
+- [x] `generate_smuggling_html()` has direct regression coverage for plain and encrypted output
+- [x] The encrypted renderer no longer silently ignores `crypto_js_src`
+- [x] Handler-level SMUGGLE tests still pass without changing the external JSON/temp-artifact contract
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,5 @@ Stabilize the public renderer contract behind focused tests and a small internal
 - Rollback: revert the seam change and keep only the safe direct tests that describe current behavior
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 17:58:46 +0300`; report: `stage-reports/STAGE-002-20260621-175846.md`.
+- Direct renderer tests now pin plain/encrypted output, and encrypted rendering honors custom `crypto_js_src` through the new internal render seam.

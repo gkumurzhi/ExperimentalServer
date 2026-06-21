@@ -1,7 +1,7 @@
 # STAGE-003 - Safe operator framing and docs guardrails
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -50,9 +50,9 @@ Align README, mirrored security/docs pages, CLI help, and stale-doc tooling with
 3. Extend stale-doc tooling so the most harmful phrases cannot be reintroduced quietly.
 
 ## Acceptance criteria
-- [ ] README no longer describes `SMUGGLE` as a DLP/proxy bypass or email/messenger delivery workflow
-- [ ] `python -m exphttp --help` no longer presents `--tls` on `0.0.0.0` as a public-safe default and clearly distinguishes lab-only methods
-- [ ] Stale-doc tooling fails when the banned unsafe phrases return
+- [x] README no longer describes `SMUGGLE` as a DLP/proxy bypass or email/messenger delivery workflow
+- [x] `python -m exphttp --help` no longer presents `--tls` on `0.0.0.0` as a public-safe default and clearly distinguishes lab-only methods
+- [x] Stale-doc tooling fails when the banned unsafe phrases return
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -70,4 +70,5 @@ Align README, mirrored security/docs pages, CLI help, and stale-doc tooling with
 - Rollback: revert the copy changes and keep only any safe stale-doc test improvements that remain valid
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 18:03:33 +0300`; report: `stage-reports/STAGE-003-20260621-180333.md`.
+- README, CLI help, security docs, and stale-doc tooling now enforce lab-only `SMUGGLE` framing and explicit advanced-upload/profile boundaries.
