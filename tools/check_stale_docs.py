@@ -121,6 +121,21 @@ STALE_PATTERNS: tuple[StalePattern, ...] = (
         "stale public-exposure bind example; document trusted-lab/external prerequisites",
     ),
     StalePattern(
+        re.compile(r"Обход DLP/прокси", re.IGNORECASE),
+        "stale lab-only SMUGGLE framing; avoid bypass/delivery wording",
+    ),
+    StalePattern(
+        re.compile(r"\bDLP/proxy bypass\b", re.IGNORECASE),
+        "stale lab-only SMUGGLE framing; avoid bypass/delivery wording",
+    ),
+    StalePattern(
+        re.compile(
+            r"(?:через\s+email\s+и\s+мессендж\w+|via\s+email\s+and\s+messengers|email(?:,|\s+and)\s+messengers)",
+            re.IGNORECASE,
+        ),
+        "stale lab-only SMUGGLE framing; avoid third-party delivery wording",
+    ),
+    StalePattern(
         re.compile(r"Content-Length smuggling \(duplicate/negative CL\)", re.IGNORECASE),
         (
             "stale Content-Length wording; identical duplicates are accepted, "

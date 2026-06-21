@@ -103,6 +103,20 @@ def test_public_exposure_quick_start_wording_is_reported(tmp_path: Path) -> None
     assert any("public-exposure quick-start" in finding.message for finding in findings)
 
 
+def test_smuggle_bypass_and_delivery_wording_is_reported(tmp_path: Path) -> None:
+    write_minimal_docs(tmp_path)
+    (tmp_path / "README.md").write_text(
+        "- Обход DLP/прокси для скачивания\n- Передача через email и мессенджеры\n",
+        encoding="utf-8",
+    )
+
+    findings = check_stale_docs.find_stale_references(tmp_path)
+
+    assert findings
+    assert {finding.path for finding in findings} == {Path("README.md")}
+    assert any("lab-only SMUGGLE framing" in finding.message for finding in findings)
+
+
 def test_threat_model_duplicate_content_length_wording_is_reported(tmp_path: Path) -> None:
     write_minimal_docs(tmp_path)
     (tmp_path / "docs" / "threat-model.md").write_text(

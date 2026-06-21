@@ -310,6 +310,12 @@ class TestCLIParser:
         assert "--write-sample-config" in help_text
         assert "--config ./exphttp.ini --check-config" in help_text
 
+    def test_help_footer_marks_lab_only_methods_explicitly(self):
+        help_text = self.parser.format_help()
+
+        assert "Lab-only methods: NOTE, SMUGGLE" in help_text
+        assert "FETCH, INFO, PING, NONE" in help_text
+
     def test_help_text_is_cp1252_encodable(self):
         help_text = self.parser.format_help()
 

@@ -101,7 +101,8 @@ Runtime file state is split across a small number of explicit directories:
    to `<root>/uploads/`; the built-in UI and `/static/...` are served
    read-only package resources.
 5. **Advanced upload** — unknown non-standard methods carrying upload payload
-   data route to `AdvancedUploadHandlersMixin`, which supports JSON body,
+   data route to `AdvancedUploadHandlersMixin` only when the active `lab`
+   profile enables advanced-upload fallback; that mixin supports JSON body,
    header, chunked-header, and URL transports.
 
 See the [threat model](threat-model.md) for what each layer buys you.

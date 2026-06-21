@@ -140,7 +140,8 @@ Examples:
     exphttp --config ./exphttp.ini --check-config            Validate config before start
 
 Custom HTTP methods:
-    FETCH, INFO, PING, NONE, SMUGGLE    (+ standard GET, POST, PUT, OPTIONS)
+    FETCH, INFO, PING, NONE             (+ standard GET, POST, PUT, OPTIONS)
+    Lab-only methods: NOTE, SMUGGLE     (--profile lab)
         """,
     )
     parser.set_defaults(profile=DEFAULT_PROFILE, profile_explicit=False, advanced_upload=False)

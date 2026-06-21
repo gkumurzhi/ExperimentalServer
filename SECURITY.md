@@ -77,6 +77,9 @@ obfuscation, not a replacement for TLS or authentication:
 - Advanced upload is disabled by default and enabled only by the `lab` feature
   profile. Prefer `--profile serve` for read-only sharing and the default
   `--profile workspace` for normal upload/delete workspaces.
+- `SMUGGLE` is also `lab` only. Treat it as a temporary operator-owned artifact
+  generator for controlled demo/inspection flows, not as sanctioned bypass or
+  third-party delivery guidance.
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
 - Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`
