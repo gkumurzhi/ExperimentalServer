@@ -12,6 +12,8 @@ src/
   __main__.py          # compatibility module entry point
   cli.py               # argparse
   server.py            # ExperimentalHTTPServer: socket lifecycle + WS helpers
+  settings.py          # INI/env/CLI settings normalization and validation
+  extensions.py        # explicit plugin API dataclasses and plugin loading
   metrics.py           # MetricsCollector (thread-safe counters)
   notepad_service.py   # NOTE domain logic shared by HTTP and WebSocket
   request_pipeline.py  # auth/dispatch/send orchestration
@@ -56,7 +58,7 @@ sequenceDiagram
     RequestPipeline->>RequestPipeline: _check_payload_size()
     RequestPipeline->>HandlerMixin: dispatch
     HandlerMixin->>HandlerRegistry: lookup
-    HandlerRegistry-->>Handler: bound method
+    HandlerRegistry-->>Handler: core or explicitly registered plugin method
     Handler->>NotepadService: NOTE/WS note operations (when applicable)
     Handler-->>RequestPipeline: HTTPResponse
     RequestPipeline->>MetricsCollector: record()
@@ -103,3 +105,18 @@ Runtime file state is split across a small number of explicit directories:
    header, chunked-header, and URL transports.
 
 See the [threat model](threat-model.md) for what each layer buys you.
+
+## Configuration and extension boundaries
+
+`src.settings.ServerSettings` is the operator-facing configuration boundary.
+It resolves built-in defaults, INI files, `EXPHTTP_*` environment variables,
+and explicit CLI flags before the CLI constructs `ExperimentalHTTPServer`.
+The `public_direct` preset is validated in this layer so services and
+containers can run `exphttp --config <file> --check-config` before startup.
+
+`src.extensions` / `exphttp.extensions` is the only supported external plugin
+surface. Plugins are not auto-discovered; an operator must explicitly list
+modules in configuration or pass `PluginSpec` objects when embedding the
+server. Plugin methods are registered after core profile methods, cannot
+override core methods by default, and carry policy metadata for profile
+gating, CORS, and browser mutation checks.

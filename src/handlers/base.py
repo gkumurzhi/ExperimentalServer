@@ -5,7 +5,7 @@ Base class for HTTP method handlers.
 import importlib.resources
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, cast
 from urllib.parse import unquote
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     import threading
 
     from ..security.keys import ECDHKeyManager
-    from .registry import Handler
+    from .registry import HandlerRegistry
 
 logger = logging.getLogger("httpserver")
 
@@ -113,7 +113,7 @@ class BaseHandler:
     upload_dir: Path
     notes_dir: Path
     upload_storage: UploadStorageService
-    method_handlers: Mapping[str, "Handler"]
+    method_handlers: "HandlerRegistry"
     features: FeatureSet
     advanced_upload_enabled: bool
     _temp_smuggle_files: set[str]

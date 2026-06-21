@@ -100,8 +100,15 @@ When running the server outside a trusted lab:
 - Select the narrowest `--profile` that supports the workflow; avoid `lab` for
   externally reachable services unless experimental methods are required.
 - Bind to `127.0.0.1` unless external access is explicitly required.
+- Prefer `--config` for services and run `exphttp --config <file>
+  --check-config` before enabling a unit/container. For direct public exposure,
+  set `public_direct = true` so startup validation requires real TLS,
+  `auth_file`, explicit memory budget, enabled timeouts, non-lab profile, and
+  no wildcard write CORS.
 - For Docker, keep the default Compose plain HTTP publication on host loopback
-  and use mounted secret files with `--auth-file` for TLS/auth profiles.
+  and use mounted secret files with `--auth-file` for TLS/auth profiles. The
+  `deploy/docker/docker-compose.public-direct.yml` preset uses the published
+  GHCR image, mounted INI config, and Docker secrets.
 - Place behind a reverse proxy with per-client rate limiting and request-size
   limits when the service is exposed beyond localhost or a trusted lab.
 - Configure an exact `--cors-origin` for a trusted browser UI. Wildcard
@@ -129,15 +136,16 @@ SMUGGLE storage quota flags. Protect ACME state volumes as secret certificate
 material and schedule controlled restarts before certificate expiry so
 startup-time renewal can run.
 
-The repository Dockerfile and Compose file are local/operator examples, not a
-supported published image channel. Treat `exphttp:local` as a local build and
-review the Compose topology before adapting it to an exposed environment. The
-checked-in Docker commands use the app `workspace` profile explicitly; change
-to `serve` for read-only containers and use `lab` only in controlled labs with
-TLS/Auth, firewall controls, proxy-side throttling, and resource limits. The
-ACME Compose profile exposes public ports for HTTP-01 and HTTPS and requires a
-Basic Auth secret, but it is still an operator-owned topology rather than a
-supported internet service preset.
+The root Dockerfile and example Compose file are local/operator examples.
+Tagged releases also publish `ghcr.io/gkumurzhi/exphttp` with provenance/SBOM
+settings in the release workflow, but deployment topology remains
+operator-owned. Treat `exphttp:local` as a local build and review the Compose
+topology before adapting it to an exposed environment. The checked-in Docker
+commands use the app `workspace` profile explicitly; change to `serve` for
+read-only containers and use `lab` only in controlled labs with TLS/Auth,
+firewall controls, proxy-side throttling, and resource limits. The ACME Compose
+profile exposes public ports for HTTP-01 and HTTPS and requires a Basic Auth
+secret.
 
 ## Known Limitations
 

@@ -21,10 +21,10 @@ The v0 compatibility promise is intentionally narrow:
 - Documented method names, route shapes, profile names, filesystem scopes, and
   stable `PING` discovery fields should not be removed or renamed without a
   release note and migration path.
-- `PING` fields `profile`, `supported_methods`, and `capabilities` are the
-  stable discovery mechanism for client feature gating. Treat
-  `supported_methods` as a set, and ignore unknown `capabilities` keys so new
-  opt-in booleans can be added safely.
+- `PING` fields `profile`, `supported_methods`, `plugin_methods`, and
+  `capabilities` are the stable discovery mechanism for client feature gating.
+  Treat `supported_methods` and `plugin_methods` as sets, and ignore unknown
+  `capabilities` keys so new opt-in booleans can be added safely.
 - Response examples may gain additive JSON fields. Clients should ignore fields
   they do not understand unless this document marks the field as required.
 - Legacy error bodies are not normalized across all endpoints. Status codes and
@@ -349,6 +349,7 @@ PING / HTTP/1.1
   "server": "ExperimentalHTTPServer/2.0.0",
   "timestamp": "2025-01-15T10:30:00.123456+00:00",
   "supported_methods": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE"],
+  "plugin_methods": [],
   "access_scope": "uploads",
   "profile": "workspace",
   "capabilities": {

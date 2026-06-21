@@ -4,9 +4,12 @@ CLI entry point for ExperimentalHTTPServer.
 """
 
 import argparse
+import json
+import os
 import signal
 import sys
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from types import FrameType
 from typing import Any
 
@@ -30,6 +33,12 @@ from .server import (
     DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT,
     ExperimentalHTTPServer,
 )
+from .settings import (
+    SettingsError,
+    load_settings_file,
+    resolve_settings,
+    sample_config_text,
+)
 
 _MIB = 1024 * 1024
 
@@ -46,6 +55,8 @@ class _ProfileAction(argparse.Action):
     ) -> None:
         if not isinstance(values, str):
             parser.error("--profile requires a profile name")
+        if getattr(namespace, "advanced_upload", False) and values != "lab":
+            parser.error("--advanced-upload is a deprecated alias for --profile lab")
         setattr(namespace, self.dest, values)
         namespace.profile_explicit = True
 
@@ -124,8 +135,9 @@ Quick start:
     exphttp --tls --auth random → HTTPS + random password
 
 Examples:
-    exphttp -H 0.0.0.0 -p 443 --tls    Public HTTPS
-    exphttp -d ./data -m 500            Custom dir, 500 MB limit
+    exphttp -H 0.0.0.0 -p 8443 --tls --auth-file ./auth.txt  Trusted lab HTTPS
+    exphttp --write-sample-config ./exphttp.ini              Public-direct config template
+    exphttp --config ./exphttp.ini --check-config            Validate config before start
 
 Custom HTTP methods:
     FETCH, INFO, PING, NONE, SMUGGLE    (+ standard GET, POST, PUT, OPTIONS)
@@ -134,6 +146,28 @@ Custom HTTP methods:
     parser.set_defaults(profile=DEFAULT_PROFILE, profile_explicit=False, advanced_upload=False)
 
     parser.add_argument("-V", "--version", action="version", version=f"%(prog)s {__version__}")
+
+    config_group = parser.add_argument_group("Configuration")
+    config_group.add_argument(
+        "--config",
+        metavar="FILE",
+        help="Read settings from an INI configuration file",
+    )
+    config_group.add_argument(
+        "--check-config",
+        action="store_true",
+        help="Validate the resolved configuration and exit without starting",
+    )
+    config_group.add_argument(
+        "--print-config",
+        action="store_true",
+        help="Print the resolved configuration as redacted JSON and exit",
+    )
+    config_group.add_argument(
+        "--write-sample-config",
+        metavar="FILE",
+        help="Write a public-direct sample INI configuration and exit",
+    )
 
     # Basic
     basic = parser.add_argument_group("Basic")
@@ -451,6 +485,86 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--advanced-upload is a deprecated alias for --profile lab")
 
 
+def _collect_explicit_cli_dests(
+    parser: argparse.ArgumentParser,
+    argv: Sequence[str],
+) -> set[str]:
+    """Return argparse destinations explicitly present in ``argv``."""
+    option_to_dest: dict[str, str] = {}
+    for action in parser._actions:
+        for option in action.option_strings:
+            option_to_dest[option] = action.dest
+
+    explicit: set[str] = set()
+    for token in argv:
+        option = token.split("=", 1)[0]
+        if option in option_to_dest:
+            explicit.add(option_to_dest[option])
+    return explicit
+
+
+_CLI_TO_SETTINGS: dict[str, str] = {
+    "host": "host",
+    "port": "port",
+    "dir": "root_dir",
+    "quiet": "quiet",
+    "debug": "debug",
+    "open": "open_browser",
+    "json_log": "json_log",
+    "cors_origin": "cors_origin",
+    "profile": "profile",
+    "max_size": "max_size_mb",
+    "upload_storage_limit": "upload_storage_limit_mb",
+    "upload_file_limit": "upload_file_limit",
+    "upload_reserve_free": "upload_reserve_free_mb",
+    "note_storage_limit": "note_storage_limit_mb",
+    "note_count_limit": "note_count_limit",
+    "smuggle_temp_age": "smuggle_temp_age",
+    "smuggle_temp_file_limit": "smuggle_temp_file_limit",
+    "smuggle_temp_storage_limit": "smuggle_temp_storage_limit_mb",
+    "max_header_size": "max_header_size_kb",
+    "body_memory_budget": "body_memory_budget_mb",
+    "body_idle_timeout": "body_idle_timeout",
+    "body_timeout": "body_timeout",
+    "body_min_rate": "body_min_rate",
+    "stream_send_idle_timeout": "stream_send_idle_timeout",
+    "stream_send_timeout": "stream_send_timeout",
+    "max_websocket_connections": "max_websocket_connections",
+    "websocket_frame_idle_timeout": "websocket_frame_idle_timeout",
+    "workers": "workers",
+    "tls": "tls",
+    "cert": "cert_file",
+    "key": "key_file",
+    "letsencrypt": "letsencrypt",
+    "domain": "domain",
+    "email": "email",
+    "sslip": "sslip",
+    "public_ip": "public_ip",
+    "acme_staging": "acme_staging",
+    "acme_server": "acme_server",
+    "acme_http_address": "acme_http_address",
+    "acme_http_port": "acme_http_port",
+    "auth": "auth",
+    "auth_file": "auth_file",
+}
+
+
+def _cli_values_from_args(
+    args: argparse.Namespace,
+    explicit_dests: set[str],
+) -> dict[str, object]:
+    """Build settings values from only explicitly supplied CLI options."""
+    values: dict[str, object] = {}
+    if "advanced_upload" in explicit_dests and args.advanced_upload:
+        values["profile"] = "lab"
+
+    for dest, field_name in _CLI_TO_SETTINGS.items():
+        if dest not in explicit_dests:
+            continue
+        values[field_name] = getattr(args, dest)
+    return values
+
+
 def _install_shutdown_signal_handlers(server: ExperimentalHTTPServer) -> dict[signal.Signals, Any]:
     """Install graceful shutdown handlers for container-style termination."""
     previous_handlers: dict[signal.Signals, Any] = {}
@@ -475,61 +589,33 @@ def _restore_signal_handlers(previous_handlers: dict[signal.Signals, Any]) -> No
 def main(argv: Sequence[str] | None = None) -> int:
     """Main entry point."""
     parser = create_parser()
-    args = parser.parse_args(argv)
-    _validate_args(parser, args)
+    actual_argv = list(sys.argv[1:] if argv is None else argv)
+    explicit_dests = _collect_explicit_cli_dests(parser, actual_argv)
+    args = parser.parse_args(actual_argv)
 
-    # Build config from arguments
-    config = {
-        "host": args.host,
-        "port": args.port,
-        "root_dir": args.dir,
-        "max_upload_size": args.max_size * 1024 * 1024,
-        "upload_storage_limit": (
-            args.upload_storage_limit * _MIB if args.upload_storage_limit else None
-        ),
-        "upload_file_limit": args.upload_file_limit or None,
-        "upload_reserved_free_space": args.upload_reserve_free * _MIB,
-        "note_storage_limit": args.note_storage_limit * _MIB if args.note_storage_limit else None,
-        "note_count_limit": args.note_count_limit or None,
-        "smuggle_temp_max_age": args.smuggle_temp_age or None,
-        "smuggle_temp_file_limit": args.smuggle_temp_file_limit or None,
-        "smuggle_temp_storage_limit": (
-            args.smuggle_temp_storage_limit * _MIB if args.smuggle_temp_storage_limit else None
-        ),
-        "max_header_size": args.max_header_size * 1024,
-        "body_memory_budget": args.body_memory_budget * _MIB if args.body_memory_budget else None,
-        "body_idle_timeout": args.body_idle_timeout or None,
-        "body_timeout": args.body_timeout or None,
-        "body_min_rate": args.body_min_rate,
-        "stream_send_idle_timeout": args.stream_send_idle_timeout,
-        "stream_send_timeout": args.stream_send_timeout or None,
-        "max_websocket_connections": args.max_websocket_connections,
-        "websocket_frame_idle_timeout": args.websocket_frame_idle_timeout,
-        "max_workers": args.workers,
-        "quiet": args.quiet,
-        "debug": args.debug,
-        "tls": args.tls or bool(args.cert) or args.letsencrypt or args.sslip,
-        "cert_file": args.cert,
-        "key_file": args.key,
-        "letsencrypt": args.letsencrypt,
-        "domain": args.domain,
-        "email": args.email,
-        "sslip": args.sslip,
-        "public_ip": args.public_ip,
-        "acme_staging": args.acme_staging,
-        "acme_server": args.acme_server,
-        "acme_http_address": args.acme_http_address,
-        "acme_http_port": args.acme_http_port,
-        "auth": args.auth,
-        "auth_file": args.auth_file,
-        "open_browser": args.open,
-        "json_log": args.json_log,
-        "cors_origin": args.cors_origin,
-        "profile": args.profile,
-    }
+    if args.write_sample_config:
+        Path(args.write_sample_config).write_text(sample_config_text(), encoding="utf-8")
+        return 0
 
     try:
-        server = ExperimentalHTTPServer(**config)
+        file_settings = load_settings_file(args.config) if args.config else None
+        settings = resolve_settings(
+            file_settings=file_settings,
+            env=dict(os.environ),
+            cli_values=_cli_values_from_args(args, explicit_dests),
+        )
+    except SettingsError as exc:
+        parser.error(str(exc))
+
+    if args.check_config:
+        return 0
+
+    if args.print_config:
+        print(json.dumps(settings.to_redacted_dict(), indent=2, sort_keys=True))
+        return 0
+
+    try:
+        server = ExperimentalHTTPServer(**settings.to_server_kwargs())
         previous_handlers = _install_shutdown_signal_handlers(server)
         try:
             server.start()

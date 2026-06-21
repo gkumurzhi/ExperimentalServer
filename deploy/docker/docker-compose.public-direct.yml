@@ -1,0 +1,36 @@
+services:
+  exphttp:
+    image: ghcr.io/gkumurzhi/exphttp:${EXPHTTP_VERSION:-latest}
+    container_name: exphttp
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - exphttp-data:/data
+      - exphttp-acme-state:/home/exphttp/.exphttp
+      - ./exphttp.ini.example:/etc/exphttp/exphttp.ini:ro
+    secrets:
+      - exphttp_auth
+    command:
+      - --config
+      - /etc/exphttp/exphttp.ini
+    healthcheck:
+      disable: true
+
+volumes:
+  exphttp-data:
+  exphttp-acme-state:
+
+secrets:
+  exphttp_auth:
+    file: ./secrets/exphttp_auth

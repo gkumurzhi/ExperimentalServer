@@ -285,8 +285,120 @@ class TestCLIParser:
         args = self.parser.parse_args([])
         assert args.json_log is False
 
+    def test_config_control_flags(self):
+        args = self.parser.parse_args(
+            [
+                "--config",
+                "/etc/exphttp/exphttp.ini",
+                "--check-config",
+                "--print-config",
+                "--write-sample-config",
+                "/tmp/exphttp.ini",
+            ]
+        )
+
+        assert args.config == "/etc/exphttp/exphttp.ini"
+        assert args.check_config is True
+        assert args.print_config is True
+        assert args.write_sample_config == "/tmp/exphttp.ini"
+
+    def test_help_examples_prefer_trusted_lab_and_public_direct_paths(self):
+        help_text = self.parser.format_help()
+
+        assert "Public HTTPS" not in help_text
+        assert "Trusted lab HTTPS" in help_text
+        assert "--write-sample-config" in help_text
+        assert "--config ./exphttp.ini --check-config" in help_text
+
 
 class TestCLIMain:
+    def test_main_check_config_validates_without_starting_server(
+        self,
+        monkeypatch,
+        temp_dir: Path,
+    ):
+        config_file = temp_dir / "exphttp.ini"
+        config_file.write_text(
+            """
+            [server]
+            host = 127.0.0.1
+            port = 8090
+            profile = workspace
+            """,
+            encoding="utf-8",
+        )
+
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not start for --check-config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        assert cli.main(["--config", str(config_file), "--check-config"]) == 0
+
+    def test_main_print_config_redacts_auth_and_does_not_start(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not start for --print-config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        assert cli.main(["--auth", "admin:supersecret", "--print-config"]) == 0
+        rendered = capsys.readouterr().out
+        assert '"auth": "***"' in rendered
+        assert "supersecret" not in rendered
+
+    def test_main_write_sample_config(self, monkeypatch, temp_dir: Path):
+        output = temp_dir / "sample.ini"
+
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not start for --write-sample-config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        assert cli.main(["--write-sample-config", str(output)]) == 0
+        rendered = output.read_text(encoding="utf-8")
+        assert "[server]" in rendered
+        assert "public_direct = true" in rendered
+
+    def test_main_config_file_is_overridden_by_explicit_cli(self, monkeypatch, temp_dir: Path):
+        config_file = temp_dir / "exphttp.ini"
+        config_file.write_text(
+            """
+            [server]
+            host = 0.0.0.0
+            port = 9000
+            dir = /srv/exphttp
+            profile = serve
+
+            [limits]
+            max_size_mb = 64
+            """,
+            encoding="utf-8",
+        )
+        captured: dict[str, object] = {}
+
+        class ServerStub:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def start(self):
+                captured["started"] = True
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", ServerStub)
+
+        result = cli.main(["--config", str(config_file), "--port", "8080", "--profile", "lab"])
+
+        assert result == 0
+        assert captured["host"] == "0.0.0.0"
+        assert captured["port"] == 8080
+        assert captured["root_dir"] == "/srv/exphttp"
+        assert captured["profile"] == "lab"
+        assert captured["max_upload_size"] == 64 * 1024 * 1024
+        assert captured["started"] is True
+
     def test_advanced_upload_alias_conflicts_with_safe_profiles(self):
         with pytest.raises(SystemExit) as exc_info:
             cli.main(["--advanced-upload", "--profile", "serve"])

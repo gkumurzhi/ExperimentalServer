@@ -1,0 +1,32 @@
+[Unit]
+Description=exphttp file workspace server
+Documentation=https://github.com/gkumurzhi/ExperimentalServer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=exphttp
+Group=exphttp
+WorkingDirectory=/var/lib/exphttp
+EnvironmentFile=-/etc/exphttp/exphttp.env
+ExecStartPre=/opt/exphttp/venv/bin/exphttp --config /etc/exphttp/exphttp.ini --check-config
+ExecStart=/opt/exphttp/venv/bin/exphttp --config /etc/exphttp/exphttp.ini
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/exphttp /home/exphttp/.exphttp
+StateDirectory=exphttp
+RuntimeDirectory=exphttp
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -11,13 +11,16 @@ import ssl
 import sys
 import threading
 import time
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import HIDDEN_FILES, __version__
-from .features import DEFAULT_PROFILE, FeatureSet, resolve_feature_profile
+from .extensions import HandlerContext, PluginMethodSpec, PluginSpec, coerce_plugin_specs
+from .features import DEFAULT_PROFILE, FeatureSet, profile_names, resolve_feature_profile
 from .handlers import HandlerMixin
+from .handlers.registry import Handler
 from .handlers.smuggle import (
     DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS,
     DEFAULT_SMUGGLE_TEMP_MAX_BYTES,
@@ -133,6 +136,12 @@ class ExperimentalHTTPServer(HandlerMixin):
         cors_origin: str | None = None,
         # Feature profile
         profile: str = DEFAULT_PROFILE,
+        # Explicit plugin API
+        plugins: Sequence[PluginSpec] | None = None,
+        plugin_modules: Sequence[str] | None = None,
+        plugins_override_core: bool = False,
+        plugins_allow_public_direct: bool = False,
+        public_direct: bool = False,
         # WebSocket resource limits
         max_websocket_connections: int | None = None,
         websocket_frame_idle_timeout: float = DEFAULT_WEBSOCKET_FRAME_IDLE_TIMEOUT,
@@ -224,6 +233,7 @@ class ExperimentalHTTPServer(HandlerMixin):
         self.features: FeatureSet = resolve_feature_profile(profile)
         self.profile = self.features.profile
         self.advanced_upload_enabled = self.features.advanced_upload
+        self.public_direct = public_direct
 
         # TLS settings (delegated to TLSManager; these fields stay as read-only
         # views used by status printing and request handling).
@@ -292,8 +302,67 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Clean up stale SMUGGLE files from previous sessions
         self._cleanup_old_smuggle_files()
 
+        self.plugin_methods: dict[str, str] = {}
+        self._plugin_method_policies: dict[str, PluginMethodSpec] = {}
         self.method_handlers = self.build_method_handlers()
+        self._register_plugins(
+            plugins=plugins,
+            plugin_modules=plugin_modules,
+            override_core=plugins_override_core,
+            allow_public_direct=plugins_allow_public_direct,
+        )
         self._request_pipeline = RequestPipeline(self)
+
+    def _register_plugins(
+        self,
+        *,
+        plugins: Sequence[PluginSpec] | None,
+        plugin_modules: Sequence[str] | None,
+        override_core: bool,
+        allow_public_direct: bool,
+    ) -> None:
+        """Register explicitly enabled plugin HTTP methods."""
+        if self.public_direct and (plugins or plugin_modules) and not allow_public_direct:
+            raise ValueError(
+                "public_direct disables plugins unless plugins_allow_public_direct is true"
+            )
+
+        core_methods = {
+            method
+            for profile_name in profile_names()
+            for method in resolve_feature_profile(profile_name).registry_methods()
+        }
+        for plugin in coerce_plugin_specs(plugins, plugin_modules):
+            for method_spec in plugin.methods:
+                if self.profile not in method_spec.profiles:
+                    continue
+                method = method_spec.method
+                if method in core_methods and not override_core:
+                    raise ValueError(f"plugin method {method} would override a core method")
+
+                context = HandlerContext(
+                    server=self,
+                    profile=self.profile,
+                    plugin_name=plugin.name,
+                )
+                self.method_handlers.register(
+                    method,
+                    self._build_plugin_handler(method_spec, context),
+                )
+                self.plugin_methods[method] = plugin.name
+                self._plugin_method_policies[method] = method_spec
+
+    @staticmethod
+    def _build_plugin_handler(
+        method_spec: PluginMethodSpec,
+        context: HandlerContext,
+    ) -> Handler:
+        """Wrap a plugin handler in the core registry handler signature."""
+
+        def _handle_plugin(request: HTTPRequest) -> HTTPResponse:
+            return method_spec.handler(request, context)
+
+        return _handle_plugin
 
     def set_authenticator(self, authenticator: BasicAuthenticator | None) -> None:
         """Install an authenticator and keep auth rate limiting in sync."""
@@ -957,7 +1026,15 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _cors_allow_methods_header(self) -> str:
         """Return the profile-derived CORS allow-methods header value."""
-        return ", ".join(self.features.cors_methods(read_only=self.cors_origins == ("*",)))
+        read_only = self.cors_origins == ("*",)
+        methods = list(self.features.cors_methods(read_only=read_only))
+        for method, policy in self._plugin_method_policies.items():
+            if not policy.cors_allowed:
+                continue
+            if read_only and policy.mutating:
+                continue
+            methods.append(method)
+        return ", ".join(methods)
 
     def _is_browser_mutation_allowed(self, request: HTTPRequest) -> bool:
         """Allow only same-origin or explicitly configured browser mutations.
@@ -983,6 +1060,9 @@ class ExperimentalHTTPServer(HandlerMixin):
 
     def _is_browser_protected_mutation(self, request: HTTPRequest) -> bool:
         """Return True when an HTTP request can change server-side state."""
+        plugin_policy = self._plugin_method_policies.get(request.method)
+        if plugin_policy is not None:
+            return plugin_policy.mutating
         return self.features.requires_browser_mutation_guard(
             request.method,
             method_registered=request.method in self.method_handlers,

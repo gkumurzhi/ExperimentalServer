@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- **Config:** INI/env/CLI settings layer with `--config`, `--check-config`,
+  `--print-config`, and `--write-sample-config`; public-direct validation
+  requires real TLS, `auth_file`, explicit memory budget, enabled timeouts, and
+  non-lab profile.
+- **Deployment:** first-class `deploy/systemd/` and `deploy/docker/`
+  public-direct artifacts for console Linux servers and Docker Compose.
+- **Extensions:** explicit `exphttp.extensions` plugin API with profile, CORS,
+  and browser-mutation policy metadata; `PING` now reports `plugin_methods`.
+- **Release:** tag-gated PyPI trusted publishing and GHCR image publishing
+  with version checks, SBOM/provenance settings, and image attestation.
+
 ### Changed
 - **Behavior:** default feature profile is now `workspace`; use `--profile lab`
   or the deprecated `--advanced-upload` alias for the legacy experimental

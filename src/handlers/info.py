@@ -103,6 +103,7 @@ class InfoHandlersMixin(BaseHandler):
             "server": f"ExperimentalHTTPServer/{__version__}",
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "supported_methods": list(self.method_handlers.keys()),
+            "plugin_methods": list(getattr(self, "plugin_methods", {}).keys()),
             "access_scope": "uploads",
             "profile": features.profile,
             "capabilities": features.capabilities(),

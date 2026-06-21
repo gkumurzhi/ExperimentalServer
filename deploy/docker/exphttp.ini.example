@@ -1,0 +1,40 @@
+# exphttp public-direct Docker Compose example.
+# Mounted by docker-compose.public-direct.yml at /etc/exphttp/exphttp.ini.
+
+[server]
+host = 0.0.0.0
+port = 8443
+dir = /data
+profile = workspace
+public_direct = true
+json_log = true
+workers = 10
+
+[security]
+auth_file = /run/secrets/exphttp_auth
+
+[tls]
+sslip = true
+# public_ip = 203.0.113.10
+# acme_staging = true
+acme_http_port = 8080
+
+[limits]
+max_size_mb = 100
+body_memory_budget_mb = 512
+body_idle_timeout = 5
+body_timeout = 300
+body_min_rate = 0
+stream_send_idle_timeout = 5
+stream_send_timeout = 300
+upload_storage_limit_mb = 0
+upload_file_limit = 0
+upload_reserve_free_mb = 0
+
+[cors]
+cors_origin =
+
+[plugins]
+allowlist =
+allow_public_direct = false
+override_core = false
