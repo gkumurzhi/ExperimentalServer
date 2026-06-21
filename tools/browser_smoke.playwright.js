@@ -2166,7 +2166,7 @@ async (page) => {
       10000
     );
 
-    await page.keyboard.press("Enter");
+    await actionButton.press("Enter");
     const modal = page.locator("#smuggleModal");
     await modal.waitFor({ state: "attached", timeout: 10000 });
     await page.locator('#smuggleModal [role="dialog"]').waitFor({ state: "visible", timeout: 10000 });
@@ -2276,7 +2276,7 @@ async (page) => {
       10000
     );
 
-    await page.keyboard.press("Enter");
+    await actionButton.press("Enter");
     const dialog = page.locator('#appDialog [role="alertdialog"]');
     await dialog.waitFor({ state: "visible", timeout: 10000 });
 
