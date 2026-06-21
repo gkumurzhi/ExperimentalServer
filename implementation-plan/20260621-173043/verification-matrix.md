@@ -1,0 +1,10 @@
+# Verification Matrix
+
+| Stage | Required checks | Optional checks | Known blockers | Baseline needed? |
+|---|---|---|---|---|
+| STAGE-001 | `./.venv/bin/pytest -q tests/test_server_methods.py tests/test_server_live.py`; `python tools/browser_smoke.py --profile lab --mode full`; `python tools/browser_smoke.py --profile workspace --mode disabled-state`; `python tools/browser_smoke.py --profile serve --mode disabled-state` | `./.venv/bin/pytest -q tests/test_http/test_io.py` | None at planning time | Yes: preserve current global UI CSP and disabled-profile behavior |
+| STAGE-002 | `./.venv/bin/pytest -q tests/test_utils/test_smuggling.py tests/test_server_methods.py` | `./.venv/bin/pytest -q tests/test_security/test_crypto.py` | Depends on the artifact contract settled in STAGE-001 | Yes: generated HTML structure after STAGE-001 |
+| STAGE-003 | `./.venv/bin/pytest -q tests/test_cli.py tests/test_check_stale_docs.py`; `python tools/check_stale_docs.py`; `python -m exphttp --help` | `python tools/sync_docs.py --check` | None | Yes: current lab-only profile wording and public-direct policy |
+| STAGE-004 | `python tools/browser_smoke.py --profile lab --mode full`; `python tools/browser_smoke.py --profile workspace --mode disabled-state`; `python tools/browser_smoke.py --profile serve --mode disabled-state` | Manual keyboard pass over the artifact dialog/result state | Depends on STAGE-002 smoke and renderer behavior | Yes: current focus-trap and live-region behavior |
+| STAGE-005 | `./.venv/bin/pytest -q tests/test_extensions.py tests/test_server_methods.py` | `./.venv/bin/pytest -q tests/test_handler_registry.py` | None | Yes: existing profile gating in `src/features.py` |
+| STAGE-006 | `./.venv/bin/pytest -q tests/test_settings.py tests/test_cli.py tests/test_deployment_artifacts.py`; `python -m exphttp --check-config` | `python -m exphttp --config deploy/docker/exphttp.ini.example --check-config`; `python -m exphttp --config deploy/systemd/exphttp.ini.example --check-config` | Depends on STAGE-003 wording alignment | Yes: current config schema and sample INIs |
