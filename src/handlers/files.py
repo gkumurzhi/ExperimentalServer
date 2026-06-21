@@ -34,6 +34,18 @@ HTML_CONTENT_SECURITY_POLICY = (
     "form-action 'self'"
 )
 
+SMUGGLE_ARTIFACT_CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'unsafe-inline'; "
+    "img-src data:; "
+    "connect-src 'none'; "
+    "base-uri 'none'; "
+    "object-src 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'none'"
+)
+
 
 class FileHandlersMixin(BaseHandler):
     """Mixin with file operation handlers."""
@@ -133,7 +145,12 @@ class FileHandlersMixin(BaseHandler):
 
         # CSP header for HTML responses
         if content_type.startswith("text/html"):
-            response.set_header("Content-Security-Policy", HTML_CONTENT_SECURITY_POLICY)
+            csp = (
+                SMUGGLE_ARTIFACT_CONTENT_SECURITY_POLICY
+                if is_smuggle
+                else HTML_CONTENT_SECURITY_POLICY
+            )
+            response.set_header("Content-Security-Policy", csp)
 
         return response
 

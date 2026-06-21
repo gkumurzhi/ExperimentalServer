@@ -2140,11 +2140,76 @@ async (page) => {
 
     const popup = await popupPromise;
     const popupUrl = popup ? popup.url() : "";
-    if (popup) {
-      await popup.waitForLoadState("domcontentloaded");
-      await popup.close();
-    }
+    await assertSmuggleArtifactPopupCompletes(popup, name);
     return popupUrl;
+  }
+
+  async function assertSmuggleArtifactPopupCompletes(popup, expectedName, options = {}) {
+    const { password = null } = options;
+    if (!popup) {
+      throw new Error("SMUGGLE artifact popup did not open");
+    }
+
+    const downloadPromise = popup.waitForEvent("download", { timeout: 10000 });
+    await popup.waitForLoadState("domcontentloaded");
+
+    if (password) {
+      await popup.locator("#p").fill(password);
+      await popup.locator("button").click();
+      await popup.waitForFunction(
+        ([targetName]) => {
+          const message = document.getElementById("m");
+          return Boolean(message && message.textContent === `Downloaded: ${targetName}`);
+        },
+        [expectedName],
+        { timeout: 10000 }
+      );
+    } else {
+      await popup.waitForFunction(
+        ([targetName]) => {
+          const status = document.getElementById("s");
+          return Boolean(status && status.textContent === `Done! File: ${targetName}`);
+        },
+        [expectedName],
+        { timeout: 10000 }
+      );
+    }
+
+    const download = await downloadPromise;
+    const suggestedFilename = download.suggestedFilename();
+    if (suggestedFilename !== expectedName) {
+      throw new Error(`SMUGGLE artifact download filename mismatch: ${suggestedFilename}`);
+    }
+    await popup.close();
+  }
+
+  async function smuggleEncryptedViaApiAndAssert(name) {
+    const result = await page.evaluate(async ([serverUrl, targetName]) => {
+      const encodedName = encodeURIComponent(targetName);
+      const response = await sendCustomRequest("SMUGGLE", `${serverUrl}/uploads/${encodedName}?encrypt=1`);
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: JSON.parse(text),
+      };
+    }, [baseUrl, name]);
+
+    if (result.status !== 200) {
+      throw new Error(`Encrypted SMUGGLE returned ${result.status}: ${JSON.stringify(result.body)}`);
+    }
+    if (!result.body.encrypted || !result.body.password || !result.body.url) {
+      throw new Error(`Encrypted SMUGGLE response missing verification data: ${JSON.stringify(result.body)}`);
+    }
+
+    const popupPromise = page.waitForEvent("popup", { timeout: 5000 });
+    await page.evaluate((url) => window.open(url, "_blank"), `${baseUrl}${result.body.url}`);
+    const popup = await popupPromise;
+    await assertSmuggleArtifactPopupCompletes(popup, name, { password: result.body.password });
+
+    return {
+      url: result.body.url,
+      encrypted: result.body.encrypted,
+    };
   }
 
   async function assertSmuggleDialogKeyboardContract(name) {
@@ -3083,6 +3148,7 @@ async (page) => {
     await fetchViaServerFilesAndAssert(uploadName);
     await assertSmuggleDialogKeyboardContract(uploadName);
     const smugglePopupUrl = await smuggleViaServerFilesAndAssert(uploadName);
+    const encryptedSmuggle = await smuggleEncryptedViaApiAndAssert(uploadName);
     const infoPath = await infoViaServerFilesAndAssert(uploadName);
     await browseUploadsAndAssert(uploadName);
     await assertDeleteDialogKeyboardContract(uploadName);
@@ -3277,6 +3343,7 @@ async (page) => {
       requestPanelFetchPath,
       infoPath,
       smugglePopupUrl,
+      encryptedSmuggle,
       opsecAutoSwitch,
       loadedTitle,
       loadedText,

@@ -138,17 +138,16 @@ class SmuggleHandlersMixin(BaseHandler):
 
         # Return URL to the temp file
         temp_name = temp_path.name
+        payload: dict[str, str | bool] = {
+            "url": f"/uploads/{temp_name}",
+            "file": file_path.name,
+            "encrypted": password is not None,
+        }
+        if password is not None:
+            payload["password"] = password
+
         response = HTTPResponse(200)
-        response.set_body(
-            json.dumps(
-                {
-                    "url": f"/uploads/{temp_name}",
-                    "file": file_path.name,
-                    "encrypted": password is not None,
-                }
-            ),
-            "application/json",
-        )
+        response.set_body(json.dumps(payload), "application/json")
         response.set_header("X-Smuggle-URL", f"/uploads/{temp_name}")
 
         return response

@@ -1671,6 +1671,59 @@ class TestServerHelpers:
 
         assert response.status_code == 200
 
+    def test_smuggle_temp_html_uses_artifact_csp_without_weakening_ui_csp(self, temp_dir):
+        (temp_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
+        server = ExperimentalHTTPServer(root_dir=str(temp_dir), quiet=True, profile="lab")
+        source_path = server.upload_dir / "small.txt"
+        source_path.write_bytes(b"small payload")
+
+        smuggle_response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/small.txt"))
+        smuggle_body = json.loads(smuggle_response.body)
+        artifact_response = server.handle_get(make_request("GET", smuggle_body["url"]))
+
+        assert artifact_response.status_code == 200
+        assert artifact_response.headers["Content-Type"].startswith("text/html")
+        artifact_csp = artifact_response.headers["Content-Security-Policy"]
+        assert "script-src 'self' 'unsafe-inline'" in artifact_csp
+        assert "frame-ancestors 'none'" in artifact_csp
+        assert artifact_response.stream_cleanup is not None
+
+        ui_response = server.handle_get(make_request("GET", "/"))
+        ui_csp = ui_response.headers["Content-Security-Policy"]
+        assert "script-src 'self';" in ui_csp
+        assert "script-src 'self' 'unsafe-inline'" not in ui_csp
+
+        ordinary_html = server.upload_dir / "ordinary.html"
+        ordinary_html.write_text("<script>window.executed=true</script>", encoding="utf-8")
+        ordinary_response = server.handle_get(make_request("GET", "/uploads/ordinary.html"))
+
+        assert ordinary_response.headers["Content-Type"] == "application/octet-stream"
+        assert "Content-Security-Policy" not in ordinary_response.headers
+
+    def test_smuggle_encrypted_response_exposes_verification_password(
+        self,
+        server,
+        upload_dir,
+        monkeypatch,
+    ):
+        monkeypatch.setattr("src.handlers.smuggle.secrets.choice", lambda _alphabet: "A")
+        source_path = upload_dir / "secret.txt"
+        source_path.write_bytes(b"secret payload")
+
+        response = server.handle_smuggle(make_request("SMUGGLE", "/uploads/secret.txt?encrypt=1"))
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["url"].startswith("/uploads/smuggle_")
+        assert body["file"] == "secret.txt"
+        assert body["encrypted"] is True
+        assert body["password"] == "AAAAAAA"
+
+        temp_path = upload_dir / body["url"].removeprefix("/uploads/")
+        html = temp_path.read_text(encoding="utf-8")
+        assert "Protected File" in html
+        assert "secret payload" not in html
+
     def test_smuggle_small_file_generates_registered_temp_html(self, server, upload_dir):
         server.smuggle_source_size_limit = 64
         source_path = upload_dir / "small.txt"
@@ -1683,6 +1736,7 @@ class TestServerHelpers:
         assert body["url"].startswith("/uploads/smuggle_")
         assert body["file"] == "small.txt"
         assert body["encrypted"] is False
+        assert "password" not in body
 
         temp_path = upload_dir / body["url"].removeprefix("/uploads/")
         assert temp_path.exists()
