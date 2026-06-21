@@ -241,6 +241,7 @@ def receive_request_result(
     header_end_pos = 0
     first_recv = True
     body_reservation: BodyMemoryReservation | None = None
+    active_body_recv_timeout_reason: ReceiveRejectionReason | None = None
 
     def body_received_bytes() -> int:
         if not headers_received:
@@ -266,19 +267,21 @@ def receive_request_result(
             return "body_rate_too_slow"
         return None
 
-    def body_recv_timeout(now: float) -> float | None:
-        timeouts: list[float] = []
+    def body_recv_timeout(now: float) -> tuple[float | None, ReceiveRejectionReason | None]:
+        timeouts: list[tuple[float, ReceiveRejectionReason]] = []
         if body_idle_timeout is not None:
-            timeouts.append(body_idle_timeout)
+            timeouts.append((body_idle_timeout, "body_idle_timeout"))
         if body_start_time is not None:
             if body_timeout is not None:
-                timeouts.append(max(0.001, body_timeout - (now - body_start_time)))
+                timeouts.append(
+                    (max(0.001, body_timeout - (now - body_start_time)), "body_timeout")
+                )
             rate_deadline = body_rate_deadline()
             if rate_deadline is not None:
-                timeouts.append(max(0.001, rate_deadline - now))
+                timeouts.append((max(0.001, rate_deadline - now), "body_rate_too_slow"))
         if not timeouts:
-            return None
-        return min(timeouts)
+            return None, None
+        return min(timeouts, key=lambda item: item[0])
 
     def reject(reason: ReceiveRejectionReason) -> RequestReceiveResult:
         nonlocal body_reservation
@@ -305,7 +308,8 @@ def receive_request_result(
                         content_length,
                     )
                     return reject(body_timeout_reason)
-                client_socket.settimeout(body_recv_timeout(now))
+                body_timeout_value, active_body_recv_timeout_reason = body_recv_timeout(now)
+                client_socket.settimeout(body_timeout_value)
 
             try:
                 recv_size = RECV_CHUNK
@@ -413,6 +417,8 @@ def receive_request_result(
                         content_length,
                     )
                     return reject(body_timeout_reason)
+                if active_body_recv_timeout_reason != "body_idle_timeout":
+                    continue
                 logger.warning(
                     "Request body idle timeout (%d bytes < %d bytes), dropping",
                     body_received_bytes(),

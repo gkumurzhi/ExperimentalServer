@@ -8,6 +8,7 @@ import time
 
 import pytest
 
+import src.http.io as http_io
 from src.http.io import (
     DEFAULT_MAX_HEADER_SIZE,
     BodyMemoryBudget,
@@ -378,6 +379,28 @@ class TestReceiveRequest:
         assert result.data == b""
         assert result.rejection_reason == "body_incomplete"
         assert sock.timeouts[-1] is None
+
+    def test_total_timeout_retry_does_not_fall_back_to_idle_timeout(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        sock = ScriptedSocket([b"POST / HTTP/1.1\r\nContent-Length: 10\r\n\r\nx", TimeoutError()])
+        reasons: list[str] = []
+        timeline = iter([0.0, 0.0, 0.0, 0.049, 0.049, 0.051])
+
+        monkeypatch.setattr(http_io.time, "monotonic", lambda: next(timeline))
+
+        result = receive_request_result(
+            sock,
+            max_upload_size=1024,
+            body_idle_timeout=None,
+            body_timeout=0.05,
+            on_reject=reasons.append,
+        )
+
+        assert result.data == b""
+        assert result.rejection_reason == "body_timeout"
+        assert reasons == ["body_timeout"]
 
     def test_slow_but_valid_body_can_be_allowed_by_config(
         self,
