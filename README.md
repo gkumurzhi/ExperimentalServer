@@ -849,8 +849,12 @@ plugin = PluginSpec(
 ```
 
 Методы плагинов не могут перезаписывать core HTTP methods без явного
-`plugins_override_core`. `PING` возвращает `plugin_methods` отдельно от core
-`capabilities`; browser mutation guard использует флаг `mutating`.
+`plugins_override_core`. Capability gating профиля определяет, какие встроенные
+методы активны прямо сейчас, но не освобождает их имена для плагина:
+`SMUGGLE`, `NOTE` и другие built-in names остаются зарезервированными даже в
+`workspace`/`serve`, пока оператор явно не включит override. `PING` возвращает
+`plugin_methods` отдельно от core `capabilities`; browser mutation guard
+использует флаг `mutating`.
 
 ## API примеры
 

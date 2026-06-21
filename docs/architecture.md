@@ -120,4 +120,8 @@ surface. Plugins are not auto-discovered; an operator must explicitly list
 modules in configuration or pass `PluginSpec` objects when embedding the
 server. Plugin methods are registered after core profile methods, cannot
 override core methods by default, and carry policy metadata for profile
-gating, CORS, and browser mutation checks.
+gating, CORS, and browser mutation checks. Profile gating only decides whether
+the built-in method is active for the current server profile; it does not free
+that method name for plugins. A `workspace` or `serve` plugin still cannot
+claim `SMUGGLE` or `NOTE` unless the operator explicitly enables
+`plugins_override_core`.

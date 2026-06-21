@@ -1,7 +1,7 @@
 # STAGE-005 - Plugin core-method reservation
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -46,9 +46,9 @@ Reserve built-in method names across profiles so plugins cannot silently claim d
 3. Add regression tests and minimal docs that describe the boundary clearly.
 
 ## Acceptance criteria
-- [ ] A plugin cannot register `SMUGGLE` in `workspace` or `serve` unless the explicit core-override path is enabled
-- [ ] Existing legitimate plugin registration paths still work
-- [ ] Docs describe the difference between capability gating and core-method override intent
+- [x] A plugin cannot register `SMUGGLE` in `workspace` or `serve` unless the explicit core-override path is enabled
+- [x] Existing legitimate plugin registration paths still work
+- [x] Docs describe the difference between capability gating and core-method override intent
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -66,4 +66,6 @@ Reserve built-in method names across profiles so plugins cannot silently claim d
 - Rollback: revert the reservation logic and keep only the safe documentation clarifications if they still reflect reality
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 18:26:43 +0300`; report: `stage-reports/STAGE-005-20260621-182643.md`.
+- Verified that `ExperimentalHTTPServer._register_plugins()` already reserves the union of built-in registry methods across all profiles, so disabled core names remain blocked unless `plugins_override_core` is enabled.
+- Kept runtime code unchanged and tightened README/architecture wording so profile capability gating is clearly distinct from explicit core-method override intent.
