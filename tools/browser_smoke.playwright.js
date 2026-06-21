@@ -2152,6 +2152,19 @@ async (page) => {
     const actionButton = getServerFileAction(name, "smuggle");
     await actionButton.waitFor({ state: "visible", timeout: 10000 });
     await actionButton.focus();
+    await waitForPageCondition(
+      `smuggle action focused (${name})`,
+      ([targetPath]) => {
+        const active = document.activeElement;
+        return Boolean(
+          active &&
+          active.getAttribute("data-file-action") === "smuggle" &&
+          active.getAttribute("data-path") === targetPath
+        );
+      },
+      [encodedPath],
+      10000
+    );
 
     await page.keyboard.press("Enter");
     const modal = page.locator("#smuggleModal");
@@ -2248,6 +2261,20 @@ async (page) => {
     const actionButton = getServerFileAction(name, "delete");
     await actionButton.waitFor({ state: "visible", timeout: 10000 });
     await actionButton.focus();
+    const encodedPath = encodeURIComponent(`/uploads/${name}`);
+    await waitForPageCondition(
+      `delete action focused (${name})`,
+      ([targetPath]) => {
+        const active = document.activeElement;
+        return Boolean(
+          active &&
+          active.getAttribute("data-file-action") === "delete" &&
+          active.getAttribute("data-path") === targetPath
+        );
+      },
+      [encodedPath],
+      10000
+    );
 
     await page.keyboard.press("Enter");
     const dialog = page.locator('#appDialog [role="alertdialog"]');
@@ -2279,7 +2306,6 @@ async (page) => {
     await page.keyboard.press("Escape");
     await page.locator("#appDialog").waitFor({ state: "detached", timeout: 10000 });
 
-    const encodedPath = encodeURIComponent(`/uploads/${name}`);
     await waitForPageCondition(
       `delete dialog focus restored (${name})`,
       ([targetPath]) => {
