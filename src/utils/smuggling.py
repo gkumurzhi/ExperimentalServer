@@ -5,6 +5,26 @@ HTML Smuggling — generate HTML pages for file download delivery.
 import base64
 import hashlib
 import json
+from dataclasses import dataclass, field
+from html import escape
+
+
+@dataclass(frozen=True)
+class SmugglingRenderOptions:
+    """Closed renderer options for generated SMUGGLE artifacts."""
+
+    crypto_js_src: str = "/static/crypto-js.min.js"
+
+
+@dataclass(frozen=True)
+class SmugglingRenderContext:
+    """Internal renderer context after payload preparation."""
+
+    filename: str
+    base64_data: str
+    encrypted: bool
+    password_captcha: str | None = None
+    options: SmugglingRenderOptions = field(default_factory=SmugglingRenderOptions)
 
 
 def xor_encrypt(data: bytes, password: str) -> bytes:
@@ -52,14 +72,34 @@ def generate_smuggling_html(
     if password:
         # Encrypt and encode to base64
         encrypted = xor_encrypt(file_data, password)
-        data_b64 = base64.b64encode(encrypted).decode("utf-8")
-        return _create_html_with_password(
-            data_b64, filename, crypto_js_src, password_captcha, password
+        context = SmugglingRenderContext(
+            filename=filename,
+            base64_data=base64.b64encode(encrypted).decode("utf-8"),
+            encrypted=True,
+            password_captcha=password_captcha,
+            options=SmugglingRenderOptions(crypto_js_src=crypto_js_src),
         )
     else:
         # Plain base64
-        data_b64 = base64.b64encode(file_data).decode("utf-8")
-        return _create_html_no_password(data_b64, filename)
+        context = SmugglingRenderContext(
+            filename=filename,
+            base64_data=base64.b64encode(file_data).decode("utf-8"),
+            encrypted=False,
+        )
+
+    return _render_smuggling_html(context)
+
+
+def _render_smuggling_html(context: SmugglingRenderContext) -> str:
+    """Render the prepared SMUGGLE artifact HTML."""
+    if context.encrypted:
+        return _create_html_with_password(
+            context.base64_data,
+            context.filename,
+            context.options.crypto_js_src,
+            context.password_captcha,
+        )
+    return _create_html_no_password(context.base64_data, context.filename)
 
 
 def _create_html_no_password(base64_data: str, filename: str) -> str:
@@ -111,10 +151,10 @@ def _create_html_with_password(
     filename: str,
     crypto_js_src: str,
     captcha_img: str | None = None,
-    password: str | None = None,
 ) -> str:
     """HTML with password — password input form."""
     safe_fn = json.dumps(filename)[1:-1]
+    safe_crypto_js_src = escape(crypto_js_src, quote=True)
     # CAPTCHA block (if provided)
     captcha_block = ""
     if captcha_img:
@@ -152,7 +192,7 @@ button:hover{{background:#00b8e6}}
 <input type="password" id="p" placeholder="Password" autofocus>
 <button onclick="d()">Download</button>
 <div class="msg" id="m"></div>
-<script src="/static/crypto-js.min.js"></script>
+<script src="{safe_crypto_js_src}"></script>
 <script>
 var fn="{safe_fn}";
 var encData="{encrypted_data}";
