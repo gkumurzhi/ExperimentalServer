@@ -72,6 +72,34 @@ def test_ini_file_env_and_cli_precedence(tmp_path: Path) -> None:
     assert settings.auth_file == "/etc/exphttp/auth"
 
 
+def test_smuggle_temp_limits_follow_file_env_and_cli_precedence(tmp_path: Path) -> None:
+    config_file = tmp_path / "exphttp.ini"
+    config_file.write_text(
+        """
+        [limits]
+        smuggle_temp_age = 900
+        smuggle_temp_file_limit = 12
+        smuggle_temp_storage_limit_mb = 64
+        """,
+        encoding="utf-8",
+    )
+
+    settings = resolve_settings(
+        file_settings=load_settings_file(config_file),
+        env={"EXPHTTP_SMUGGLE_TEMP_FILE_LIMIT": "24"},
+        cli_values={"smuggle_temp_age": 30},
+    )
+
+    assert settings.smuggle_temp_age == 30
+    assert settings.smuggle_temp_file_limit == 24
+    assert settings.smuggle_temp_storage_limit_mb == 64
+
+    kwargs = settings.to_server_kwargs()
+    assert kwargs["smuggle_temp_max_age"] == 30
+    assert kwargs["smuggle_temp_file_limit"] == 24
+    assert kwargs["smuggle_temp_storage_limit"] == 64 * 1024 * 1024
+
+
 def test_public_direct_requires_real_tls_auth_file_and_memory_budget() -> None:
     settings = ServerSettings(
         host="0.0.0.0",
@@ -148,6 +176,15 @@ def test_redacted_json_does_not_expose_inline_auth_secret() -> None:
     assert "secret" not in rendered
     assert '"auth": "***"' in rendered
     assert "/etc/exphttp/auth" in rendered
+
+
+def test_redacted_json_reports_effective_tls_when_enabled_via_sslip() -> None:
+    settings = ServerSettings(sslip=True)
+
+    rendered = settings.to_redacted_dict()
+
+    assert rendered["tls"] is False
+    assert rendered["effective_tls"] is True
 
 
 def test_sample_config_is_parseable() -> None:

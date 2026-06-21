@@ -5,6 +5,7 @@
 host = 0.0.0.0
 port = 443
 dir = /var/lib/exphttp
+# Keep public_direct on workspace/serve; lab is intentionally excluded.
 profile = workspace
 public_direct = true
 json_log = true
@@ -14,6 +15,8 @@ workers = 10
 auth_file = /etc/exphttp/auth
 
 [tls]
+# Runtime TLS becomes active through sslip/letsencrypt/cert+key even if
+# the explicit self-signed `tls` flag remains false in normalized output.
 # First-run public IPv4 option. For a real domain, replace sslip with:
 # letsencrypt = true
 # domain = files.example.com

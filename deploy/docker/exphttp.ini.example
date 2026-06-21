@@ -5,6 +5,7 @@
 host = 0.0.0.0
 port = 8443
 dir = /data
+# Keep public_direct on workspace/serve; lab is intentionally excluded.
 profile = workspace
 public_direct = true
 json_log = true
@@ -14,6 +15,8 @@ workers = 10
 auth_file = /run/secrets/exphttp_auth
 
 [tls]
+# Runtime TLS becomes active through sslip/letsencrypt/cert+key even if
+# the explicit self-signed `tls` flag remains false in normalized output.
 sslip = true
 # public_ip = 203.0.113.10
 # acme_staging = true

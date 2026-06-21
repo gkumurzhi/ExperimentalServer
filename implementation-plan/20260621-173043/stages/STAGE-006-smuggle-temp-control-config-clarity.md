@@ -1,7 +1,7 @@
 # STAGE-006 - SMUGGLE temp-control config clarity
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -47,9 +47,9 @@ Make the operator-facing temp-artifact configuration path easier to trust by cov
 3. Update the minimum code, tests, and sample comments needed so operators can understand the validated public-direct/TLS path without widening behavior.
 
 ## Acceptance criteria
-- [ ] Settings precedence tests cover the `smuggle_temp_*` knobs through INI, environment, and CLI resolution
-- [ ] Operators have a clear explanation for why validated `sslip` or ACME configs may still show `"tls": false` in normalized output, or an additive output field makes the runtime TLS state explicit
-- [ ] Deployment samples continue to validate and keep `lab` out of the public-direct path
+- [x] Settings precedence tests cover the `smuggle_temp_*` knobs through INI, environment, and CLI resolution
+- [x] Operators have a clear explanation for why validated `sslip` or ACME configs may still show `"tls": false` in normalized output, or an additive output field makes the runtime TLS state explicit
+- [x] Deployment samples continue to validate and keep `lab` out of the public-direct path
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,6 @@ Make the operator-facing temp-artifact configuration path easier to trust by cov
 - Rollback: revert the output change and keep the safe precedence tests plus sample-comment clarifications
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 18:34:00 +0300`; report: `stage-reports/STAGE-006-20260621-183400.md`.
+- Added settings/CLI regression coverage for `smuggle_temp_*` precedence and for `effective_tls` in `--print-config`.
+- `ServerSettings.to_redacted_dict()` now reports `effective_tls`, while sample/deploy configs explain that public-direct stays on `workspace`/`serve` and TLS can become active through `sslip`/ACME without the raw `tls` flag.

@@ -230,7 +230,7 @@ class ServerSettings:
             "max_workers": self.workers,
             "quiet": self.quiet,
             "debug": self.debug,
-            "tls": self.tls or bool(self.cert_file) or self.letsencrypt or self.sslip,
+            "tls": self.effective_tls_enabled(),
             "cert_file": self.cert_file,
             "key_file": self.key_file,
             "letsencrypt": self.letsencrypt,
@@ -259,11 +259,16 @@ class ServerSettings:
             kwargs["public_direct"] = True
         return kwargs
 
+    def effective_tls_enabled(self) -> bool:
+        """Return whether runtime HTTPS will be enabled after normalization."""
+        return self.tls or bool(self.cert_file) or self.letsencrypt or self.sslip
+
     def to_redacted_dict(self) -> dict[str, object]:
         """Return settings as JSON-safe data without inline secrets."""
         data = asdict(self)
         if data.get("auth"):
             data["auth"] = "***"
+        data["effective_tls"] = self.effective_tls_enabled()
         return data
 
 
@@ -414,6 +419,7 @@ def sample_config_text() -> str:
 host = 0.0.0.0
 port = 8443
 dir = /var/lib/exphttp
+# Keep public_direct on workspace/serve; lab is intentionally excluded.
 profile = workspace
 public_direct = true
 json_log = true
@@ -423,6 +429,8 @@ workers = 10
 auth_file = /etc/exphttp/auth
 
 [tls]
+# Runtime TLS becomes active through sslip/letsencrypt/cert+key even if
+# the explicit self-signed `tls` flag remains false in normalized output.
 # Use sslip for first-run public IPv4 deployments, or replace with:
 # letsencrypt = true
 # domain = files.example.com

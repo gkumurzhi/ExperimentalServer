@@ -11,3 +11,9 @@
 - Files changed: `README.md`, `docs/architecture.md`, `implementation-plan/20260621-173043/stage-reports/STAGE-005-20260621-182643.md`, `implementation-plan/20260621-173043/stage-status.md`, `implementation-plan/20260621-173043/stages/STAGE-005-plugin-core-method-reservation.md`
 - Verification: `./.venv/bin/pytest -q tests/test_extensions.py tests/test_server_methods.py`, `./.venv/bin/pytest -q tests/test_handler_registry.py`, and `git diff --check -- ...` passed.
 - Report: `stage-reports/STAGE-005-20260621-182643.md`
+
+## 2026-06-21 18:34:00 +0300 — STAGE-006
+- Status: CLOSED
+- Files changed: `src/settings.py`, `tests/test_settings.py`, `tests/test_cli.py`, `deploy/docker/exphttp.ini.example`, `deploy/systemd/exphttp.ini.example`, `implementation-plan/20260621-173043/stage-reports/STAGE-006-20260621-183400.md`, `implementation-plan/20260621-173043/stage-status.md`, `implementation-plan/20260621-173043/stages/STAGE-006-smuggle-temp-control-config-clarity.md`
+- Verification: `./.venv/bin/pytest -q tests/test_settings.py tests/test_cli.py tests/test_deployment_artifacts.py`, `python -m exphttp --check-config`, `python -m exphttp --config deploy/docker/exphttp.ini.example --check-config`, `python -m exphttp --config deploy/systemd/exphttp.ini.example --check-config`, and `git diff --check -- ...` passed.
+- Report: `stage-reports/STAGE-006-20260621-183400.md`

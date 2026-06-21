@@ -361,6 +361,21 @@ class TestCLIMain:
         assert '"auth": "***"' in rendered
         assert "supersecret" not in rendered
 
+    def test_main_print_config_reports_effective_tls_for_sslip(
+        self,
+        monkeypatch,
+        capsys,
+    ):
+        def fail_if_called(**_kwargs):
+            raise AssertionError("server should not start for --print-config")
+
+        monkeypatch.setattr(cli, "ExperimentalHTTPServer", fail_if_called)
+
+        assert cli.main(["--sslip", "--print-config"]) == 0
+        rendered = capsys.readouterr().out
+        assert '"tls": false' in rendered
+        assert '"effective_tls": true' in rendered
+
     def test_main_write_sample_config(self, monkeypatch, temp_dir: Path):
         output = temp_dir / "sample.ini"
 
