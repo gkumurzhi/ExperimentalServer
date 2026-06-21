@@ -57,6 +57,7 @@ nav:
       - ADR-003 · Runtime crypto and ACME: ADR/ADR-003-cryptography-optional.md
       - ADR-004 · Uploads via relative_to: ADR/ADR-004-uploads-relative-to.md
       - ADR-005 · Concurrency model: ADR/ADR-005-threadpool-over-asyncio.md
+      - ADR-006 · Profile default and exposure policy: ADR/ADR-006-profile-default-and-exposure.md
   - Security:
       - Threat model: threat-model.md
       - Disclosure policy: security.md
