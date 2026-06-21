@@ -1010,6 +1010,42 @@ input[type="radio"] {
     line-height: 1.45;
 }
 
+.smuggle-result__body {
+    gap: var(--space-3);
+}
+
+.smuggle-result__row {
+    display: grid;
+    gap: 6px;
+}
+
+.smuggle-result__label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.smuggle-result__value {
+    color: var(--text-emphasis);
+    font-family: var(--font-mono);
+    overflow-wrap: anywhere;
+    user-select: all;
+}
+
+.smuggle-result__status--ok {
+    color: var(--accent-secondary);
+}
+
+.smuggle-result__status--error {
+    color: var(--danger);
+}
+
+.smuggle-result__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 @media (max-width: 640px) {
     .input-group {
         flex-direction: column;
@@ -1029,5 +1065,9 @@ input[type="radio"] {
         right: max(var(--space-3), env(safe-area-inset-right));
         bottom: max(var(--space-3), env(safe-area-inset-bottom));
         width: calc(100vw - var(--space-4));
+    }
+
+    .smuggle-result__actions {
+        grid-template-columns: minmax(0, 1fr);
     }
 }

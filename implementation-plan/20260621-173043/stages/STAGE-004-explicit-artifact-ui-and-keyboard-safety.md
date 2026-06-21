@@ -1,7 +1,7 @@
 # STAGE-004 - Explicit artifact UI and keyboard safety
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 HIGH
@@ -47,9 +47,9 @@ Replace the current auto-open artifact flow with an explicit, keyboard-safe gene
 3. Update focus behavior and smoke coverage so keyboard users land on a safe first control, can tab through the result state, and still get correct focus restoration and disabled-profile behavior.
 
 ## Acceptance criteria
-- [ ] The artifact flow no longer auto-opens on success
-- [ ] Initial dialog focus no longer lands on the side-effect action
-- [ ] Browser smoke proves the generated-result state and keyboard path in `lab`, while `workspace` and `serve` stay unavailable
+- [x] The artifact flow no longer auto-opens on success
+- [x] Initial dialog focus no longer lands on the side-effect action
+- [x] Browser smoke proves the generated-result state and keyboard path in `lab`, while `workspace` and `serve` stay unavailable
 
 ## Verification plan
 | Check | Command or method | Expected result |
@@ -67,4 +67,7 @@ Replace the current auto-open artifact flow with an explicit, keyboard-safe gene
 - Rollback: revert the UI flow change and keep only any safe label/status improvements that do not alter interaction order
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Closed on `2026-06-21 18:23:44 +0300`; report: `stage-reports/STAGE-004-20260621-180914.md`.
+- The file-row action and modal now frame `SMUGGLE` as artifact generation, not implicit opening.
+- Successful generation opens an explicit result dialog with URL, encryption state, optional password, and separate `Copy URL`, `Open`, `Save`, and `Close` actions.
+- Browser smoke now enforces the safer keyboard path in `lab` and confirms `workspace`/`serve` still expose no artifact capability.

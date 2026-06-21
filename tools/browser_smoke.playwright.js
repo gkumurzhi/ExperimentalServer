@@ -2104,7 +2104,7 @@ async (page) => {
     const actions = [
       { action: "download", prefix: /Download files|Скачивание файлов/i },
       { action: "info", prefix: /File metadata|Метаданные файла/i },
-      { action: "smuggle", prefix: /SMUGGLE|HTML Smuggling/i },
+      { action: "smuggle", prefix: /HTML artifact|HTML-артефакт/i },
       { action: "delete", prefix: /Delete|Удалить/i },
     ];
 
@@ -2130,17 +2130,87 @@ async (page) => {
     await page.locator("#smuggleCancelBtn").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#smuggleEncrypt").waitFor({ state: "attached", timeout: 10000 });
 
-    const popupPromise = page.waitForEvent("popup", { timeout: 5000 }).catch(() => null);
     await page.locator("#smuggleSubmitBtn").click();
     await modal.waitFor({ state: "detached", timeout: 10000 });
+
+    const unexpectedPopup = await page.waitForEvent("popup", { timeout: 1000 }).catch(() => null);
+    if (unexpectedPopup) {
+      await unexpectedPopup.close().catch(() => {});
+      throw new Error("SMUGGLE artifact opened before explicit result action");
+    }
+
+    const resultModal = page.locator("#smuggleResultModal");
+    await resultModal.waitFor({ state: "attached", timeout: 10000 });
+    await page.locator('#smuggleResultModal [role="dialog"]').waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleCopyUrlBtn").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleOpenBtn").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleSaveBtn").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleCloseBtn").waitFor({ state: "visible", timeout: 10000 });
 
     await waitForText(page.locator("#filesResponseArea"), `SMUGGLE /uploads/${name}`, 10000);
     await waitForText(page.locator("#filesResponseArea"), /HTML сгенерирован|HTML generated/, 10000);
     await waitForText(page.locator("#filesResponseArea"), "URL:", 10000);
+    await waitForText(page.locator("#smuggleResultValue"), /\/uploads\/smuggle_[^/\s]+\.html/, 10000);
 
+    await waitForPageCondition(
+      `smuggle result dialog initial focus (${name})`,
+      () => document.activeElement?.id === "smuggleCopyUrlBtn",
+      null,
+      10000
+    );
+    await page.keyboard.press("Tab");
+    await waitForPageCondition(
+      `smuggle result dialog tab to open (${name})`,
+      () => document.activeElement?.id === "smuggleOpenBtn",
+      null,
+      10000
+    );
+    await page.keyboard.press("Tab");
+    await waitForPageCondition(
+      `smuggle result dialog tab to save (${name})`,
+      () => document.activeElement?.id === "smuggleSaveBtn",
+      null,
+      10000
+    );
+    await page.keyboard.press("Tab");
+    await waitForPageCondition(
+      `smuggle result dialog tab to close (${name})`,
+      () => document.activeElement?.id === "smuggleCloseBtn",
+      null,
+      10000
+    );
+    await page.keyboard.press("Tab");
+    await waitForPageCondition(
+      `smuggle result dialog wrap to copy (${name})`,
+      () => document.activeElement?.id === "smuggleCopyUrlBtn",
+      null,
+      10000
+    );
+
+    await page.locator("#smuggleCopyUrlBtn").click();
+    const normalizedBaseUrl = String(baseUrl || "").replace(/\/$/, "");
+    await assertClipboardSnapshot("smuggle-url", [`${normalizedBaseUrl}/uploads/smuggle_`], 10000);
+
+    const popupPromise = page.waitForEvent("popup", { timeout: 5000 });
+    await page.locator("#smuggleOpenBtn").click();
+    await resultModal.waitFor({ state: "detached", timeout: 10000 });
     const popup = await popupPromise;
     const popupUrl = popup ? popup.url() : "";
     await assertSmuggleArtifactPopupCompletes(popup, name);
+
+    await waitForPageCondition(
+      `smuggle result dialog focus restored (${name})`,
+      ([targetPath]) => {
+        const active = document.activeElement;
+        return Boolean(
+          active &&
+          active.getAttribute("data-file-action") === "smuggle" &&
+          active.getAttribute("data-path") === targetPath
+        );
+      },
+      [encodeURIComponent(`/uploads/${name}`)],
+      10000
+    );
     return popupUrl;
   }
 
@@ -2238,6 +2308,14 @@ async (page) => {
 
     await waitForPageCondition(
       `smuggle dialog initial focus (${name})`,
+      () => document.activeElement?.id === "smuggleEncrypt",
+      null,
+      10000
+    );
+
+    await page.keyboard.press("Tab");
+    await waitForPageCondition(
+      `smuggle dialog tab to submit (${name})`,
       () => document.activeElement?.id === "smuggleSubmitBtn",
       null,
       10000
@@ -2251,18 +2329,10 @@ async (page) => {
       10000
     );
 
-    await page.keyboard.press("Tab");
-    await waitForPageCondition(
-      `smuggle dialog wrap to checkbox (${name})`,
-      () => document.activeElement?.id === "smuggleEncrypt",
-      null,
-      10000
-    );
-
     await page.keyboard.press("Shift+Tab");
     await waitForPageCondition(
-      `smuggle dialog reverse wrap to cancel (${name})`,
-      () => document.activeElement?.id === "smuggleCancelBtn",
+      `smuggle dialog reverse wrap to submit (${name})`,
+      () => document.activeElement?.id === "smuggleSubmitBtn",
       null,
       10000
     );

@@ -193,7 +193,7 @@ async function browseDirectory() {
                                 data-path="${encodedItemPath}"
                                 title="${smuggleLabel}"
                                 aria-label="${smuggleLabel}"
-                            >HTML</button>
+                            >${esc(t('smuggleButtonLabel'))}</button>
                 ` : '';
                 const deleteButton = isFileDeleteEnabled() ? `
                             <button
@@ -567,8 +567,8 @@ function showSmuggleDialog(filePath, triggerEl = null) {
     openManagedDialog({
         dialogId: 'smuggleModal',
         triggerEl,
-        initialFocusSelector: '#smuggleSubmitBtn',
-        restoreFocusOnConfirm: true,
+        initialFocusSelector: '#smuggleEncrypt',
+        restoreFocusOnConfirm: false,
         markup: `
         <div class="modal-overlay">
             <div class="modal-content smuggle-dialog" role="dialog" aria-modal="true" aria-labelledby="smuggleDialogTitle" aria-describedby="smuggleDialogHint">
@@ -585,7 +585,7 @@ function showSmuggleDialog(filePath, triggerEl = null) {
                     <p class="smuggle-dialog__hint" id="smuggleDialogHint">${t('smuggleProtectHint')}</p>
                 </div>
                 <div class="modal-actions">
-                    <button type="button" class="btn-opsec" id="smuggleSubmitBtn" data-dialog-action="confirm">${t('smuggleOpen')}</button>
+                    <button type="button" class="btn-opsec" id="smuggleSubmitBtn" data-dialog-action="confirm">${t('smuggleGenerate')}</button>
                     <button type="button" class="btn-ghost" id="smuggleCancelBtn" data-dialog-action="cancel">${t('smuggleCancel')}</button>
                 </div>
             </div>
@@ -597,7 +597,7 @@ function showSmuggleDialog(filePath, triggerEl = null) {
             }
             if (action === 'confirm') {
                 const usePassword = Boolean(modal.querySelector('#smuggleEncrypt')?.checked);
-                executeSmuggle(filePath, usePassword);
+                executeSmuggle(filePath, usePassword, triggerEl);
                 return true;
             }
             return undefined;
@@ -605,7 +605,121 @@ function showSmuggleDialog(filePath, triggerEl = null) {
     });
 }
 
-async function executeSmuggle(filePath, usePassword = false) {
+function buildSmuggleResponseSummary(result) {
+    const lines = [
+        result.file,
+        `${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}`,
+        `URL: ${result.url}`,
+    ];
+    if (result.password) {
+        lines.push(`${t('smugglePassword')}: ${result.password}`);
+    }
+    lines.push('', t('smuggleReady'));
+    return lines.join('\n');
+}
+
+function setSmuggleResultStatus(modal, message, tone = '') {
+    const statusEl = modal.querySelector('#smuggleResultStatus');
+    if (!statusEl) {
+        return;
+    }
+    statusEl.textContent = message;
+    statusEl.className = `smuggle-dialog__hint smuggle-result__status${tone ? ` smuggle-result__status--${tone}` : ''}`;
+}
+
+function triggerSmuggleArtifactDownload(artifactUrl, artifactName) {
+    const link = document.createElement('a');
+    link.href = artifactUrl;
+    link.download = artifactName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+}
+
+function showSmuggleResultDialog(filePath, result, triggerEl = null) {
+    const artifactUrl = new URL(result.url, window.location.href).toString();
+    const artifactName = String(result.url || '').split('/').pop() || 'smuggle-artifact.html';
+    const passwordRow = result.password ? `
+                <div class="smuggle-result__row">
+                    <span class="smuggle-result__label">${esc(t('smugglePassword'))}</span>
+                    <code class="smuggle-result__value">${esc(result.password)}</code>
+                </div>
+    ` : '';
+
+    openManagedDialog({
+        dialogId: 'smuggleResultModal',
+        triggerEl,
+        initialFocusSelector: '#smuggleCopyUrlBtn',
+        restoreFocusOnConfirm: true,
+        markup: `
+        <div class="modal-overlay">
+            <div class="modal-content smuggle-dialog" role="dialog" aria-modal="true" aria-labelledby="smuggleResultTitle" aria-describedby="smuggleResultHint smuggleResultStatus">
+                <div class="smuggle-dialog__header">
+                    <h3 id="smuggleResultTitle">${t('smuggleTitle')}</h3>
+                    <p class="smuggle-dialog__file">
+                        <span class="smuggle-dialog__path">${esc(filePath)}</span>
+                    </p>
+                </div>
+                <div class="smuggle-dialog__settings smuggle-result__body">
+                    <div class="smuggle-result__row">
+                        <span class="smuggle-result__label">${esc(t('smuggleEncrypted'))}</span>
+                        <span class="smuggle-result__value">${esc(result.encrypted ? t('smuggleYes') : t('smuggleNo'))}</span>
+                    </div>
+                    ${passwordRow}
+                    <div class="smuggle-result__row">
+                        <span class="smuggle-result__label">URL</span>
+                        <div class="smuggle-result__value" id="smuggleResultValue">${esc(artifactUrl)}</div>
+                    </div>
+                    <p class="smuggle-dialog__hint" id="smuggleResultHint">${t('smuggleResultHint')}</p>
+                    <p class="smuggle-dialog__hint smuggle-result__status" id="smuggleResultStatus" role="status" aria-live="polite" aria-atomic="true">${t('smuggleReady')}</p>
+                </div>
+                <div class="modal-actions smuggle-result__actions">
+                    <button type="button" class="btn-info" id="smuggleCopyUrlBtn" data-dialog-action="copy-url">${t('smuggleCopyUrl')}</button>
+                    <button type="button" class="btn-opsec" id="smuggleOpenBtn" data-dialog-action="open">${t('smuggleOpen')}</button>
+                    <button type="button" class="btn-ghost" id="smuggleSaveBtn" data-dialog-action="save">${t('smuggleSave')}</button>
+                    <button type="button" class="btn-ghost" id="smuggleCloseBtn" data-dialog-action="close">${t('smuggleClose')}</button>
+                </div>
+            </div>
+        </div>
+    `,
+        onAction: async (action, modal) => {
+            if (action === 'close') {
+                return false;
+            }
+            if (action === 'copy-url') {
+                try {
+                    await writeTextToClipboard(artifactUrl, 'smuggle-url');
+                    setSmuggleResultStatus(modal, t('smuggleCopied'), 'ok');
+                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleCopied')}`);
+                } catch (error) {
+                    const message = formatActionErrorMessage(t('clipboardCopyFailed'), error);
+                    setSmuggleResultStatus(modal, message, 'error');
+                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${message}`);
+                }
+                return undefined;
+            }
+            if (action === 'open') {
+                const popup = window.open(artifactUrl, '_blank');
+                if (!popup) {
+                    const message = formatActionErrorMessage(t('smuggleOpen'), new Error(t('error')));
+                    setSmuggleResultStatus(modal, message, 'error');
+                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${message}`);
+                    return undefined;
+                }
+                announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleOpened')}`);
+                return true;
+            }
+            if (action === 'save') {
+                triggerSmuggleArtifactDownload(artifactUrl, artifactName);
+                announceLiveRegion('filesResponseAreaLive', `${t('downloadStarted')}: ${artifactName}`);
+                return true;
+            }
+            return undefined;
+        },
+    });
+}
+
+async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
     // Формируем URL
     let url = SERVER_URL + filePath;
     let requestPath = filePath;
@@ -637,15 +751,7 @@ async function executeSmuggle(filePath, usePassword = false) {
         if (response.status === 200) {
             const result = JSON.parse(text);
 
-            // Открываем страницу напрямую с сервера
-            window.open(SERVER_URL + result.url, '_blank');
-
-            // Показываем результат
-            const responseSummary = `${result.file}
-${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}
-URL: ${result.url}
-
-${t('smuggleOpened')}`;
+            const responseSummary = buildSmuggleResponseSummary(result);
             setExchangeInspector('files', {
                 phase: 'complete',
                 request: {
@@ -668,6 +774,7 @@ ${t('smuggleOpened')}`;
                 },
             });
             announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleGenerated')}`);
+            showSmuggleResultDialog(filePath, result, triggerEl);
         } else {
             announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}`);
             setExchangeInspector('files', {
@@ -691,6 +798,9 @@ ${t('smuggleOpened')}`;
                     body: createExchangeTextBody(text),
                 },
             });
+            if (triggerEl) {
+                focusElementWithoutScroll(triggerEl);
+            }
         }
     } catch (error) {
         announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}: ${error.message}`);
@@ -712,5 +822,8 @@ ${t('smuggleOpened')}`;
                 body: createExchangeTextBody(error.message),
             },
         });
+        if (triggerEl) {
+            focusElementWithoutScroll(triggerEl);
+        }
     }
 }
