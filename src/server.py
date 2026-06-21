@@ -289,6 +289,8 @@ class ExperimentalHTTPServer(HandlerMixin):
         # Logging setup
         self._setup_logging(quiet)
 
+        self.root_dir.mkdir(parents=True, exist_ok=True)
+
         # Directory for uploaded files
         self.upload_dir = self.root_dir / "uploads"
         self.upload_dir.mkdir(exist_ok=True)

@@ -735,7 +735,10 @@ class TestCLIMain:
         assert result == 1
         assert "Error: boom" in captured.err
 
-    @pytest.mark.skipif(not hasattr(signal, "SIGTERM"), reason="SIGTERM not available")
+    @pytest.mark.skipif(
+        not hasattr(signal, "SIGTERM") or sys.platform == "win32",
+        reason="subprocess SIGTERM graceful shutdown is not portable to Windows",
+    )
     def test_cli_process_handles_sigterm_gracefully(self, temp_dir: Path):
         port = _find_free_port()
         (temp_dir / "index.html").write_text("<html>ok</html>", encoding="utf-8")
@@ -778,6 +781,20 @@ class TestCLIMain:
 
 
 class TestServerConstructorValidation:
+    def test_constructor_creates_missing_root_tree(self, temp_dir: Path):
+        root_dir = temp_dir / "missing" / "root"
+
+        server = ExperimentalHTTPServer(
+            root_dir=str(root_dir),
+            quiet=True,
+        )
+
+        assert server.root_dir == root_dir.resolve()
+        assert server.upload_dir == root_dir.resolve() / "uploads"
+        assert server.notes_dir == root_dir.resolve() / "notes"
+        assert server.upload_dir.is_dir()
+        assert server.notes_dir.is_dir()
+
     def test_zero_upload_storage_limits_disable_policy(self, temp_dir: Path):
         server = ExperimentalHTTPServer(
             root_dir=str(temp_dir),

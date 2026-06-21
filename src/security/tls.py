@@ -498,8 +498,7 @@ def obtain_letsencrypt_cert(
     except OSError as err:
         bind_host = http_address or _WILDCARD_BIND_HOST
         raise RuntimeError(
-            f"could not bind ACME HTTP-01 challenge server on {bind_host}:"
-            f"{http_port}: {err}"
+            f"could not bind ACME HTTP-01 challenge server on {bind_host}:{http_port}: {err}"
         ) from err
 
     fullchain_pem = finalized_order.fullchain_pem
