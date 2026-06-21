@@ -396,5 +396,9 @@ class TestPublicIpHelpers:
         with pytest.raises(ValueError, match="not globally routable"):
             validate_public_ipv4("192.168.0.1")
 
+    def test_resolve_public_ipv4_rejects_non_https_url(self):
+        with pytest.raises(ValueError, match="must be https"):
+            resolve_public_ipv4(url="http://example.com/ip")
+
     def test_sslip_domain_for_ip(self):
         assert sslip_domain_for_ip("8.8.4.4") == "8-8-4-4.sslip.io"

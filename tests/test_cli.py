@@ -310,6 +310,11 @@ class TestCLIParser:
         assert "--write-sample-config" in help_text
         assert "--config ./exphttp.ini --check-config" in help_text
 
+    def test_help_text_is_cp1252_encodable(self):
+        help_text = self.parser.format_help()
+
+        help_text.encode("cp1252", errors="strict")
+
 
 class TestCLIMain:
     def test_main_check_config_validates_without_starting_server(

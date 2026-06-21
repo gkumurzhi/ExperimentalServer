@@ -2881,7 +2881,7 @@ async (page) => {
 
   async function loadNoteByKeyboard(title) {
     await page.locator("#notepadRefreshBtn").focus();
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 12; i++) {
       await page.keyboard.press("Tab");
       const focused = await page.evaluate(([targetTitle]) => {
         const active = document.activeElement;

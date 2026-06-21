@@ -16,6 +16,7 @@ import re
 import subprocess
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -41,6 +42,7 @@ DEFAULT_RENEWAL_DAYS = 30
 DEFAULT_PUBLIC_IP_URL = "https://api.ipify.org"
 
 _DOMAIN_RE = re.compile(r"^[a-z0-9.-]+$")
+_WILDCARD_BIND_HOST = "0.0.0.0"  # nosec B104
 
 
 @dataclass(frozen=True)
@@ -314,9 +316,21 @@ def check_cert_needs_renewal(cert_path: str | Path, days: int = DEFAULT_RENEWAL_
     except (OSError, ValueError):
         return True
 
-    expires_at = cert.not_valid_after_utc
+    expires_at = _certificate_datetime_utc(cert, "not_valid_after")
     renewal_cutoff = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=days)
     return expires_at <= renewal_cutoff
+
+
+def _certificate_datetime_utc(certificate: x509.Certificate, field_name: str) -> dt.datetime:
+    """Return certificate validity datetimes as timezone-aware UTC."""
+    preferred_name = f"{field_name}_utc"
+    if hasattr(certificate, preferred_name):
+        value = cast(dt.datetime, getattr(certificate, preferred_name))
+    else:
+        value = cast(dt.datetime, getattr(certificate, field_name))
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=dt.timezone.utc)
+    return value.astimezone(dt.timezone.utc)
 
 
 def _public_key_der(public_key: Any) -> bytes:
@@ -482,8 +496,9 @@ def obtain_letsencrypt_cert(
                 acme_client.answer_challenge(challenge_body, response)
             finalized_order = acme_client.poll_and_finalize(order, deadline=deadline)
     except OSError as err:
+        bind_host = http_address or _WILDCARD_BIND_HOST
         raise RuntimeError(
-            f"could not bind ACME HTTP-01 challenge server on {http_address or '0.0.0.0'}:"
+            f"could not bind ACME HTTP-01 challenge server on {bind_host}:"
             f"{http_port}: {err}"
         ) from err
 
@@ -508,8 +523,8 @@ def get_cert_info(cert_path: str | Path) -> dict[str, str]:
     return {
         "subject": cert.subject.rfc4514_string(),
         "issuer": cert.issuer.rfc4514_string(),
-        "notBefore": cert.not_valid_before_utc.isoformat(),
-        "notAfter": cert.not_valid_after_utc.isoformat(),
+        "notBefore": _certificate_datetime_utc(cert, "not_valid_before").isoformat(),
+        "notAfter": _certificate_datetime_utc(cert, "not_valid_after").isoformat(),
         "serialNumber": str(cert.serial_number),
     }
 
@@ -520,9 +535,12 @@ def resolve_public_ipv4(
     timeout: float = 3.0,
 ) -> str:
     """Resolve the caller's public IPv4 address through a small HTTPS lookup."""
+    parsed_url = urllib.parse.urlsplit(url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        raise ValueError(f"public IPv4 lookup URL must be https: {url!r}")
     request = urllib.request.Request(url, headers={"User-Agent": "exphttp/public-ip"})
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec B310
             body = response.read(128).decode("ascii").strip()
     except (OSError, urllib.error.URLError) as err:
         raise RuntimeError(f"could not resolve public IPv4 address via {url}: {err}") from err

@@ -130,9 +130,9 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Quick start:
-    exphttp                    → http://127.0.0.1:8080
-    exphttp --open             → start + open browser
-    exphttp --tls --auth random → HTTPS + random password
+    exphttp                    -> http://127.0.0.1:8080
+    exphttp --open             -> start + open browser
+    exphttp --tls --auth random -> HTTPS + random password
 
 Examples:
     exphttp -H 0.0.0.0 -p 8443 --tls --auth-file ./auth.txt  Trusted lab HTTPS

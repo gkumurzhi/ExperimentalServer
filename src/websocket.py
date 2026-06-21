@@ -82,7 +82,7 @@ def check_websocket_upgrade(request: HTTPRequest) -> bool:
 def build_ws_accept_key(ws_key: str) -> str:
     """Compute ``Sec-WebSocket-Accept`` per RFC 6455 Section 4.2.2."""
     combined = ws_key.strip() + _WS_GUID
-    sha1 = hashlib.sha1(combined.encode("ascii")).digest()
+    sha1 = hashlib.sha1(combined.encode("ascii"), usedforsecurity=False).digest()
     return base64.b64encode(sha1).decode("ascii")
 
 

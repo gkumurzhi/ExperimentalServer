@@ -27,6 +27,7 @@ from .tls import (
 )
 
 logger = logging.getLogger("httpserver")
+_WILDCARD_BIND_HOST = "0.0.0.0"  # nosec B104
 
 
 class TLSManager:
@@ -184,7 +185,7 @@ class TLSManager:
 
     def _generate_self_signed(self) -> None:
         print("[TLS] Generating self-signed certificate...")
-        common_name = self.host if self.host != "0.0.0.0" else "localhost"
+        common_name = self.host if self.host != _WILDCARD_BIND_HOST else "localhost"
         cert_path, key_path = generate_self_signed_cert(common_name=common_name)
         self.cert_file = str(cert_path)
         self.key_file = str(key_path)
