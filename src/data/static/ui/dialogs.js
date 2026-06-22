@@ -131,6 +131,7 @@ function showAppDialog({
     title,
     message,
     details = '',
+    role = 'alertdialog',
     confirmLabel,
     cancelLabel = t('smuggleCancel'),
     confirmClassName = 'btn-info',
@@ -148,7 +149,7 @@ function showAppDialog({
         restoreFocusOnConfirm,
         markup: `
         <div class="modal-overlay">
-            <div class="modal-content app-dialog" role="alertdialog" aria-modal="true" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage${details ? ' appDialogDetails' : ''}">
+            <div class="modal-content app-dialog" role="${esc(role)}" aria-modal="true" aria-labelledby="appDialogTitle" aria-describedby="appDialogMessage${details ? ' appDialogDetails' : ''}">
                 <div class="app-dialog__header">
                     <h3 class="app-dialog__title" id="appDialogTitle">${esc(title)}</h3>
                 </div>
@@ -175,6 +176,7 @@ function showConfirmDialog(options) {
         title: options.title,
         message: options.message,
         details: options.details,
+        role: 'alertdialog',
         confirmLabel: options.confirmLabel,
         cancelLabel: options.cancelLabel || t('smuggleCancel'),
         confirmClassName: options.confirmClassName || 'btn-danger',
@@ -190,6 +192,7 @@ function showNoticeDialog(options) {
         title: options.title,
         message: options.message,
         details: options.details,
+        role: 'dialog',
         confirmLabel: options.confirmLabel || t('okBtn'),
         confirmClassName: options.confirmClassName || 'btn-info',
         triggerEl: options.triggerEl,

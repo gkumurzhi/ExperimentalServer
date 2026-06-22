@@ -203,6 +203,81 @@ async (page) => {
     await page.locator("#appDialog").waitFor({ state: "detached", timeout });
   }
 
+  async function assertSharedDialogRoleContract(timeout = 10000) {
+    await page.locator("#themeBtn").focus();
+
+    await page.evaluate(() => {
+      void showNoticeDialog({
+        title: "Browser Smoke Notice",
+        message: "Notice dialog role contract",
+        confirmLabel: "Acknowledge",
+        triggerEl: document.getElementById("themeBtn"),
+      });
+    });
+
+    await waitForPageCondition(
+      "notice dialog role contract",
+      () => {
+        const dialog = document.querySelector('#appDialog [role="dialog"]');
+        const alertDialog = document.querySelector('#appDialog [role="alertdialog"]');
+        const confirm = document.querySelector('#appDialog [data-dialog-action="confirm"]');
+        return Boolean(
+          dialog &&
+          !alertDialog &&
+          dialog.getAttribute("aria-modal") === "true" &&
+          document.activeElement === confirm
+        );
+      },
+      null,
+      timeout
+    );
+
+    await page.keyboard.press("Escape");
+    await page.locator("#appDialog").waitFor({ state: "detached", timeout });
+    await waitForPageCondition(
+      "notice dialog focus restored",
+      () => document.activeElement?.id === "themeBtn",
+      null,
+      timeout
+    );
+
+    await page.evaluate(() => {
+      void showConfirmDialog({
+        title: "Browser Smoke Confirm",
+        message: "Confirm dialog role contract",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+        triggerEl: document.getElementById("themeBtn"),
+      });
+    });
+
+    await waitForPageCondition(
+      "confirm dialog role contract",
+      () => {
+        const dialog = document.querySelector('#appDialog [role="alertdialog"]');
+        const plainDialog = document.querySelector('#appDialog [role="dialog"]');
+        const cancel = document.querySelector('#appDialog [data-dialog-action="cancel"]');
+        return Boolean(
+          dialog &&
+          !plainDialog &&
+          dialog.getAttribute("aria-modal") === "true" &&
+          document.activeElement === cancel
+        );
+      },
+      null,
+      timeout
+    );
+
+    await page.keyboard.press("Escape");
+    await page.locator("#appDialog").waitFor({ state: "detached", timeout });
+    await waitForPageCondition(
+      "confirm dialog focus restored",
+      () => document.activeElement?.id === "themeBtn",
+      null,
+      timeout
+    );
+  }
+
   async function waitForConnectionStatus(expectedState, expectedTransport, timeout = 10000) {
     await waitForPageCondition(
       `waitForConnectionStatus(${expectedState},${expectedTransport})`,
@@ -3360,6 +3435,7 @@ async (page) => {
       notepadEphemeralWarningText: "Сессии не сохраняются при перезагрузке сервера",
       notepadTextareaLabelText: "Текст заметки",
     });
+    await assertSharedDialogRoleContract();
 
     const noteTitle = "Browser Smoke Note";
     const noteText = "browser smoke note body";
