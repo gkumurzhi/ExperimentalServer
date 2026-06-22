@@ -28,6 +28,16 @@ def test_resolve_safe_smuggle_download_filename_falls_back_to_safe_extension() -
     assert filename == "Quarterly-Report.bin"
 
 
+def test_resolve_safe_smuggle_download_filename_normalizes_unsafe_stem() -> None:
+    filename = smuggling.resolve_safe_smuggle_download_filename(
+        source_filename="report.bin",
+        download_name="../Quarterly\nReport ",
+        download_ext="pdf",
+    )
+
+    assert filename == "Quarterly-Report.pdf"
+
+
 def test_generate_smuggling_html_card_auto_includes_notice_and_countdown() -> None:
     html = smuggling.generate_smuggling_html(
         b"payload",
@@ -106,3 +116,34 @@ def test_generate_smuggling_html_encrypted_builder_uses_resolved_filename() -> N
     assert 'var fn="Quarterly-Report.pdf";' in html
     assert "CryptoJS.SHA256" in html
     assert '<script src="/static/crypto-js.min.js"></script>' in html
+
+
+def test_generate_smuggling_html_builder_download_name_is_script_safe() -> None:
+    html = smuggling.generate_smuggling_html(
+        file_data=b"payload",
+        filename="report.bin",
+        builder=smuggling.SafeSmuggleBuilderConfig(
+            download_name='</script><script>alert(1)</script>',
+            download_ext="pdf",
+            preset="direct",
+        ),
+    )
+
+    assert "var fn=" in html
+    assert 'var fn="</script>' not in html
+
+
+def test_generate_smuggling_html_encrypted_builder_download_name_is_script_safe() -> None:
+    html = smuggling.generate_smuggling_html(
+        file_data=b"payload",
+        filename="report.bin",
+        password="hunter2",
+        builder=smuggling.SafeSmuggleBuilderConfig(
+            download_name='</script><script>alert(1)</script>',
+            download_ext="pdf",
+            preset="direct",
+        ),
+    )
+
+    assert "var fn=" in html
+    assert 'var fn="</script>' not in html

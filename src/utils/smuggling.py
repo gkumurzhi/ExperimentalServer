@@ -130,7 +130,7 @@ def resolve_safe_smuggle_download_filename(
     source_stem = name_parts[0] if len(name_parts) == 2 and name_parts[0] else source_filename
     source_ext = name_parts[1] if len(name_parts) == 2 else ""
 
-    stem = (download_name or source_stem).strip() or "download"
+    stem = _normalize_safe_smuggle_stem((download_name or source_stem).strip())
     requested_ext = (download_ext or "").strip().lstrip(".").lower()
     normalized_source_ext = source_ext.strip().lstrip(".").lower()
     if requested_ext in SAFE_SMUGGLE_EXTENSIONS:
@@ -140,6 +140,31 @@ def resolve_safe_smuggle_download_filename(
     else:
         ext = "bin"
     return f"{stem}.{ext}" if ext else stem
+
+
+def _normalize_safe_smuggle_stem(stem: str) -> str:
+    """Collapse a download stem into a local filename token."""
+    normalized_chars: list[str] = []
+    for char in stem:
+        if char.isalnum() or char in {"-", "_", " "}:
+            normalized_chars.append(char)
+            continue
+        if char in {".", "/", "\\", "\r", "\n", "\t"} or ord(char) < 32 or ord(char) == 127:
+            normalized_chars.append("-")
+            continue
+        normalized_chars.append("-")
+
+    normalized = "".join(normalized_chars)
+    normalized = " ".join(normalized.split()).replace(" ", "-")
+    while "--" in normalized:
+        normalized = normalized.replace("--", "-")
+    normalized = normalized.strip("._- ")
+    return normalized or "download"
+
+
+def _safe_script_json(value: str) -> str:
+    """Serialize a string for safe use inside an inline <script> block."""
+    return json.dumps(value).replace("</", "<\\/")
 
 
 def _render_smuggling_html(context: SmugglingRenderContext) -> str:
@@ -278,8 +303,8 @@ h2{{margin:0 0 8px;color:#f8fafc}}
   </div>
 </div>
 <script>
-var fn={json.dumps(filename)};
-var data={json.dumps(base64_data)};
+var fn={_safe_script_json(filename)};
+var data={_safe_script_json(base64_data)};
 function startDownload(){{
 try{{
 var status=document.getElementById("smuggleStatus");
@@ -366,8 +391,8 @@ button{{width:100%;padding:12px;background:#38bdf8;color:#082f49;border:none;bor
 </div>
 <script src="{safe_crypto_js_src}"></script>
 <script>
-var fn={json.dumps(filename)};
-var encData={json.dumps(encrypted_data)};
+var fn={_safe_script_json(filename)};
+var encData={_safe_script_json(encrypted_data)};
 function d(){{
 var pw=document.getElementById("p").value;
 if(!pw){{msg("Enter password","err");return}}
