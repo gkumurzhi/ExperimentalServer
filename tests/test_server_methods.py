@@ -1743,6 +1743,117 @@ class TestServerHelpers:
         assert str(temp_path) in server._temp_smuggle_files
         assert "small.txt" in temp_path.read_text(encoding="utf-8")
 
+    def test_smuggle_builder_rejects_non_allowlisted_extension(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=exe&preset=card_manual",
+            )
+        )
+
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["status"] == 400
+        assert body["error"] == "Invalid SMUGGLE builder extension"
+
+    def test_smuggle_builder_rejects_invalid_preset(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=pdf&preset=viewer",
+            )
+        )
+
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["status"] == 400
+        assert body["error"] == "Invalid SMUGGLE builder preset"
+
+    def test_smuggle_builder_rejects_invalid_delay(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=pdf"
+                "&preset=card_auto&delay_ms=12001",
+            )
+        )
+
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["status"] == 400
+        assert body["error"] == "Invalid SMUGGLE builder delay"
+
+    def test_smuggle_builder_rejects_oversized_title(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+        oversized_title = "A" * 121
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=pdf"
+                f"&preset=card_manual&title={oversized_title}",
+            )
+        )
+
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["status"] == 400
+        assert body["error"] == "SMUGGLE builder title is too long"
+
+    def test_smuggle_builder_card_auto_renders_selected_download_name(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=pdf"
+                "&preset=card_auto&title=Quarterly%20Report"
+                "&message=Internal%20lab%20test%20artifact"
+                "&cta_label=Download%20test%20artifact&delay_ms=1200&show_notice=1",
+            )
+        )
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        temp_path = upload_dir / body["url"].removeprefix("/uploads/")
+        html = temp_path.read_text(encoding="utf-8")
+        assert "Quarterly-Report.pdf" in html
+        assert "Internal lab test artifact" in html
+        assert "Test artifact notice: internal lab-only page." in html
+        assert 'id="smuggleCountdown"' in html
+
+    def test_smuggle_builder_encrypted_response_uses_resolved_filename(
+        self,
+        server,
+        upload_dir,
+        monkeypatch,
+    ):
+        monkeypatch.setattr("src.handlers.smuggle.secrets.choice", lambda _alphabet: "A")
+        (upload_dir / "secret.txt").write_bytes(b"secret payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/secret.txt?encrypt=1&download_name=Quarterly-Report"
+                "&download_ext=pdf&preset=direct",
+            )
+        )
+
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["encrypted"] is True
+        assert body["password"] == "AAAAAAA"
+        temp_path = upload_dir / body["url"].removeprefix("/uploads/")
+        html = temp_path.read_text(encoding="utf-8")
+        assert "Quarterly-Report.pdf" in html
+        assert "CryptoJS.SHA256" in html
+
     def test_smuggle_temp_cleanup_removes_artifacts_over_max_age(
         self,
         temp_dir,

@@ -11,7 +11,12 @@ from pathlib import Path
 
 from ..http import HTTPRequest, HTTPResponse
 from ..utils.captcha import generate_password_captcha
-from ..utils.smuggling import generate_smuggling_html
+from ..utils.smuggling import (
+    SAFE_SMUGGLE_EXTENSIONS,
+    SAFE_SMUGGLE_PRESETS,
+    SafeSmuggleBuilderConfig,
+    generate_smuggling_html,
+)
 from .base import BaseHandler
 
 logger = logging.getLogger("httpserver")
@@ -20,6 +25,11 @@ SMUGGLE_SOURCE_SIZE_LIMIT = 10 * 1024 * 1024
 DEFAULT_SMUGGLE_TEMP_MAX_AGE_SECONDS = 3600
 DEFAULT_SMUGGLE_TEMP_MAX_FILES = 32
 DEFAULT_SMUGGLE_TEMP_MAX_BYTES = 128 * 1024 * 1024
+SMUGGLE_BUILDER_MAX_DOWNLOAD_NAME = 120
+SMUGGLE_BUILDER_MAX_TITLE = 120
+SMUGGLE_BUILDER_MAX_MESSAGE = 280
+SMUGGLE_BUILDER_MAX_CTA_LABEL = 80
+SMUGGLE_BUILDER_MAX_DELAY_MS = 10_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +111,11 @@ class SmuggleHandlersMixin(BaseHandler):
         if source_size > source_size_limit:
             return self._smuggle_too_large_response(source_size, source_size_limit)
 
+        try:
+            builder = self._parse_safe_smuggle_builder(request)
+        except ValueError as exc:
+            return self._bad_request(str(exc))
+
         # Generate random password server-side if encryption requested
         password = None
         password_captcha = None
@@ -125,6 +140,7 @@ class SmuggleHandlersMixin(BaseHandler):
             filename=file_path.name,
             password=password,
             password_captcha=password_captcha,
+            builder=builder,
         )
 
         try:
@@ -151,6 +167,84 @@ class SmuggleHandlersMixin(BaseHandler):
         response.set_header("X-Smuggle-URL", f"/uploads/{temp_name}")
 
         return response
+
+    def _parse_safe_smuggle_builder(
+        self,
+        request: HTTPRequest,
+    ) -> SafeSmuggleBuilderConfig | None:
+        """Parse and validate safe builder query params for SMUGGLE."""
+        query = request.query_params
+        builder_keys = (
+            "download_name",
+            "download_ext",
+            "preset",
+            "title",
+            "message",
+            "cta_label",
+            "delay_ms",
+            "show_notice",
+        )
+        if not any(key in query for key in builder_keys):
+            return None
+
+        download_ext = (query.get("download_ext") or "").strip().lstrip(".").lower()
+        if download_ext and download_ext not in SAFE_SMUGGLE_EXTENSIONS:
+            raise ValueError("Invalid SMUGGLE builder extension")
+
+        preset = (query.get("preset") or "direct").strip().lower()
+        if preset not in SAFE_SMUGGLE_PRESETS:
+            raise ValueError("Invalid SMUGGLE builder preset")
+
+        raw_delay = (query.get("delay_ms") or "0").strip()
+        try:
+            delay_ms = int(raw_delay)
+        except ValueError as exc:
+            raise ValueError("Invalid SMUGGLE builder delay") from exc
+        if delay_ms < 0 or delay_ms > SMUGGLE_BUILDER_MAX_DELAY_MS:
+            raise ValueError("Invalid SMUGGLE builder delay")
+
+        return SafeSmuggleBuilderConfig(
+            download_name=self._validate_smuggle_builder_text(
+                query.get("download_name"),
+                field_name="download name",
+                max_length=SMUGGLE_BUILDER_MAX_DOWNLOAD_NAME,
+            ),
+            download_ext=download_ext or None,
+            preset=preset,
+            title=self._validate_smuggle_builder_text(
+                query.get("title"),
+                field_name="title",
+                max_length=SMUGGLE_BUILDER_MAX_TITLE,
+            ),
+            message=self._validate_smuggle_builder_text(
+                query.get("message"),
+                field_name="message",
+                max_length=SMUGGLE_BUILDER_MAX_MESSAGE,
+            ),
+            cta_label=self._validate_smuggle_builder_text(
+                query.get("cta_label"),
+                field_name="CTA label",
+                max_length=SMUGGLE_BUILDER_MAX_CTA_LABEL,
+            ),
+            delay_ms=delay_ms,
+            show_notice=(query.get("show_notice") or "1").strip().lower()
+            not in {"0", "false", "no"},
+        )
+
+    def _validate_smuggle_builder_text(
+        self,
+        raw_value: str | None,
+        *,
+        field_name: str,
+        max_length: int,
+    ) -> str | None:
+        """Return stripped builder text or raise on over-length values."""
+        value = (raw_value or "").strip()
+        if not value:
+            return None
+        if len(value) > max_length:
+            raise ValueError(f"SMUGGLE builder {field_name} is too long")
+        return value
 
     def _smuggle_source_size_limit(self) -> int:
         """Return the effective SMUGGLE source cap in bytes."""
