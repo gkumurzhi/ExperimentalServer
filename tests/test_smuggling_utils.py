@@ -18,6 +18,16 @@ def test_resolve_safe_smuggle_download_filename_uses_allowlisted_extension() -> 
     assert filename == "Quarterly-Report.pdf"
 
 
+def test_resolve_safe_smuggle_download_filename_falls_back_to_safe_extension() -> None:
+    filename = smuggling.resolve_safe_smuggle_download_filename(
+        source_filename="report.exe",
+        download_name="Quarterly-Report",
+        download_ext="exe",
+    )
+
+    assert filename == "Quarterly-Report.bin"
+
+
 def test_generate_smuggling_html_card_auto_includes_notice_and_countdown() -> None:
     html = smuggling.generate_smuggling_html(
         b"payload",
@@ -36,7 +46,8 @@ def test_generate_smuggling_html_card_auto_includes_notice_and_countdown() -> No
 
     assert "Quarterly-Report.pdf" in html
     assert "Internal lab test artifact" in html
-    assert "Test artifact" in html
+    assert "Test artifact notice: internal lab-only page." in html
+    assert 'id="smuggleCountdown"' in html
     assert "setTimeout(startDownload, 1200)" in html
 
 
@@ -69,6 +80,15 @@ def test_generate_smuggling_html_without_builder_keeps_legacy_plain_renderer() -
     assert 'var fn="report \\"quoted\\".txt";' in html
     assert "setTimeout(d,500);" in html
     assert "Test artifact" not in html
+
+
+def test_generate_smuggling_html_without_builder_preserves_original_filename() -> None:
+    html = smuggling.generate_smuggling_html(
+        file_data=b"hello world",
+        filename="Report.EXE",
+    )
+
+    assert 'var fn="Report.EXE";' in html
 
 
 def test_generate_smuggling_html_encrypted_builder_uses_resolved_filename() -> None:

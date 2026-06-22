@@ -87,10 +87,14 @@ def generate_smuggling_html(
     Returns:
         HTML page string.
     """
-    resolved_filename = resolve_safe_smuggle_download_filename(
-        source_filename=filename,
-        download_name=builder.download_name if builder else None,
-        download_ext=builder.download_ext if builder else None,
+    resolved_filename = (
+        resolve_safe_smuggle_download_filename(
+            source_filename=filename,
+            download_name=builder.download_name,
+            download_ext=builder.download_ext,
+        )
+        if builder is not None
+        else filename
     )
 
     if password:
@@ -127,7 +131,14 @@ def resolve_safe_smuggle_download_filename(
     source_ext = name_parts[1] if len(name_parts) == 2 else ""
 
     stem = (download_name or source_stem).strip() or "download"
-    ext = (download_ext or source_ext).strip().lstrip(".").lower()
+    requested_ext = (download_ext or "").strip().lstrip(".").lower()
+    normalized_source_ext = source_ext.strip().lstrip(".").lower()
+    if requested_ext in SAFE_SMUGGLE_EXTENSIONS:
+        ext = requested_ext
+    elif normalized_source_ext in SAFE_SMUGGLE_EXTENSIONS:
+        ext = normalized_source_ext
+    else:
+        ext = "bin"
     return f"{stem}.{ext}" if ext else stem
 
 
