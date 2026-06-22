@@ -1789,6 +1789,22 @@ class TestServerHelpers:
         assert body["status"] == 400
         assert body["error"] == "Invalid SMUGGLE builder delay"
 
+    def test_smuggle_builder_rejects_invalid_show_notice(self, server, upload_dir):
+        (upload_dir / "small.txt").write_bytes(b"small payload")
+
+        response = server.handle_smuggle(
+            make_request(
+                "SMUGGLE",
+                "/uploads/small.txt?download_name=Quarterly-Report&download_ext=pdf"
+                "&preset=card_manual&show_notice=banana",
+            )
+        )
+
+        assert response.status_code == 400
+        body = json.loads(response.body)
+        assert body["status"] == 400
+        assert body["error"] == "Invalid SMUGGLE builder show_notice"
+
     def test_smuggle_builder_rejects_oversized_title(self, server, upload_dir):
         (upload_dir / "small.txt").write_bytes(b"small payload")
         oversized_title = "A" * 121

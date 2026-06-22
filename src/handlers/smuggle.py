@@ -203,6 +203,10 @@ class SmuggleHandlersMixin(BaseHandler):
         if delay_ms < 0 or delay_ms > SMUGGLE_BUILDER_MAX_DELAY_MS:
             raise ValueError("Invalid SMUGGLE builder delay")
 
+        raw_show_notice = (query.get("show_notice") or "1").strip().lower()
+        if raw_show_notice not in {"1", "0", "true", "false", "yes", "no"}:
+            raise ValueError("Invalid SMUGGLE builder show_notice")
+
         return SafeSmuggleBuilderConfig(
             download_name=self._validate_smuggle_builder_text(
                 query.get("download_name"),
@@ -227,8 +231,7 @@ class SmuggleHandlersMixin(BaseHandler):
                 max_length=SMUGGLE_BUILDER_MAX_CTA_LABEL,
             ),
             delay_ms=delay_ms,
-            show_notice=(query.get("show_notice") or "1").strip().lower()
-            not in {"0", "false", "no"},
+            show_notice=raw_show_notice in {"1", "true", "yes"},
         )
 
     def _validate_smuggle_builder_text(
