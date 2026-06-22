@@ -1143,6 +1143,35 @@ async (page) => {
     );
   }
 
+  async function assertNotepadSelectedDeleteButtonState({
+    disabled,
+    count,
+    labelPrefix,
+    timeout = 10000,
+  }) {
+    await waitForPageCondition(
+      `assertNotepadSelectedDeleteButtonState(${disabled},${count})`,
+      ([targetDisabled, targetCount, expectedPrefix]) => {
+        const button = document.getElementById("notepadDeleteSelectedBtn");
+        const label = button?.getAttribute("aria-label") || "";
+        const title = button?.getAttribute("title") || "";
+        return Boolean(
+          button &&
+          button.disabled === targetDisabled &&
+          button.dataset.count === String(targetCount) &&
+          title === label &&
+          (
+            targetCount > 0
+              ? label.startsWith(expectedPrefix) && label.includes(String(targetCount))
+              : label === expectedPrefix
+          )
+        );
+      },
+      [disabled, count, labelPrefix],
+      timeout
+    );
+  }
+
   async function assertRequestPreviewSummary(method, path, expectedText = [], timeout = 10000) {
     await waitForPageCondition(
       `assertRequestPreviewSummary(${method},${path})`,
@@ -3032,6 +3061,11 @@ async (page) => {
 
   async function deleteSelectedNoteViaUiAndAssert(deleteTitle, keepTitle) {
     await page.locator(".note-row", { hasText: deleteTitle }).locator("[data-note-select]").check();
+    await assertNotepadSelectedDeleteButtonState({
+      disabled: false,
+      count: 1,
+      labelPrefix: "Удалить выбранные заметки",
+    });
     await page.locator("#notepadDeleteSelectedBtn").click();
     await confirmAppDialog(deleteTitle, 10000);
     await waitForPageCondition(

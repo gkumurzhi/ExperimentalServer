@@ -81,6 +81,14 @@ function notepadCanClear() {
     return notepadAvailable && isNotepadClearEnabled();
 }
 
+function notepadGetDeleteSelectedButtonLabel() {
+    const baseLabel = t('notepadDeleteSelectedBtn');
+    if (notepadSelectedIds.size <= 0) {
+        return baseLabel;
+    }
+    return `${baseLabel}: ${notepadSelectedIds.size}`;
+}
+
 function notepadSyncDestructiveControls() {
     const deleteEnabled = isNotepadDeleteEnabled();
     const clearEnabled = isNotepadClearEnabled();
@@ -90,9 +98,12 @@ function notepadSyncDestructiveControls() {
         notepadDeleteBtnEl.dataset.capabilityAvailable = deleteEnabled ? 'true' : 'false';
     }
     if (notepadDeleteSelectedBtnEl) {
+        const deleteSelectedLabel = notepadGetDeleteSelectedButtonLabel();
         notepadDeleteSelectedBtnEl.disabled = !notepadCanDeleteSelected();
         notepadDeleteSelectedBtnEl.dataset.capabilityAvailable = deleteEnabled ? 'true' : 'false';
         notepadDeleteSelectedBtnEl.dataset.count = String(notepadSelectedIds.size);
+        notepadDeleteSelectedBtnEl.title = deleteSelectedLabel;
+        notepadDeleteSelectedBtnEl.setAttribute('aria-label', deleteSelectedLabel);
     }
     if (notepadClearBtnEl) {
         notepadClearBtnEl.disabled = !notepadCanClear();
