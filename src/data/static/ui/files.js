@@ -559,15 +559,188 @@ async function deleteFile(path, triggerEl = null) {
     }
 }
 // ===== HTML Smuggling =====
+const SAFE_SMUGGLE_EXTENSIONS = ['txt', 'bin', 'dat', 'zip', 'pdf'];
+const SAFE_SMUGGLE_PRESET_CONFIG = {
+    direct: { supportsCta: false, supportsDelay: false },
+    card_manual: { supportsCta: true, supportsDelay: false },
+    card_auto: { supportsCta: true, supportsDelay: true },
+};
+
+function getSmuggleSourceName(filePath) {
+    const parts = String(filePath || '').split('/');
+    return parts[parts.length - 1] || 'artifact.bin';
+}
+
+function getSmuggleDefaultExtension(sourceName) {
+    const dotIndex = sourceName.lastIndexOf('.');
+    const inferredExt = dotIndex > 0 ? sourceName.slice(dotIndex + 1).toLowerCase() : '';
+    return SAFE_SMUGGLE_EXTENSIONS.includes(inferredExt) ? inferredExt : 'bin';
+}
+
+function getDefaultSmuggleBuilderState(filePath) {
+    const sourceName = getSmuggleSourceName(filePath);
+    const dotIndex = sourceName.lastIndexOf('.');
+    return {
+        sourceName,
+        downloadName: dotIndex > 0 ? sourceName.slice(0, dotIndex) : sourceName.replace(/\.[^.]*$/, ''),
+        downloadExt: getSmuggleDefaultExtension(sourceName),
+        preset: 'direct',
+        title: t('smuggleBuilderDefaultTitle'),
+        message: t('smuggleBuilderDefaultMessage'),
+        ctaLabel: t('smuggleBuilderDefaultCta'),
+        delayMs: 1200,
+        showNotice: true,
+        encrypt: false,
+    };
+}
+
+function getSmugglePresetConfig(preset) {
+    return SAFE_SMUGGLE_PRESET_CONFIG[preset] || SAFE_SMUGGLE_PRESET_CONFIG.direct;
+}
+
+function getSmugglePresetLabel(preset) {
+    if (preset === 'card_manual') {
+        return t('smuggleBuilderPresetManual');
+    }
+    if (preset === 'card_auto') {
+        return t('smuggleBuilderPresetAuto');
+    }
+    return t('smuggleBuilderPresetDirect');
+}
+
+function clampSmuggleDelay(value) {
+    const parsed = Number.parseInt(String(value || ''), 10);
+    if (!Number.isFinite(parsed)) {
+        return 1200;
+    }
+    return Math.max(0, Math.min(10000, parsed));
+}
+
+function resolveSmuggleDownloadName(state) {
+    const name = String(state.downloadName || '').trim() || 'download';
+    const ext = SAFE_SMUGGLE_EXTENSIONS.includes(state.downloadExt) ? state.downloadExt : 'bin';
+    return `${name}.${ext}`;
+}
+
+function readSmuggleBuilderState(modal, filePath) {
+    const defaults = getDefaultSmuggleBuilderState(filePath);
+    const downloadExt = String(modal.querySelector('#smuggleDownloadExt')?.value || defaults.downloadExt).toLowerCase();
+    const preset = String(modal.querySelector('#smugglePreset')?.value || defaults.preset);
+    const supports = getSmugglePresetConfig(preset);
+    return {
+        sourceName: defaults.sourceName,
+        downloadName: String(modal.querySelector('#smuggleDownloadName')?.value || '').trim() || defaults.downloadName,
+        downloadExt: SAFE_SMUGGLE_EXTENSIONS.includes(downloadExt) ? downloadExt : defaults.downloadExt,
+        preset,
+        title: String(modal.querySelector('#smuggleTitleInput')?.value || '').trim(),
+        message: String(modal.querySelector('#smuggleMessageInput')?.value || '').trim(),
+        ctaLabel: supports.supportsCta
+            ? String(modal.querySelector('#smuggleCtaLabelInput')?.value || '').trim()
+            : '',
+        delayMs: supports.supportsDelay ? clampSmuggleDelay(modal.querySelector('#smuggleDelayMs')?.value) : 0,
+        showNotice: Boolean(modal.querySelector('#smuggleShowNotice')?.checked),
+        encrypt: Boolean(modal.querySelector('#smuggleEncrypt')?.checked),
+    };
+}
+
+function setSmuggleFieldState(modal, rowSelector, inputSelector, enabled) {
+    const row = modal.querySelector(rowSelector);
+    const input = modal.querySelector(inputSelector);
+    if (row) {
+        row.hidden = !enabled;
+    }
+    if (input) {
+        input.disabled = !enabled;
+    }
+}
+
+function buildSmugglePreviewMarkup(state) {
+    const supports = getSmugglePresetConfig(state.preset);
+    const title = state.title || t('smuggleBuilderDefaultTitle');
+    const message = state.message || t('smuggleBuilderDefaultMessage');
+    const ctaLabel = state.ctaLabel || t('smuggleBuilderDefaultCta');
+    const delay = clampSmuggleDelay(state.delayMs);
+    const downloadName = resolveSmuggleDownloadName(state);
+    const notice = state.showNotice
+        ? `<p class="smuggle-preview__notice">${esc(t('smuggleBuilderNoticePreview'))}</p>`
+        : '';
+    const cta = supports.supportsCta
+        ? `<div class="smuggle-preview__button">${esc(ctaLabel)}</div>`
+        : '';
+    const countdown = supports.supportsDelay
+        ? `<p class="smuggle-preview__meta">${esc(t('smuggleBuilderPreviewDelay'))}: ${delay} ms</p>`
+        : '';
+    const shield = state.encrypt ? esc(t('smuggleBuilderPreviewProtected')) : esc(t('smuggleBuilderLabBadge'));
+    return `
+        <div class="smuggle-preview__card">
+            <p class="smuggle-preview__badge">${shield}</p>
+            ${notice}
+            <h4 class="smuggle-preview__title">${esc(title)}</h4>
+            <p class="smuggle-preview__message">${esc(message)}</p>
+            <p class="smuggle-preview__meta">${esc(t('smuggleBuilderPreviewPreset'))}: ${esc(getSmugglePresetLabel(state.preset))}</p>
+            <p class="smuggle-preview__meta">${esc(t('smuggleDownloadName'))}: <strong>${esc(downloadName)}</strong></p>
+            ${countdown}
+            ${cta}
+        </div>
+    `;
+}
+
+function syncSmuggleBuilderUi(modal, filePath) {
+    const state = readSmuggleBuilderState(modal, filePath);
+    const supports = getSmugglePresetConfig(state.preset);
+    const previewName = modal.querySelector('#smuggleDownloadNamePreview');
+    if (previewName) {
+        previewName.textContent = resolveSmuggleDownloadName(state);
+    }
+    setSmuggleFieldState(modal, '#smuggleCtaRow', '#smuggleCtaLabelInput', supports.supportsCta);
+    setSmuggleFieldState(modal, '#smuggleDelayRow', '#smuggleDelayMs', supports.supportsDelay);
+    const preview = modal.querySelector('#smugglePreview');
+    if (preview) {
+        preview.innerHTML = buildSmugglePreviewMarkup(state);
+    }
+}
+
+function buildSmuggleRequestPath(filePath, state) {
+    const params = new URLSearchParams();
+    if (state.encrypt) {
+        params.set('encrypt', '1');
+    }
+    if (state.downloadName) {
+        params.set('download_name', state.downloadName);
+    }
+    params.set('download_ext', state.downloadExt);
+    params.set('preset', state.preset);
+    if (state.title) {
+        params.set('title', state.title);
+    }
+    if (state.message) {
+        params.set('message', state.message);
+    }
+    if (getSmugglePresetConfig(state.preset).supportsCta && state.ctaLabel) {
+        params.set('cta_label', state.ctaLabel);
+    }
+    if (getSmugglePresetConfig(state.preset).supportsDelay) {
+        params.set('delay_ms', String(clampSmuggleDelay(state.delayMs)));
+    }
+    params.set('show_notice', state.showNotice ? '1' : '0');
+    return `${filePath}?${params.toString()}`;
+}
+
 function showSmuggleDialog(filePath, triggerEl = null) {
     if (!isSmuggleEnabled()) {
         return;
     }
 
-    openManagedDialog({
+    const defaults = getDefaultSmuggleBuilderState(filePath);
+    const sourceName = defaults.sourceName;
+    const extensionOptions = SAFE_SMUGGLE_EXTENSIONS.map(ext => (
+        `<option value="${esc(ext)}"${ext === defaults.downloadExt ? ' selected' : ''}>.${esc(ext)}</option>`
+    )).join('');
+
+    const modal = openManagedDialog({
         dialogId: 'smuggleModal',
         triggerEl,
-        initialFocusSelector: '#smuggleEncrypt',
+        initialFocusSelector: '#smuggleDownloadName',
         restoreFocusOnConfirm: false,
         markup: `
         <div class="modal-overlay">
@@ -578,11 +751,70 @@ function showSmuggleDialog(filePath, triggerEl = null) {
                         <span class="smuggle-dialog__path">${esc(filePath)}</span>
                     </p>
                 </div>
-                <div class="smuggle-dialog__settings">
-                    <label class="checkbox-row smuggle-dialog__toggle" for="smuggleEncrypt">
-                        <input type="checkbox" id="smuggleEncrypt"> <span>${t('smuggleProtect')}</span>
+                <div class="smuggle-dialog__section">
+                    <p class="smuggle-dialog__section-title">${esc(t('smuggleBuilderSourceSection'))}</p>
+                    <div class="smuggle-dialog__meta">
+                        <p class="smuggle-dialog__badge">${esc(t('smuggleBuilderLabBadge'))}</p>
+                        <p class="smuggle-dialog__hint">${esc(t('smuggleBuilderSourceName'))}: <span class="smuggle-dialog__path">${esc(sourceName)}</span></p>
+                        <p class="smuggle-dialog__hint" id="smuggleDialogHint">${esc(t('smuggleBuilderSourcePath'))}: <span class="smuggle-dialog__path">${esc(filePath)}</span></p>
+                    </div>
+                </div>
+                <div class="smuggle-dialog__section">
+                    <p class="smuggle-dialog__section-title">${esc(t('smuggleBuilderDeliverySection'))}</p>
+                    <div class="smuggle-dialog__grid">
+                        <label class="smuggle-dialog__field" for="smuggleDownloadName">
+                            <span>${esc(t('smuggleBuilderBaseName'))}</span>
+                            <input type="text" id="smuggleDownloadName" maxlength="120" value="${esc(defaults.downloadName)}">
+                        </label>
+                        <label class="smuggle-dialog__field" for="smuggleDownloadExt">
+                            <span>${esc(t('smuggleBuilderExtension'))}</span>
+                            <select id="smuggleDownloadExt">${extensionOptions}</select>
+                        </label>
+                    </div>
+                    <p class="smuggle-dialog__hint">${esc(t('smuggleBuilderPreviewName'))}: <strong id="smuggleDownloadNamePreview">${esc(resolveSmuggleDownloadName(defaults))}</strong></p>
+                </div>
+                <div class="smuggle-dialog__section">
+                    <p class="smuggle-dialog__section-title">${esc(t('smuggleBuilderPresetSection'))}</p>
+                    <label class="smuggle-dialog__field" for="smugglePreset">
+                        <span>${esc(t('smuggleBuilderPresetLabel'))}</span>
+                        <select id="smugglePreset">
+                            <option value="direct">${esc(t('smuggleBuilderPresetDirect'))}</option>
+                            <option value="card_manual">${esc(t('smuggleBuilderPresetManual'))}</option>
+                            <option value="card_auto">${esc(t('smuggleBuilderPresetAuto'))}</option>
+                        </select>
                     </label>
-                    <p class="smuggle-dialog__hint" id="smuggleDialogHint">${t('smuggleProtectHint')}</p>
+                </div>
+                <div class="smuggle-dialog__section">
+                    <p class="smuggle-dialog__section-title">${esc(t('smuggleBuilderAdvancedSection'))}</p>
+                    <div class="smuggle-dialog__grid">
+                        <label class="smuggle-dialog__field" for="smuggleTitleInput">
+                            <span>${esc(t('smuggleBuilderTitleLabel'))}</span>
+                            <input type="text" id="smuggleTitleInput" maxlength="120" value="${esc(defaults.title)}">
+                        </label>
+                        <label class="smuggle-dialog__field" for="smuggleCtaLabelInput" id="smuggleCtaRow">
+                            <span>${esc(t('smuggleBuilderCtaLabel'))}</span>
+                            <input type="text" id="smuggleCtaLabelInput" maxlength="80" value="${esc(defaults.ctaLabel)}">
+                        </label>
+                        <label class="smuggle-dialog__field smuggle-dialog__field--wide" for="smuggleMessageInput">
+                            <span>${esc(t('smuggleBuilderMessageLabel'))}</span>
+                            <textarea id="smuggleMessageInput" maxlength="280">${esc(defaults.message)}</textarea>
+                        </label>
+                        <label class="smuggle-dialog__field" for="smuggleDelayMs" id="smuggleDelayRow" hidden>
+                            <span>${esc(t('smuggleBuilderDelayLabel'))}</span>
+                            <input type="number" id="smuggleDelayMs" min="0" max="10000" step="100" value="${esc(String(defaults.delayMs))}">
+                        </label>
+                    </div>
+                    <label class="checkbox-row smuggle-dialog__toggle" for="smuggleShowNotice">
+                        <input type="checkbox" id="smuggleShowNotice" checked> <span>${esc(t('smuggleBuilderNoticeLabel'))}</span>
+                    </label>
+                    <label class="checkbox-row smuggle-dialog__toggle" for="smuggleEncrypt">
+                        <input type="checkbox" id="smuggleEncrypt"> <span>${esc(t('smuggleProtect'))}</span>
+                    </label>
+                    <p class="smuggle-dialog__hint">${esc(t('smuggleProtectHint'))}</p>
+                </div>
+                <div class="smuggle-dialog__section">
+                    <p class="smuggle-dialog__section-title">${esc(t('smuggleBuilderPreviewSection'))}</p>
+                    <div class="smuggle-preview" id="smugglePreview"></div>
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn-opsec" id="smuggleSubmitBtn" data-dialog-action="confirm">${t('smuggleGenerate')}</button>
@@ -591,26 +823,41 @@ function showSmuggleDialog(filePath, triggerEl = null) {
             </div>
         </div>
     `,
-        onAction: (action, modal) => {
+        onAction: (action, activeModal) => {
             if (action === 'cancel') {
                 return false;
             }
             if (action === 'confirm') {
-                const usePassword = Boolean(modal.querySelector('#smuggleEncrypt')?.checked);
-                executeSmuggle(filePath, usePassword, triggerEl);
+                executeSmuggle(filePath, readSmuggleBuilderState(activeModal, filePath), triggerEl);
                 return true;
             }
             return undefined;
         },
     });
+
+    if (!modal) {
+        return;
+    }
+
+    modal.querySelectorAll('input, select, textarea').forEach(control => {
+        const eventName = control.tagName === 'SELECT' ? 'change' : 'input';
+        control.addEventListener(eventName, () => syncSmuggleBuilderUi(modal, filePath));
+        if (control.type === 'checkbox') {
+            control.addEventListener('change', () => syncSmuggleBuilderUi(modal, filePath));
+        }
+    });
+    syncSmuggleBuilderUi(modal, filePath);
 }
 
 function buildSmuggleResponseSummary(result) {
     const lines = [
         result.file,
         `${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}`,
-        `URL: ${result.url}`,
     ];
+    if (result.downloadName) {
+        lines.push(`${t('smuggleDownloadName')}: ${result.downloadName}`);
+    }
+    lines.push(`URL: ${result.url}`);
     if (result.password) {
         lines.push(`${t('smugglePassword')}: ${result.password}`);
     }
@@ -622,8 +869,11 @@ function buildSmuggleResultA11ySummary(filePath, artifactUrl, result) {
     const parts = [
         `${t('smuggleFile')}: ${filePath}`,
         `${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}`,
-        `URL: ${artifactUrl}`,
     ];
+    if (result.downloadName) {
+        parts.push(`${t('smuggleDownloadName')}: ${result.downloadName}`);
+    }
+    parts.push(`URL: ${artifactUrl}`);
     if (result.password) {
         parts.push(`${t('smugglePassword')}: ${result.password}`);
     }
@@ -658,6 +908,12 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
                     <code class="smuggle-result__value">${esc(result.password)}</code>
                 </div>
     ` : '';
+    const downloadNameRow = result.downloadName ? `
+                <div class="smuggle-result__row">
+                    <span class="smuggle-result__label">${esc(t('smuggleDownloadName'))}</span>
+                    <div class="smuggle-result__value" id="smuggleResultDownloadName">${esc(result.downloadName)}</div>
+                </div>
+    ` : '';
 
     openManagedDialog({
         dialogId: 'smuggleResultModal',
@@ -679,6 +935,7 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
                         <span class="smuggle-result__label">${esc(t('smuggleEncrypted'))}</span>
                         <span class="smuggle-result__value">${esc(result.encrypted ? t('smuggleYes') : t('smuggleNo'))}</span>
                     </div>
+                    ${downloadNameRow}
                     ${passwordRow}
                     <div class="smuggle-result__row">
                         <span class="smuggle-result__label">URL</span>
@@ -733,16 +990,9 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
     });
 }
 
-async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
-    // Формируем URL
-    let url = SERVER_URL + filePath;
-    let requestPath = filePath;
-    if (usePassword) {
-        url += '?encrypt=1';  // Сервер сгенерирует пароль
-        requestPath += '?encrypt=1';
-    }
-
-    // Запрашиваем создание HTML файла
+async function executeSmuggle(filePath, builderState, triggerEl = null) {
+    const requestPath = buildSmuggleRequestPath(filePath, builderState);
+    const url = SERVER_URL + requestPath;
     try {
         setExchangeInspector('files', {
             phase: 'sending',
@@ -755,7 +1005,7 @@ async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
             },
             response: {
                 phase: 'sending',
-                startLine: `SMUGGLE ${filePath}`,
+                startLine: `SMUGGLE ${requestPath}`,
                 body: createExchangeTextBody(t('statusPending')),
             },
         });
@@ -764,6 +1014,7 @@ async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
 
         if (response.status === 200) {
             const result = JSON.parse(text);
+            result.downloadName = resolveSmuggleDownloadName(builderState);
 
             const responseSummary = buildSmuggleResponseSummary(result);
             setExchangeInspector('files', {
@@ -780,7 +1031,7 @@ async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
                     method: 'SMUGGLE',
                     path: filePath,
                     phase: 'complete',
-                    startLine: `SMUGGLE ${filePath}\n${t('smuggleGenerated')}`,
+                    startLine: `SMUGGLE ${requestPath}\n${t('smuggleGenerated')}`,
                     status: 200,
                     statusText: 'OK',
                     headers: response.headers,
@@ -805,7 +1056,7 @@ async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
                     method: 'SMUGGLE',
                     path: filePath,
                     phase: 'error',
-                    startLine: `SMUGGLE ${filePath}\n${t('error')}`,
+                    startLine: `SMUGGLE ${requestPath}\n${t('error')}`,
                     status: response.status,
                     statusText: response.statusText || t('error'),
                     headers: response.headers,
@@ -832,7 +1083,7 @@ async function executeSmuggle(filePath, usePassword = false, triggerEl = null) {
                 method: 'SMUGGLE',
                 path: filePath,
                 phase: 'error',
-                startLine: `SMUGGLE ${filePath}\n${t('error')}`,
+                startLine: `SMUGGLE ${requestPath}\n${t('error')}`,
                 body: createExchangeTextBody(error.message),
             },
         });

@@ -2230,10 +2230,20 @@ async (page) => {
     const modal = page.locator("#smuggleModal");
     await modal.waitFor({ state: "attached", timeout: 10000 });
     await page.locator('#smuggleModal [role="dialog"]').waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleDownloadName").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleDownloadExt").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smugglePreset").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smugglePreview").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#smuggleSubmitBtn").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#smuggleCancelBtn").waitFor({ state: "visible", timeout: 10000 });
     await page.locator("#smuggleEncrypt").waitFor({ state: "attached", timeout: 10000 });
 
+    await page.locator("#smuggleDownloadName").fill("Quarterly-Report");
+    await page.locator("#smuggleDownloadExt").selectOption("pdf");
+    await page.locator("#smugglePreset").selectOption("card_auto");
+    await page.locator("#smuggleTitleInput").fill("Quarterly Report");
+    await page.locator("#smuggleMessageInput").fill("Internal lab test artifact");
+    await page.locator("#smuggleDelayMs").fill("1200");
     await page.locator("#smuggleSubmitBtn").click();
     await modal.waitFor({ state: "detached", timeout: 10000 });
 
@@ -2254,6 +2264,7 @@ async (page) => {
     await waitForText(page.locator("#filesResponseArea"), `SMUGGLE /uploads/${name}`, 10000);
     await waitForText(page.locator("#filesResponseArea"), /HTML сгенерирован|HTML generated/, 10000);
     await waitForText(page.locator("#filesResponseArea"), "URL:", 10000);
+    await waitForText(page.locator("#smuggleResultDownloadName"), "Quarterly-Report.pdf", 10000);
     await waitForText(page.locator("#smuggleResultValue"), /\/uploads\/smuggle_[^/\s]+\.html/, 10000);
     const normalizedBaseUrl = String(baseUrl || "").replace(/\/$/, "");
     await waitForPageCondition(
@@ -2318,7 +2329,7 @@ async (page) => {
     await resultModal.waitFor({ state: "detached", timeout: 10000 });
     const popup = await popupPromise;
     const popupUrl = popup ? popup.url() : "";
-    await assertSmuggleArtifactPopupCompletes(popup, name);
+    await assertSmuggleArtifactPopupCompletes(popup, "Quarterly-Report.pdf");
 
     await waitForPageCondition(
       `smuggle result dialog focus restored (${name})`,
@@ -2359,6 +2370,10 @@ async (page) => {
     } else {
       await popup.waitForFunction(
         ([targetName]) => {
+          const safeStatus = document.getElementById("smuggleStatus");
+          if (safeStatus && safeStatus.textContent === `Downloaded: ${targetName}`) {
+            return true;
+          }
           const status = document.getElementById("s");
           return Boolean(status && status.textContent === `Done! File: ${targetName}`);
         },
@@ -2430,31 +2445,31 @@ async (page) => {
 
     await waitForPageCondition(
       `smuggle dialog initial focus (${name})`,
-      () => document.activeElement?.id === "smuggleEncrypt",
+      () => document.activeElement?.id === "smuggleDownloadName",
       null,
       10000
     );
 
     await page.keyboard.press("Tab");
     await waitForPageCondition(
-      `smuggle dialog tab to submit (${name})`,
-      () => document.activeElement?.id === "smuggleSubmitBtn",
+      `smuggle dialog tab to extension (${name})`,
+      () => document.activeElement?.id === "smuggleDownloadExt",
       null,
       10000
     );
 
     await page.keyboard.press("Tab");
     await waitForPageCondition(
-      `smuggle dialog tab to cancel (${name})`,
-      () => document.activeElement?.id === "smuggleCancelBtn",
+      `smuggle dialog tab to preset (${name})`,
+      () => document.activeElement?.id === "smugglePreset",
       null,
       10000
     );
 
     await page.keyboard.press("Shift+Tab");
     await waitForPageCondition(
-      `smuggle dialog reverse wrap to submit (${name})`,
-      () => document.activeElement?.id === "smuggleSubmitBtn",
+      `smuggle dialog reverse wrap to extension (${name})`,
+      () => document.activeElement?.id === "smuggleDownloadExt",
       null,
       10000
     );
