@@ -81,7 +81,12 @@ obfuscation, not a replacement for TLS or authentication:
   `--profile workspace` for normal upload/delete workspaces.
 - `SMUGGLE` is also `lab` only. Treat it as a temporary operator-owned artifact
   generator for controlled demo/inspection flows, not as sanctioned bypass or
-  third-party delivery guidance.
+  third-party delivery guidance. The safe builder is intentionally closed: it
+  only allows the fixed extensions `txt`, `bin`, `dat`, `zip`, and `pdf`,
+  only renders the fixed presets `direct`, `card_manual`, and `card_auto`, and
+  does not permit arbitrary HTML, CSS, JavaScript, external redirects, or
+  deceptive prompts. Keep the visible lab/test-artifact marker enabled unless
+  you are validating the explicit `show_notice=0` contract in an internal test.
 - XOR + HMAC is *not* a substitute for authenticated encryption; the HMAC
   validates payload bytes only, not filename or transport metadata.
 - Unknown non-standard methods carrying `d`/`data`, `X-D`, `X-D-0`, or `?d=`

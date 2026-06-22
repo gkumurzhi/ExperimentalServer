@@ -482,6 +482,36 @@ SMUGGLE /uploads/file.txt?encrypt=1 HTTP/1.1
 `encrypt=1` stores an XOR-obfuscated payload in the generated HTML page and
 shows a server-generated password CAPTCHA on that page.
 
+In the `lab` profile, SMUGGLE also accepts a bounded safe-builder layer for
+neutral internal test artifacts. Legacy requests without these parameters stay
+backward-compatible.
+
+**Safe builder query parameters:**
+
+- `download_name`: optional download-facing basename.
+- `download_ext`: optional allowlisted extension; one of `txt`, `bin`, `dat`,
+  `zip`, or `pdf`.
+- `preset`: optional fixed shell preset; one of `direct`, `card_manual`, or
+  `card_auto`.
+- `title`: optional bounded title text rendered inside the generated page.
+- `message`: optional bounded explanatory copy rendered inside the generated
+  page.
+- `cta_label`: optional bounded button label for card presets.
+- `delay_ms`: optional auto-start delay in milliseconds for `card_auto`
+  (bounded to `0..10000`).
+- `show_notice`: `1` or `0` to keep or hide the visible lab/test-artifact
+  notice.
+
+The safe builder remains server-authoritative: it renders only fixed neutral
+test-artifact shells, keeps the normal one-shot temp-file lifecycle, and does
+not allow arbitrary HTML, CSS, JavaScript, external redirects, or custom
+assets.
+
+**With safe builder parameters:**
+```
+SMUGGLE /uploads/report.bin?download_name=Quarterly-Report&download_ext=pdf&preset=card_auto&title=Quarterly%20Report&message=Internal%20lab%20test%20artifact&cta_label=Download%20test%20artifact&delay_ms=1200&show_notice=1 HTTP/1.1
+```
+
 **Response (200):**
 ```json
 {
@@ -518,7 +548,10 @@ not publish a temporary URL.
 }
 ```
 
-**Status codes:** `200` OK, `404` File not found, `413` Source too large
+Invalid safe-builder parameters return `400` JSON errors such as
+`{"error": "Invalid SMUGGLE builder extension"}`.
+
+**Status codes:** `200` OK, `400` Invalid builder params, `404` File not found, `413` Source too large, `507` Temp storage budget exhausted
 
 ---
 
