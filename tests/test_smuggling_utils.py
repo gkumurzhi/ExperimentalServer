@@ -147,3 +147,16 @@ def test_generate_smuggling_html_encrypted_builder_download_name_is_script_safe(
 
     assert "var fn=" in html
     assert 'var fn="</script>' not in html
+
+
+def test_generate_smuggling_html_encrypted_builder_escapes_captcha_src() -> None:
+    html = smuggling.generate_smuggling_html(
+        file_data=b"payload",
+        filename="report.bin",
+        password="hunter2",
+        password_captcha='x" onerror="alert(1)',
+        builder=smuggling.SafeSmuggleBuilderConfig(preset="direct"),
+    )
+
+    assert 'src="x&quot; onerror=&quot;alert(1)"' in html
+    assert 'src="x" onerror=' not in html

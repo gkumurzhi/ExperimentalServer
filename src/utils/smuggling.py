@@ -346,10 +346,11 @@ def _create_safe_html_with_password(
     safe_filename = escape(filename, quote=True)
     captcha_block = ""
     if captcha_img:
+        safe_captcha_img = escape(captcha_img, quote=True)
         captcha_block = f"""
 <div class="captcha-box">
 <p class="captcha-label">Password:</p>
-<img src="{captcha_img}" alt="Password" class="captcha-img" draggable="false" oncontextmenu="return false;">
+<img src="{safe_captcha_img}" alt="Password" class="captcha-img" draggable="false" oncontextmenu="return false;">
 </div>"""
 
     return f"""<!DOCTYPE html>
@@ -487,10 +488,11 @@ def _create_html_with_password(
     # CAPTCHA block (if provided)
     captcha_block = ""
     if captcha_img:
+        safe_captcha_img = escape(captcha_img, quote=True)
         captcha_block = f'''
 <div class="captcha-box">
 <p class="captcha-label">Password:</p>
-<img src="{captcha_img}" alt="Password" class="captcha-img" draggable="false" oncontextmenu="return false;">
+<img src="{safe_captcha_img}" alt="Password" class="captcha-img" draggable="false" oncontextmenu="return false;">
 </div>'''
 
     # Inline SHA256 implementation (no external dependencies)
