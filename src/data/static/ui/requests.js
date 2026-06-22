@@ -89,6 +89,10 @@ requestMethodButtons.forEach(button => {
     button.addEventListener('click', async () => {
         const method = button.dataset.requestMethod;
         if (method) {
+            if (method === 'SMUGGLE' && isRequestPanelSmuggleUploadPath(normalizeRequestPath(pathInputEl ? pathInputEl.value : '', ''))) {
+                await launchRequestPanelSmuggleBuilder(button);
+                return;
+            }
             await sendRequest(method);
         }
     });
@@ -1724,6 +1728,130 @@ async function createRequestPanelDemoFile(slug, label) {
 
     const payload = parseJsonSafe(text);
     return payload?.path || response.headers['x-file-path'] || uploadPath;
+}
+
+function isRequestPanelSmuggleUploadPath(path) {
+    return Boolean(
+        path &&
+        path.startsWith('/uploads/') &&
+        path !== '/uploads/' &&
+        !path.endsWith('/')
+    );
+}
+
+async function resolveRequestPanelSmuggleSourcePath(typedPath) {
+    const normalizedPath = normalizeRequestPath(typedPath, '');
+    if (isRequestPanelSmuggleUploadPath(normalizedPath)) {
+        return normalizedPath;
+    }
+
+    return createRequestPanelDemoFile('smuggle', 'SMUGGLE');
+}
+
+async function executeRequestPanelSmuggle(filePath, builderState, triggerEl = null) {
+    const requestPath = buildSmuggleRequestPath(filePath, builderState);
+    const url = SERVER_URL + requestPath;
+    setRequestPreviewModel(createRequestPreviewModel('SMUGGLE', requestPath, { path: requestPath }));
+    setResponseAreaState('SMUGGLE', requestPath, 'sending');
+    renderRequestProgress('SMUGGLE', requestPath, 'sendingRequest');
+
+    try {
+        const startTime = performance.now();
+        const response = await sendCustomRequest('SMUGGLE', url);
+        const endTime = performance.now();
+        const duration = (endTime - startTime).toFixed(2);
+        const text = await response.text();
+
+        if (response.status === 200) {
+            const result = JSON.parse(text);
+            result.downloadName = resolveSmuggleDownloadName(builderState);
+            setRequestPreviewResult({
+                kind: 'response',
+                status: response.status,
+                statusText: response.statusText || '',
+            });
+            renderRequestSuccess('SMUGGLE', requestPath, response, duration, buildSmuggleResponseSummary(result));
+            setResponseAreaState('SMUGGLE', requestPath, 'complete', response.status);
+            announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('smuggleGenerated')}`);
+            showSmuggleResultDialog(filePath, result, triggerEl, { liveRegionId: 'responseAreaLive' });
+            return;
+        }
+
+        const requestError = buildScenarioError('SMUGGLE', response, text);
+        setRequestPreviewResult({
+            kind: 'error',
+            message: requestError.message,
+        });
+        renderRequestError('SMUGGLE', requestPath, requestError);
+        setResponseAreaState('SMUGGLE', requestPath, 'error');
+        announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('error')}: ${requestError.message}`);
+        if (triggerEl) {
+            focusElementWithoutScroll(triggerEl);
+        }
+    } catch (error) {
+        setRequestPreviewResult({
+            kind: 'error',
+            message: error.message,
+        });
+        renderRequestError('SMUGGLE', requestPath, error);
+        setResponseAreaState('SMUGGLE', requestPath, 'error');
+        announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('error')}: ${error.message}`);
+        if (triggerEl) {
+            focusElementWithoutScroll(triggerEl);
+        }
+    }
+}
+
+async function launchRequestPanelSmuggleBuilder(triggerEl = null) {
+    if (!responseAreaEl) {
+        return;
+    }
+    if (typeof isServerMethodSupported === 'function' && !isServerMethodSupported('SMUGGLE')) {
+        throw new Error('Method SMUGGLE is disabled by the active server profile');
+    }
+
+    const typedPath = pathInputEl ? pathInputEl.value : '';
+    const previousRequestPreviewState = cloneRequestPreviewState(requestPreviewState);
+    let sourcePath = normalizeRequestPath(typedPath, '/');
+
+    setRequestButtonsBusy(true);
+    setResponseAreaState('SMUGGLE', '', 'preparing');
+    renderRequestProgress('SMUGGLE', '', 'preparingDemoRequest');
+    setRequestPreviewPreparing();
+
+    try {
+        sourcePath = await resolveRequestPanelSmuggleSourcePath(typedPath);
+        setRequestPathValue(sourcePath);
+        setRequestPreviewModel(createRequestPreviewModel('SMUGGLE', sourcePath, { path: sourcePath }));
+        setResponseAreaState('SMUGGLE', sourcePath, 'ready');
+    } catch (error) {
+        requestPreviewState = previousRequestPreviewState;
+        renderRequestPreview();
+        renderRequestError('SMUGGLE', sourcePath, error);
+        setResponseAreaState('SMUGGLE', sourcePath, 'error');
+        announceLiveRegion('responseAreaLive', `SMUGGLE ${sourcePath} ${t('error')}: ${error.message}`);
+        return;
+    } finally {
+        setRequestButtonsBusy(false);
+    }
+
+    if (typeof showSmuggleDialog !== 'function') {
+        const error = new Error('SMUGGLE builder UI is unavailable');
+        setRequestPreviewResult({
+            kind: 'error',
+            message: error.message,
+        });
+        renderRequestError('SMUGGLE', sourcePath, error);
+        setResponseAreaState('SMUGGLE', sourcePath, 'error');
+        announceLiveRegion('responseAreaLive', `SMUGGLE ${sourcePath} ${t('error')}: ${error.message}`);
+        return;
+    }
+
+    showSmuggleDialog(sourcePath, triggerEl, {
+        onConfirm: (builderState) => {
+            void executeRequestPanelSmuggle(sourcePath, builderState, triggerEl);
+        },
+    });
 }
 
 async function buildRequestScenario(method, typedPath) {

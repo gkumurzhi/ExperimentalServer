@@ -2347,6 +2347,52 @@ async (page) => {
     return popupUrl;
   }
 
+  async function smuggleViaRequestPanelAndAssert(name) {
+    const requestSmuggleButton = page.locator('[data-request-method="SMUGGLE"]').first();
+    const uploadPath = `/uploads/${name}`;
+
+    await page.locator("#pathInput").fill(uploadPath);
+    await requestSmuggleButton.waitFor({ state: "visible", timeout: 10000 });
+    await requestSmuggleButton.click();
+
+    const modal = page.locator("#smuggleModal");
+    await modal.waitFor({ state: "attached", timeout: 10000 });
+    await page.locator("#smuggleDownloadName").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smuggleDownloadExt").waitFor({ state: "visible", timeout: 10000 });
+    await page.locator("#smugglePreset").waitFor({ state: "visible", timeout: 10000 });
+
+    await page.locator("#smuggleDownloadName").fill("Request-Panel-Artifact");
+    await page.locator("#smuggleDownloadExt").selectOption("txt");
+    await page.locator("#smugglePreset").selectOption("card_manual");
+    await page.locator("#smuggleTitleInput").fill("Request Panel Artifact");
+    await page.locator("#smuggleMessageInput").fill("Request panel lab artifact");
+    await page.locator("#smuggleCtaLabelInput").fill("Download from request panel");
+    await page.locator("#smuggleSubmitBtn").click();
+    await modal.waitFor({ state: "detached", timeout: 10000 });
+
+    const resultModal = page.locator("#smuggleResultModal");
+    await resultModal.waitFor({ state: "attached", timeout: 10000 });
+    await waitForText(page.locator("#requestPreviewArea"), `SMUGGLE ${uploadPath}?`, 10000);
+    await waitForText(page.locator("#responseArea"), /HTML сгенерирован|HTML generated/, 10000);
+    await waitForText(page.locator("#smuggleResultDownloadName"), "Request-Panel-Artifact.txt", 10000);
+
+    const popupPromise = page.waitForEvent("popup", { timeout: 5000 });
+    await page.locator("#smuggleOpenBtn").click();
+    await resultModal.waitFor({ state: "detached", timeout: 10000 });
+    const popup = await popupPromise;
+    const popupUrl = popup ? popup.url() : "";
+    await assertSmuggleArtifactPopupCompletes(popup, "Request-Panel-Artifact.txt");
+
+    await waitForPageCondition(
+      `request panel smuggle focus restored (${name})`,
+      () => document.activeElement?.getAttribute("data-request-method") === "SMUGGLE",
+      null,
+      10000
+    );
+
+    return popupUrl;
+  }
+
   async function assertSmuggleArtifactPopupCompletes(popup, expectedName, options = {}) {
     const { password = null } = options;
     if (!popup) {
@@ -3354,6 +3400,8 @@ async (page) => {
     }
     await waitForLiveRegionText("uploadResponseAreaLive", /Загрузка завершена|Upload complete/, 10000);
 
+    const requestPanelSmugglePopupUrl = await smuggleViaRequestPanelAndAssert(uploadName);
+
     await browseUploadsAndAssert(uploadName);
     await waitForLiveRegionText("filesResponseAreaLive", "INFO /uploads 200 OK", 10000);
     await assertFileActionAccessibleNames(uploadName);
@@ -3554,6 +3602,7 @@ async (page) => {
       ping: "pong",
       uploadedFile: uploadName,
       requestPanelFetchPath,
+      requestPanelSmugglePopupUrl,
       infoPath,
       smugglePopupUrl,
       encryptedSmuggle,

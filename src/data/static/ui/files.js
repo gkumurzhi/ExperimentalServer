@@ -726,7 +726,7 @@ function buildSmuggleRequestPath(filePath, state) {
     return `${filePath}?${params.toString()}`;
 }
 
-function showSmuggleDialog(filePath, triggerEl = null) {
+function showSmuggleDialog(filePath, triggerEl = null, options = {}) {
     if (!isSmuggleEnabled()) {
         return;
     }
@@ -828,7 +828,12 @@ function showSmuggleDialog(filePath, triggerEl = null) {
                 return false;
             }
             if (action === 'confirm') {
-                executeSmuggle(filePath, readSmuggleBuilderState(activeModal, filePath), triggerEl);
+                const builderState = readSmuggleBuilderState(activeModal, filePath);
+                if (typeof options.onConfirm === 'function') {
+                    options.onConfirm(builderState, activeModal);
+                } else {
+                    executeSmuggle(filePath, builderState, triggerEl, options.executionOptions || {});
+                }
                 return true;
             }
             return undefined;
@@ -898,7 +903,8 @@ function triggerSmuggleArtifactDownload(artifactUrl, artifactName) {
     link.remove();
 }
 
-function showSmuggleResultDialog(filePath, result, triggerEl = null) {
+function showSmuggleResultDialog(filePath, result, triggerEl = null, options = {}) {
+    const liveRegionId = options.liveRegionId || 'filesResponseAreaLive';
     const artifactUrl = new URL(result.url, window.location.href).toString();
     const artifactName = String(result.url || '').split('/').pop() || 'smuggle-artifact.html';
     const resultSummary = buildSmuggleResultA11ySummary(filePath, artifactUrl, result);
@@ -961,11 +967,11 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
                 try {
                     await writeTextToClipboard(artifactUrl, 'smuggle-url');
                     setSmuggleResultStatus(modal, t('smuggleCopied'), 'ok');
-                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleCopied')}`);
+                    announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${t('smuggleCopied')}`);
                 } catch (error) {
                     const message = formatActionErrorMessage(t('clipboardCopyFailed'), error);
                     setSmuggleResultStatus(modal, message, 'error');
-                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${message}`);
+                    announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${message}`);
                 }
                 return undefined;
             }
@@ -974,15 +980,15 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
                 if (!popup) {
                     const message = formatActionErrorMessage(t('smuggleOpen'), new Error(t('error')));
                     setSmuggleResultStatus(modal, message, 'error');
-                    announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${message}`);
+                    announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${message}`);
                     return undefined;
                 }
-                announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleOpened')}`);
+                announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${t('smuggleOpened')}`);
                 return true;
             }
             if (action === 'save') {
                 triggerSmuggleArtifactDownload(artifactUrl, artifactName);
-                announceLiveRegion('filesResponseAreaLive', `${t('downloadStarted')}: ${artifactName}`);
+                announceLiveRegion(liveRegionId, `${t('downloadStarted')}: ${artifactName}`);
                 return true;
             }
             return undefined;
@@ -990,7 +996,8 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
     });
 }
 
-async function executeSmuggle(filePath, builderState, triggerEl = null) {
+async function executeSmuggle(filePath, builderState, triggerEl = null, options = {}) {
+    const liveRegionId = options.liveRegionId || 'filesResponseAreaLive';
     const requestPath = buildSmuggleRequestPath(filePath, builderState);
     const url = SERVER_URL + requestPath;
     try {
@@ -1038,10 +1045,10 @@ async function executeSmuggle(filePath, builderState, triggerEl = null) {
                     body: createExchangeTextBody(responseSummary, { contentType: 'text/plain' }),
                 },
             });
-            announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('smuggleGenerated')}`);
-            showSmuggleResultDialog(filePath, result, triggerEl);
+            announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${t('smuggleGenerated')}`);
+            showSmuggleResultDialog(filePath, result, triggerEl, { liveRegionId });
         } else {
-            announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}`);
+            announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${t('error')}`);
             setExchangeInspector('files', {
                 phase: 'error',
                 request: {
@@ -1068,7 +1075,7 @@ async function executeSmuggle(filePath, builderState, triggerEl = null) {
             }
         }
     } catch (error) {
-        announceLiveRegion('filesResponseAreaLive', `SMUGGLE ${filePath} ${t('error')}: ${error.message}`);
+        announceLiveRegion(liveRegionId, `SMUGGLE ${filePath} ${t('error')}: ${error.message}`);
         setExchangeInspector('files', {
             phase: 'error',
             request: {
