@@ -618,6 +618,18 @@ function buildSmuggleResponseSummary(result) {
     return lines.join('\n');
 }
 
+function buildSmuggleResultA11ySummary(filePath, artifactUrl, result) {
+    const parts = [
+        `${t('smuggleFile')}: ${filePath}`,
+        `${t('smuggleEncrypted')}: ${result.encrypted ? t('smuggleYes') : t('smuggleNo')}`,
+        `URL: ${artifactUrl}`,
+    ];
+    if (result.password) {
+        parts.push(`${t('smugglePassword')}: ${result.password}`);
+    }
+    return parts.join('. ');
+}
+
 function setSmuggleResultStatus(modal, message, tone = '') {
     const statusEl = modal.querySelector('#smuggleResultStatus');
     if (!statusEl) {
@@ -639,6 +651,7 @@ function triggerSmuggleArtifactDownload(artifactUrl, artifactName) {
 function showSmuggleResultDialog(filePath, result, triggerEl = null) {
     const artifactUrl = new URL(result.url, window.location.href).toString();
     const artifactName = String(result.url || '').split('/').pop() || 'smuggle-artifact.html';
+    const resultSummary = buildSmuggleResultA11ySummary(filePath, artifactUrl, result);
     const passwordRow = result.password ? `
                 <div class="smuggle-result__row">
                     <span class="smuggle-result__label">${esc(t('smugglePassword'))}</span>
@@ -653,7 +666,7 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
         restoreFocusOnConfirm: true,
         markup: `
         <div class="modal-overlay">
-            <div class="modal-content smuggle-dialog" role="dialog" aria-modal="true" aria-labelledby="smuggleResultTitle" aria-describedby="smuggleResultHint smuggleResultStatus">
+            <div class="modal-content smuggle-dialog" role="dialog" aria-modal="true" aria-labelledby="smuggleResultTitle" aria-describedby="smuggleResultSummary smuggleResultHint smuggleResultStatus">
                 <div class="smuggle-dialog__header">
                     <h3 id="smuggleResultTitle">${t('smuggleTitle')}</h3>
                     <p class="smuggle-dialog__file">
@@ -661,6 +674,7 @@ function showSmuggleResultDialog(filePath, result, triggerEl = null) {
                     </p>
                 </div>
                 <div class="smuggle-dialog__settings smuggle-result__body">
+                    <p class="sr-only" id="smuggleResultSummary">${esc(resultSummary)}</p>
                     <div class="smuggle-result__row">
                         <span class="smuggle-result__label">${esc(t('smuggleEncrypted'))}</span>
                         <span class="smuggle-result__value">${esc(result.encrypted ? t('smuggleYes') : t('smuggleNo'))}</span>

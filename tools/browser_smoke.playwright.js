@@ -2151,6 +2151,25 @@ async (page) => {
     await waitForText(page.locator("#filesResponseArea"), /HTML сгенерирован|HTML generated/, 10000);
     await waitForText(page.locator("#filesResponseArea"), "URL:", 10000);
     await waitForText(page.locator("#smuggleResultValue"), /\/uploads\/smuggle_[^/\s]+\.html/, 10000);
+    const normalizedBaseUrl = String(baseUrl || "").replace(/\/$/, "");
+    await waitForPageCondition(
+      `smuggle result dialog a11y summary (${name})`,
+      ([expectedName, expectedUrlPrefix]) => {
+        const dialog = document.querySelector('#smuggleResultModal [role="dialog"]');
+        if (!dialog) {
+          return false;
+        }
+        const describedBy = String(dialog.getAttribute("aria-describedby") || "")
+          .split(/\s+/)
+          .filter(Boolean);
+        const describedText = describedBy
+          .map((id) => document.getElementById(id)?.textContent?.trim() || "")
+          .join(" ");
+        return describedText.includes(expectedName) && describedText.includes(expectedUrlPrefix);
+      },
+      [name, `${normalizedBaseUrl}/uploads/smuggle_`],
+      10000
+    );
 
     await waitForPageCondition(
       `smuggle result dialog initial focus (${name})`,
@@ -2188,7 +2207,6 @@ async (page) => {
     );
 
     await page.locator("#smuggleCopyUrlBtn").click();
-    const normalizedBaseUrl = String(baseUrl || "").replace(/\/$/, "");
     await assertClipboardSnapshot("smuggle-url", [`${normalizedBaseUrl}/uploads/smuggle_`], 10000);
 
     const popupPromise = page.waitForEvent("popup", { timeout: 5000 });
