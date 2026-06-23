@@ -41,19 +41,19 @@ No new external documentation checks were performed during this planning pass. T
 ## Stage overview
 | Stage | Priority | Status | Title | Depends on | Main verification | Expected files |
 |---|---|---|---|---|---|---|
-| STAGE-001 | HIGH | OPEN | Restore release-smoke stale-doc guard | None | `python -m src --help`, targeted grep/script check | `.github/workflows/ci.yml`, optional `tools/*` |
-| STAGE-002 | HIGH | OPEN | Fix Secure Notepad key contract and example interoperability | STAGE-001 | Notepad example/contract tests, docs sync | `examples/notepad_client.py`, `src/security/keys.py`, `API.md`, `docs/api.md`, tests |
-| STAGE-003 | HIGH | OPEN | Validate ACME cert/key cache pairs before reuse | STAGE-001 | TLS manager targeted tests | `src/security/tls_manager.py`, `src/security/tls.py`, `tests/test_security/test_tls_manager.py` |
-| STAGE-004 | HIGH | OPEN | Normalize CLI TLS source and numeric validation | STAGE-001 | CLI invalid-argument tests | `src/cli.py`, `src/server.py`, `tests/test_cli.py` |
-| STAGE-005 | HIGH | OPEN | Complete container ACME/sslip operator path | STAGE-003 | Compose config check, docs build | `examples/docker/docker-compose.yml`, `README.md`, `Dockerfile`, docs |
-| STAGE-006 | MEDIUM | OPEN | Remove stale crypto/dependency copy drift | STAGE-001 | stale-reference check, docs sync, browser smoke text update | runtime strings, UI strings, docs, smoke tests |
-| STAGE-007 | MEDIUM | OPEN | Align pre-commit and dependency completeness checks | STAGE-006 | `pre-commit run mypy`, `pip check`, security workflow smoke | `.pre-commit-config.yaml`, `.github/workflows/security.yml`, CI |
-| STAGE-008 | MEDIUM | OPEN | Add Docker TLS and runtime import smoke | STAGE-003 | Docker build/run, HTTPS PING | `.github/workflows/ci.yml`, `Dockerfile`, optional tools |
-| STAGE-009 | MEDIUM | OPEN | Guard Notepad plaintext title and dirty transitions | STAGE-002 | browser smoke/unit tests for title warning and dirty switch | `src/data/static/ui/notepad.js`, `src/data/static/ui/core.js`, tests |
-| STAGE-010 | MEDIUM | OPEN | Make Notepad WebSocket saves idempotent | STAGE-009 | WS retry/reconnect tests | `src/data/static/ui/notepad.js`, `src/handlers/notepad.py`, `src/notepad_service.py`, tests |
-| STAGE-011 | MEDIUM | OPEN | Add advanced-upload JSON body guardrails | STAGE-001 | advanced-upload oversized-body tests | `src/handlers/advanced_upload.py`, `API.md`, tests |
-| STAGE-012 | MEDIUM | OPEN | Make user-data writes exclusive and atomic | STAGE-011 | concurrent/failure-injection persistence tests | `src/handlers/files.py`, `src/handlers/advanced_upload.py`, `src/notepad_service.py`, tests |
-| STAGE-013 | MEDIUM | OPEN | Resolve local-only pytest collection drift | STAGE-001 | collect-only and tracked/ignored guard | `.gitignore`, `pyproject.toml`, `tools/`, `tests/`, CI |
+| STAGE-001 | HIGH | CLOSED | Restore release-smoke stale-doc guard | None | `python -m src --help`, targeted grep/script check | `.github/workflows/ci.yml`, optional `tools/*` |
+| STAGE-002 | HIGH | CLOSED | Fix Secure Notepad key contract and example interoperability | STAGE-001 | Notepad example/contract tests, docs sync | `examples/notepad_client.py`, `src/security/keys.py`, `API.md`, `docs/api.md`, tests |
+| STAGE-003 | HIGH | CLOSED | Validate ACME cert/key cache pairs before reuse | STAGE-001 | TLS manager targeted tests | `src/security/tls_manager.py`, `src/security/tls.py`, `tests/test_security/test_tls_manager.py` |
+| STAGE-004 | HIGH | CLOSED | Normalize CLI TLS source and numeric validation | STAGE-001 | CLI invalid-argument tests | `src/cli.py`, `src/server.py`, `tests/test_cli.py` |
+| STAGE-005 | HIGH | CLOSED | Complete container ACME/sslip operator path | STAGE-003 | Compose config check, docs build | `examples/docker/docker-compose.yml`, `README.md`, `Dockerfile`, docs |
+| STAGE-006 | MEDIUM | CLOSED | Remove stale crypto/dependency copy drift | STAGE-001 | stale-reference check, docs sync, browser smoke text update | runtime strings, UI strings, docs, smoke tests |
+| STAGE-007 | MEDIUM | CLOSED | Align pre-commit and dependency completeness checks | STAGE-006 | `pre-commit run mypy`, `pip check`, security workflow smoke | `.pre-commit-config.yaml`, `.github/workflows/security.yml`, CI |
+| STAGE-008 | MEDIUM | CLOSED | Add Docker TLS and runtime import smoke | STAGE-003 | Docker build/run, HTTPS PING | `.github/workflows/ci.yml`, `Dockerfile`, optional tools |
+| STAGE-009 | MEDIUM | CLOSED | Guard Notepad plaintext title and dirty transitions | STAGE-002 | browser smoke/unit tests for title warning and dirty switch | `src/data/static/ui/notepad.js`, `src/data/static/ui/core.js`, tests |
+| STAGE-010 | MEDIUM | CLOSED | Make Notepad WebSocket saves idempotent | STAGE-009 | WS retry/reconnect tests | `src/data/static/ui/notepad.js`, `src/handlers/notepad.py`, `src/notepad_service.py`, tests |
+| STAGE-011 | MEDIUM | CLOSED | Add advanced-upload JSON body guardrails | STAGE-001 | advanced-upload oversized-body tests | `src/handlers/advanced_upload.py`, `API.md`, tests |
+| STAGE-012 | MEDIUM | CLOSED | Make user-data writes exclusive and atomic | STAGE-011 | concurrent/failure-injection persistence tests | `src/handlers/files.py`, `src/handlers/advanced_upload.py`, `src/notepad_service.py`, tests |
+| STAGE-013 | MEDIUM | CLOSED | Resolve local-only pytest collection drift | STAGE-001 | collect-only and tracked/ignored guard | `.gitignore`, `pyproject.toml`, `tools/`, `tests/`, CI |
 
 ## How to close a stage
 Use:

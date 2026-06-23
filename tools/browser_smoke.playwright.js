@@ -2373,7 +2373,9 @@ async (page) => {
     const resultModal = page.locator("#smuggleResultModal");
     await resultModal.waitFor({ state: "attached", timeout: 10000 });
     await waitForText(page.locator("#requestPreviewArea"), `SMUGGLE ${uploadPath}?`, 10000);
-    await waitForText(page.locator("#responseArea"), /HTML сгенерирован|HTML generated/, 10000);
+    await waitForText(page.locator("#responseArea"), "HTTP/1.1 200 OK", 10000);
+    await waitForText(page.locator("#responseArea"), "Request-Panel-Artifact.txt", 10000);
+    await waitForLiveRegionText("responseAreaLive", /HTML сгенерирован|HTML generated/, 10000);
     await waitForText(page.locator("#smuggleResultDownloadName"), "Request-Panel-Artifact.txt", 10000);
 
     const popupPromise = page.waitForEvent("popup", { timeout: 5000 });
@@ -2381,7 +2383,9 @@ async (page) => {
     await resultModal.waitFor({ state: "detached", timeout: 10000 });
     const popup = await popupPromise;
     const popupUrl = popup ? popup.url() : "";
-    await assertSmuggleArtifactPopupCompletes(popup, "Request-Panel-Artifact.txt");
+    await assertSmuggleArtifactPopupCompletes(popup, "Request-Panel-Artifact.txt", {
+      manualStart: true,
+    });
 
     await waitForPageCondition(
       `request panel smuggle focus restored (${name})`,
@@ -2394,7 +2398,7 @@ async (page) => {
   }
 
   async function assertSmuggleArtifactPopupCompletes(popup, expectedName, options = {}) {
-    const { password = null } = options;
+    const { password = null, manualStart = false } = options;
     if (!popup) {
       throw new Error("SMUGGLE artifact popup did not open");
     }
@@ -2414,6 +2418,9 @@ async (page) => {
         { timeout: 10000 }
       );
     } else {
+      if (manualStart) {
+        await popup.locator("#downloadBtn").click();
+      }
       await popup.waitForFunction(
         ([targetName]) => {
           const safeStatus = document.getElementById("smuggleStatus");
