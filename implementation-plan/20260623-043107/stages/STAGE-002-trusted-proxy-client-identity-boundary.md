@@ -1,7 +1,7 @@
 # STAGE-002 - Trusted proxy and client identity boundary
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -68,4 +68,6 @@ Document the maintained boundary for client identity: what “direct-peer semant
 - Rollback: Revert the doc/ADR commit and restage with stricter direct-peer language.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Added `ADR-008` to define the maintained direct-peer client-identity boundary and the prerequisites for any future trusted-proxy work.
+- Aligned `README.md`, `SECURITY.md`, `docs/threat-model.md`, and `API.md` so proxied deployments are documented as requiring proxy-side per-client throttling and request/header/body caps.
+- Reduced duplicated proxy-policy wording in `ADR-006` by pointing it at the new dedicated trusted-proxy ADR.

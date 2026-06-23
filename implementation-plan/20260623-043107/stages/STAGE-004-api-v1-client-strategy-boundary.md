@@ -1,7 +1,7 @@
 # STAGE-004 - API v1 and client strategy boundary
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -68,4 +68,6 @@ Define the supported API/client boundary: keep legacy v0 honest, record whether 
 - Rollback: Revert the ADR/docs commit and restage with a stricter legacy-v0-only boundary.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Added `ADR-010` to record the supported legacy-v0 client boundary and the entry criteria for any future `/api/v1` or official SDK work.
+- Aligned `API.md`, `README.md`, and `SECURITY.md` so the built-in UI/examples remain documented as reference consumers of the legacy surface rather than an official public-client program.
+- Added a `tools/check_stale_docs.py` semantic guard requiring the README to keep the legacy-v0 and no-`/api/v1` boundary explicit.

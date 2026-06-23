@@ -115,9 +115,11 @@ Coverage gate in CI is 65 %; aim higher.
 ## Release artifacts
 
 The `Release Artifacts` workflow runs on `v*` tags and manual
-`workflow_dispatch`. It is artifact-only: it does not publish to PyPI, GHCR, or
-any other registry. Uploaded wheel, sdist, and SBOM artifacts are retained in
-GitHub Actions for 90 days.
+`workflow_dispatch`. Manual runs are artifact-only and do not publish to PyPI,
+GHCR, or another registry. Tagged releases publish the `exphttp` package to
+PyPI via Trusted Publishing/OIDC and push the `ghcr.io/gkumurzhi/exphttp`
+image. Uploaded wheel, sdist, and SBOM artifacts are retained in GitHub
+Actions for 90 days.
 
 The release lane builds `dist/*.whl` and `dist/*.tar.gz`, installs the wheel in
 a fresh virtual environment outside the checkout, runs CLI/import probes, checks
@@ -126,19 +128,20 @@ static UI assets from the built wheel, and runs browser smoke with
 if `src` imports resolve back to the source tree.
 
 The workflow uses explicit permissions: `contents: read` for checkout,
-`id-token: write` for OIDC, and `attestations: write` for GitHub artifact
-attestations. It also scans the pinned `constraints/ci.txt` dependency set with
-`pip-audit`, writes a CycloneDX JSON SBOM into `dist/`, and attests the wheel,
-sdist, and SBOM.
+`packages: write` for GHCR publication, `id-token: write` for PyPI Trusted
+Publishing/OIDC, and `attestations: write` for GitHub artifact attestations. It
+also scans the pinned `constraints/ci.txt` dependency set with `pip-audit`,
+writes a CycloneDX JSON SBOM into `dist/`, and attests the wheel, sdist, and
+SBOM.
 
 Promote a release only from the uploaded workflow artifacts after reviewing the
 attestations. Roll back a Python release by reinstalling the previous verified
 wheel or sdist while it remains inside that 90-day artifact window. For older
 rollback targets, preserve the verified wheel/sdist outside GitHub Actions
-artifact retention or rebuild from the signed tag before promotion. Container
-image publication, digest scanning, SBOM, and provenance are intentionally not
-configured until the maintainer chooses registry coordinates and publish intent;
-when that lane exists, rollbacks should pin the previous verified image digest.
+artifact retention or rebuild from the signed tag before promotion. Tagged
+releases also publish the GHCR image with BuildKit SBOM/provenance and GitHub
+attestations; container rollbacks should pin the previous verified image
+digest, not a floating tag.
 
 ## Documentation ownership
 

@@ -1,7 +1,7 @@
 # STAGE-001 - Supported surface and publishing boundary
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -68,4 +68,6 @@ Record one authoritative supported-surface decision covering local workspace use
 - Rollback: Revert the ADR/docs commit if the chosen support boundary is rejected and restage with a revised decision statement.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Added `ADR-007` to record the supported artifact surfaces and the operator-owned deployment boundary.
+- Aligned `README.md`, `SECURITY.md`, `CONTRIBUTING.md`, and `docs/index.md` with the real release workflow: tagged releases publish PyPI/GHCR artifacts, while manual release runs stay verification-only.
+- Tightened `tools/check_stale_docs.py` so the old global “artifact-only” wording is now rejected while the narrower manual-run wording remains valid.

@@ -154,6 +154,20 @@ STALE_PATTERNS: tuple[StalePattern, ...] = (
         re.compile(r"(?<![\w.])import\s+src\b"),
         "stale public import path `import src`; use `import exphttp`",
     ),
+    StalePattern(
+        re.compile(
+            r"It is artifact-only:\s*it does not publish to PyPI,\s*GHCR,\s*or another registry",
+            re.IGNORECASE,
+        ),
+        "stale artifact-only release wording; tagged releases publish PyPI and GHCR",
+    ),
+    StalePattern(
+        re.compile(
+            r"Release workflows currently produce signed GitHub Actions artifacts only",
+            re.IGNORECASE,
+        ),
+        "stale artifact-only release wording; tagged releases publish PyPI and GHCR",
+    ),
 )
 
 SEMANTIC_REQUIREMENTS: tuple[SemanticRequirement, ...] = (
@@ -164,6 +178,11 @@ SEMANTIC_REQUIREMENTS: tuple[SemanticRequirement, ...] = (
     ),
     SemanticRequirement(
         Path("README.md"),
+        re.compile(r"legacy v0[\s\S]+/api/v1", re.IGNORECASE),
+        "README must describe the current HTTP/WebSocket surface as legacy v0 and note that `/api/v1` is not implemented",
+    ),
+    SemanticRequirement(
+        Path("README.md"),
         re.compile(r"не делает сервис\s+безопасным для произвольного интернета", re.IGNORECASE),
         "README must not imply binding/TLS/Auth alone make arbitrary internet exposure safe",
     ),
@@ -171,6 +190,14 @@ SEMANTIC_REQUIREMENTS: tuple[SemanticRequirement, ...] = (
         Path("SECURITY.md"),
         re.compile(r"External exposure baseline", re.IGNORECASE),
         "SECURITY must define a minimum external-exposure hardening baseline",
+    ),
+    SemanticRequirement(
+        Path("SECURITY.md"),
+        re.compile(
+            r"does\s+not\s+persist\s+the\s+client-derived\s+AES\s+key[\s\S]+durable\s+recovery\s+out\s+of\s+scope",
+            re.IGNORECASE,
+        ),
+        "SECURITY must state that Secure Notepad does not persist durable recovery material today",
     ),
     SemanticRequirement(
         Path("API.md"),

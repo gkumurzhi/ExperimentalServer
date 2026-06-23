@@ -290,9 +290,12 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth-file ./auth.txt -m 200
   мониторинг, firewall allowlist и точный `--cors-origin` для доверенного
   браузерного UI. Не используйте
   `--cors-origin *` для публичного браузерного интерфейса. App-side Basic
-  Auth rate limiting считает неудачи по direct TCP peer IP; за reverse proxy
-  настройте proxy-side per-client throttling, потому что приложение пока не
-  доверяет `Forwarded`/`X-Forwarded-For`.
+  Auth rate limiting и `429` cooldown считают неудачи по direct TCP peer IP.
+  За reverse proxy этим peer обычно становится сам proxy, поэтому настройте
+  proxy-side per-client auth throttling и request/header/body size caps;
+  приложение не доверяет `Forwarded`/`X-Forwarded-For`/`X-Real-IP` как client
+  identity. Возможная trusted-proxy поддержка требует отдельного opt-in
+  дизайна; см. [ADR-008](docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md).
 
 ## HTTP-методы
 
@@ -318,7 +321,10 @@ exphttp -H 0.0.0.0 -p 8080 -d ./data --tls --auth-file ./auth.txt -m 200
 клиентам следует определять доступные методы и возможности через `PING`
 (`profile`, `supported_methods`, `capabilities`) и сверяться с
 [API Reference](API.md) перед тем, как полагаться на детали ошибок, retry или
-Notepad/WebSocket semantics. `/api/v1` пока не реализован.
+Notepad/WebSocket semantics. `/api/v1` пока не реализован. Встроенный browser
+UI, примеры из README и operator-owned scripts являются reference clients этого
+legacy surface, а не официальным SDK или public-client compatibility program;
+см. [ADR-010](docs/ADR/ADR-010-api-client-strategy-boundary.md).
 
 ### Заголовки ответов
 
@@ -343,6 +349,13 @@ Notepad/WebSocket semantics. `/api/v1` пока не реализован.
 3. **Загрузка (продвинутая)** — загрузка через JSON body, заголовки или URL-параметры, с опциональным XOR-шифрованием; доступна только в `--profile lab`
 4. **Скачивание** — обзор `uploads/`, переход по директориям, `INFO`, `FETCH`, удаление файлов; `SMUGGLE` и быстрая очистка `uploads/` доступны только в `--profile lab`
 5. **Secure Notepad** — ECDH/AES-GCM блокнот с автошифрованием и переключением транспорта `HTTP` / `WebSocket`; доступен только в `--profile lab`
+
+Текущий Secure Notepad не является durable recovery или multi-device sync
+системой. Клиентский AES-ключ живёт только в памяти сессии; reload страницы,
+рестарт клиента/сервера, expiry или eviction сессии могут сделать уже
+сохранённые note bodies нерасшифровываемыми. Сервер хранит ciphertext и
+metadata, но не recovery material; см.
+[ADR-009](docs/ADR/ADR-009-durable-notepad-recovery-boundary.md).
 
 ## Продвинутая загрузка
 
@@ -1125,8 +1138,9 @@ Browser smoke является release-gating проверкой в CI. Паке
 Workflow `Release Artifacts` запускается по тегам `v*` и вручную через
 `workflow_dispatch`. Для тегов `vX.Y.Z` он проверяет, что
 `src.config.__version__ == X.Y.Z`, собирает Python artifacts, публикует пакет
-в PyPI через Trusted Publishing/OIDC и публикует image
-`ghcr.io/gkumurzhi/exphttp`.
+`exphttp` в PyPI через Trusted Publishing/OIDC и публикует image
+`ghcr.io/gkumurzhi/exphttp`. Ручной `workflow_dispatch` прогоняет ту же
+signed-artifact верификацию, но без публикации registry artifacts.
 
 Release lane собирает wheel и sdist из clean checkout, устанавливает wheel в
 новый venv вне source tree, проверяет `exphttp --version`, `exphttp --help`,
@@ -1139,6 +1153,10 @@ Workflow использует явные permissions: `contents: read`, `package
 `constraints/ci.txt`, формирует CycloneDX JSON SBOM, а GitHub artifact
 attestations подписывают wheel, sdist, dependency SBOM и GHCR image digest.
 Container build включает BuildKit `sbom: true` и `provenance: true`.
+
+Опубликованные PyPI/GHCR artifacts являются поддерживаемыми surface
+распространения, но не managed service и не обещание безопасного internet
+deployment без operator-owned hardening из `SECURITY.md`.
 
 Rollback для Python-пакета в пределах этого окна выполняется установкой
 предыдущей проверенной версии wheel/sdist из release artifacts. Если нужен

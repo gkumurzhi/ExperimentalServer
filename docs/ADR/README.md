@@ -22,3 +22,7 @@ supersedes the old one.
 | [ADR-004](ADR-004-uploads-relative-to.md) | accepted | Uploads-only enforcement via `Path.relative_to` |
 | [ADR-005](ADR-005-threadpool-over-asyncio.md) | accepted | Concurrency model: ThreadPoolExecutor, not asyncio |
 | [ADR-006](ADR-006-profile-default-and-exposure.md) | accepted | Profile default and exposure policy |
+| [ADR-007](ADR-007-published-artifact-surfaces.md) | accepted | Published artifact surfaces and operator-owned deployment boundary |
+| [ADR-008](ADR-008-trusted-proxy-client-identity-boundary.md) | accepted | Direct-peer client identity and trusted-proxy prerequisites |
+| [ADR-009](ADR-009-durable-notepad-recovery-boundary.md) | accepted | Secure Notepad durable-recovery boundary |
+| [ADR-010](ADR-010-api-client-strategy-boundary.md) | accepted | Legacy v0 client boundary and API v1 entry criteria |

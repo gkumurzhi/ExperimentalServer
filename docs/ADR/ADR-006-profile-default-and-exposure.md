@@ -40,16 +40,17 @@ or a controlled lab must provide the external-exposure baseline documented in
 where possible, exact browser-origin policy, resource limits, monitoring, and
 reverse-proxy request controls.
 
-The application-side Basic Auth rate limiter keys failures on the direct TCP
-peer IP address from the accepted socket. The server does not currently trust
-or parse `Forwarded` or `X-Forwarded-For` headers. Reverse-proxy deployments
-therefore must enforce proxy-side per-client auth/request throttling and
-request-size limits unless a future trusted-proxy model is added.
+Reverse-proxy and client-identity policy is defined in ADR-008. In short, the
+maintained boundary remains the direct TCP peer from the accepted socket, and
+reverse-proxy deployments must enforce proxy-side per-client throttling and
+request-size limits until a dedicated trusted-proxy design exists.
 
-The checked-in `Dockerfile` and `examples/docker/docker-compose.yml` are
-operator convenience examples for local builds and topology experiments. They
-are not a supported published artifact track. Published image policy,
-rollback boundaries, and release automation belong to a later Docker stage.
+The checked-in `Dockerfile` and `examples/docker/docker-compose.yml` remain
+operator-owned deployment examples for local builds and topology experiments.
+Tagged releases can still publish Python and container artifacts, but that
+distribution surface does not change the safe-default exposure policy or the
+fact that deployment topology, profile choice, proxy controls, and rollback
+remain operator responsibilities.
 
 ## Consequences
 
@@ -61,20 +62,21 @@ rollback boundaries, and release automation belong to a later Docker stage.
   `--profile lab` when experimental methods are required.
 - Reverse-proxy deployments cannot accidentally treat forwarded headers as a
   trusted client identity boundary.
-- Docker examples remain usable without implying a supported image release
-  lifecycle.
+- Docker examples and published artifacts can coexist without changing the
+  operator-owned deployment boundary.
 
 ### Negative
 
 - Scripts that rely on implicit `lab` behavior need an explicit profile flag
   after the default migration.
 - Operators behind a reverse proxy must configure per-client controls in the
-  proxy until trusted-proxy support exists in the application.
+  proxy as described in ADR-008 until trusted-proxy support exists in the
+  application.
 
 ### Follow-up
 
 - STAGE-003 can centralize capability policy around this profile boundary.
 - STAGE-004 changed the CLI default after compatibility notes were in place
   and tests proved `--profile lab` preserves the legacy surface.
-- STAGE-008 may promote or defer Docker artifact support based on this
-  operator-convenience status.
+- Future artifact/distribution policy should stay consistent with this
+  operator-owned deployment boundary.

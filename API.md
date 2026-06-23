@@ -38,6 +38,10 @@ The v0 compatibility promise is intentionally narrow:
   WebSocket notes remain legacy v0 behavior gated by `--profile lab`; they are
   not a promise that the same shape will become the future v1 API.
 
+The built-in browser UI, bundled examples, and operator-owned scripts are
+reference consumers of this legacy surface, not an official SDK or a public
+client support program with broader compatibility guarantees.
+
 There is no global idempotency key in v0. Read-only methods (`GET`, `HEAD`,
 `FETCH`, `INFO`, `PING`, and `OPTIONS`) are the safest retry targets. Mutating
 methods can create, replace, delete, or clear state before a client observes a
@@ -61,11 +65,14 @@ WebSocket close frames instead of HTTP JSON bodies. The response-body tables
 below apply only when the server emits an HTTP response or an application-level
 WebSocket JSON frame.
 
-Future v1 work, if implemented, should be explicit and opt-in, such as an
-`/api/v1/...` route family or another versioned negotiation mechanism. A small
-v1 surface would likely define normalized JSON errors, explicit idempotency,
-versioned discovery, ordinary upload/list/delete operations, NOTE CRUD, and a
-versioned notes WebSocket contract. None of that v1 surface exists today.
+ADR-010 defers `/api/v1` and official SDK/public-client work until explicit
+versioning, error/idempotency, feature-selection, security-boundary, and
+ownership decisions are approved. If v1 work ever starts, it should be
+explicit and opt-in, such as an `/api/v1/...` route family or another
+versioned negotiation mechanism. A small v1 surface would likely define
+normalized JSON errors, explicit idempotency, versioned discovery, ordinary
+upload/list/delete operations, NOTE CRUD, and a versioned notes WebSocket
+contract. None of that v1 surface exists today.
 
 ## Error Response Bodies
 
@@ -566,6 +573,11 @@ accept lowercase hex IDs from 1 to 32 characters. New clients should send
 
 Current note keys are session-bound, not durably recoverable. The browser UI and `examples/notepad_client.py` keep the derived AES key only in process memory. Reloading the page, restarting the client, server restart, idle session expiry, or LRU session eviction can leave previously saved note bodies undecryptable by that client. The server does not persist note encryption keys and exposes no API to decrypt or re-key stored note blobs.
 
+ADR-009 treats this as an intentional product/security boundary: stored
+ciphertext plus metadata are not sufficient for durable recovery, and the
+current HTTP/WebSocket Notepad flow is not a backup or multi-device sync
+system.
+
 Notepad save requests have a Notepad-specific encrypted blob limit: `data`
 must decode to at most 1 MiB (1,048,576 bytes), which is at most 1,398,104
 base64 characters. Aggregate encrypted blobs are also capped by
@@ -963,6 +975,12 @@ Authorization: Basic <base64(user:pass)>
 ```
 
 Failed auth returns `401` with `WWW-Authenticate` header. Rate limiting applies after 5 failures (30s cooldown, `429` response).
+
+The limiter keys on the direct TCP peer IP from the accepted socket. In
+proxied deployments, `401`/`429` semantics therefore reflect the proxy
+connection unless the proxy enforces per-client throttling first. `Forwarded`,
+`X-Forwarded-For`, and similar headers are not trusted as client identity; see
+[`docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md`](docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md).
 
 ---
 

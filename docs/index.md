@@ -31,9 +31,11 @@ For local development, install from a checkout:
 pip install -e .
 ```
 
-Release workflows currently produce signed GitHub Actions artifacts only; the
-project does not publish to PyPI, GHCR, or another registry. To install a
-release build, use a verified wheel from the `Release Artifacts` workflow.
+Tagged releases publish the `exphttp` Python package to PyPI and the
+`ghcr.io/gkumurzhi/exphttp` image to GHCR. Manual `Release Artifacts` runs
+still produce signed wheel/sdist/SBOM artifacts without registry publication.
+These public artifacts are supported distribution surfaces, not a managed
+hosting service or an internet-safety guarantee by themselves.
 
 The default install includes the runtime crypto and ACME dependencies used by
 TLS and Secure Notepad.

@@ -1,7 +1,7 @@
 # STAGE-003 - Durable Notepad recovery ADR
 
 ## Status
-OPEN
+CLOSED
 
 ## Priority
 MEDIUM
@@ -67,4 +67,6 @@ Decide whether durable Secure Notepad recovery stays out of scope for now or mov
 - Rollback: Revert the ADR/docs commit and restage with a narrower decision statement focused on scope and prerequisites.
 
 ## Completion notes
-Filled by `close-plan-stage`.
+- Added `ADR-009` to record that durable Secure Notepad recovery is out of scope today and to define the design prerequisites for any future implementation.
+- Aligned `README.md`, `SECURITY.md`, `docs/threat-model.md`, and `API.md` so current Secure Notepad sessions are explicitly documented as session-bound and non-recoverable once client-held key material is lost.
+- Added a `tools/check_stale_docs.py` semantic guard so `SECURITY.md` must keep the non-recovery boundary explicit.

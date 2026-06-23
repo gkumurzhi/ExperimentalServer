@@ -11,6 +11,10 @@ Behind a reverse proxy, the application treats the proxy connection as the
 direct TCP peer. It does not currently trust `Forwarded` or `X-Forwarded-For`
 headers as client identity.
 
+ADR-008 keeps that direct-peer boundary as the maintained policy. Forwarded
+client-IP headers remain untrusted metadata unless a future dedicated
+trusted-proxy design changes the contract explicitly.
+
 ## Assets
 
 | Asset | Why it matters |
@@ -19,7 +23,7 @@ headers as client identity.
 | Server process | Availability (DoS pins resources, makes the service unusable) |
 | Basic Auth credentials | Confidentiality (leaked credentials grant full access) |
 | TLS private key | If leaked, enables passive decryption of all recorded traffic |
-| Notepad ECDH session key | Short-lived, bounded in-memory state; leak compromises one session, not a permanent secret |
+| Notepad ECDH session key | Short-lived, bounded in-memory state; leak compromises one session, and loss can strand stored note bodies because the server does not persist recovery material |
 | Uploaded files | User-controlled data stored under `<root>/uploads/` |
 
 ## STRIDE summary
@@ -75,7 +79,10 @@ headers as client identity.
 The app-side Basic Auth limiter keys on the accepted socket's peer address.
 For proxied deployments, this is normally the reverse proxy address, not the
 end-user address. Operators must enforce proxy-side per-client throttling and
-request-size limits unless a future trusted-proxy model is added.
+request/header/body size caps. Any future trusted-proxy implementation would
+need explicit opt-in allowlists, canonical header parsing, mixed-topology
+threat-model coverage, end-to-end tests, and observability that separates
+direct peer identity from asserted client identity.
 
 **Explicitly out of scope:** sophisticated DDoS (volumetric, amplification,
 resource-exhaustion from thousands of authenticated clients). Deploy behind
@@ -94,6 +101,10 @@ a reverse proxy / CDN if that is a concern.
 - **Perfect forward secrecy for advanced uploads.** XOR+HMAC baseline is
   fragile against chosen-plaintext; use TLS and authenticated encryption for
   real-world deployments.
+- **Durable server-side recovery of Secure Notepad plaintext.** Stored
+  ciphertext plus metadata are intentionally insufficient once the client-held
+  session key is gone; ADR-009 keeps recovery out of scope until a separate
+  cryptographic and product contract exists.
 - **Resistance to traffic analysis.** Non-standard method names and payload
   placement do not hide timings, body sizes, or connection metadata from wire
   observers.

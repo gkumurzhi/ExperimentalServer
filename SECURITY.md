@@ -69,6 +69,33 @@ High-level assumptions:
   authenticated users, vulnerabilities in `cryptography` / `acme` /
   PyOpenSSL / Python stdlib (report upstream).
 
+## Secure Notepad durability boundary
+
+Secure Notepad stores encrypted note blobs plus plaintext metadata, but it does
+not persist the client-derived AES key or other durable recovery material.
+Reloading the page, restarting the client or server, session expiry, or LRU
+session eviction can strand previously saved note bodies even though the
+ciphertext remains on disk.
+
+ADR-009 keeps durable recovery out of scope for now. Current HTTP and
+WebSocket Notepad flows are not a backup system, multi-device sync protocol, or
+server-side plaintext recovery feature. Any future recovery work would need a
+separate envelope-encryption/key-wrapping design, a recovery-secret model,
+migration rules for existing blobs, threat-model coverage, and end-to-end
+tests before implementation starts.
+
+## API/client support boundary
+
+The current HTTP/WebSocket surface is a legacy v0 contract, not a versioned
+public API program. The built-in browser UI, bundled examples, and
+operator-owned scripts are reference consumers of that surface, but they do not
+constitute an official SDK or a promise of broad public-client compatibility.
+
+ADR-010 defers `/api/v1` and any official SDK/client commitment until
+versioning, normalized error/idempotency semantics, feature selection,
+security/deployment expectations, ownership, and migration rules are approved
+together.
+
 ## Advanced Upload Caveats
 
 Advanced upload is a built-in transport convenience with optional payload
@@ -123,7 +150,18 @@ When running the server outside a trusted lab:
 - Basic Auth rate limiting in the app keys failures by the direct TCP peer IP
   address from the accepted socket. The app does not trust `Forwarded` or
   `X-Forwarded-For` headers, so proxied deployments need proxy-side per-client
-  auth/request throttling unless a future trusted-proxy model is added.
+  auth/request throttling and request-size limits in the front layer.
+
+ADR-008 keeps client identity at that accepted-socket peer boundary. The app
+does not trust `Forwarded`, `X-Forwarded-For`, `X-Real-IP`, or similar headers
+for throttling or policy decisions. In proxied deployments, app-side `401` and
+`429` behavior therefore reflects the proxy connection unless the proxy blocks
+end users earlier.
+
+Any future trusted-proxy support is deferred until a dedicated opt-in design
+lands with narrow proxy allowlists, one canonical forwarded-header policy,
+mixed-topology threat-model coverage, end-to-end tests, and observability that
+distinguishes direct peer identity from asserted client identity.
 
 ### External exposure baseline
 
@@ -143,15 +181,15 @@ material and schedule controlled restarts before certificate expiry so
 startup-time renewal can run.
 
 The root Dockerfile and example Compose file are local/operator examples.
-Tagged releases also publish `ghcr.io/gkumurzhi/exphttp` with provenance/SBOM
-settings in the release workflow, but deployment topology remains
-operator-owned. Treat `exphttp:local` as a local build and review the Compose
-topology before adapting it to an exposed environment. The checked-in Docker
-commands use the app `workspace` profile explicitly; change to `serve` for
-read-only containers and use `lab` only in controlled labs with TLS/Auth,
-firewall controls, proxy-side throttling, and resource limits. The ACME Compose
-profile exposes public ports for HTTP-01 and HTTPS and requires a Basic Auth
-secret.
+Tagged releases publish the `exphttp` PyPI package and the
+`ghcr.io/gkumurzhi/exphttp` image with provenance/SBOM settings in the release
+workflow, but deployment topology remains operator-owned. Treat
+`exphttp:local` as a local build and review the Compose topology before
+adapting it to an exposed environment. The checked-in Docker commands use the
+app `workspace` profile explicitly; change to `serve` for read-only containers
+and use `lab` only in controlled labs with TLS/Auth, firewall controls,
+proxy-side throttling, and resource limits. The ACME Compose profile exposes
+public ports for HTTP-01 and HTTPS and requires a Basic Auth secret.
 
 ## Known Limitations
 
