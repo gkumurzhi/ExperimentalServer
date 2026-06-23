@@ -123,7 +123,7 @@ def test_generate_smuggling_html_builder_download_name_is_script_safe() -> None:
         file_data=b"payload",
         filename="report.bin",
         builder=smuggling.SafeSmuggleBuilderConfig(
-            download_name='</script><script>alert(1)</script>',
+            download_name="</script><script>alert(1)</script>",
             download_ext="pdf",
             preset="direct",
         ),
@@ -139,7 +139,7 @@ def test_generate_smuggling_html_encrypted_builder_download_name_is_script_safe(
         filename="report.bin",
         password="hunter2",
         builder=smuggling.SafeSmuggleBuilderConfig(
-            download_name='</script><script>alert(1)</script>',
+            download_name="</script><script>alert(1)</script>",
             download_ext="pdf",
             preset="direct",
         ),

@@ -250,8 +250,7 @@ def _create_safe_html_no_password(
             f'onclick="startDownload()">{cta_label}</button>'
         )
         countdown_markup = (
-            '<p class="countdown">Auto-download in '
-            '<span id="smuggleCountdown"></span>s.</p>'
+            '<p class="countdown">Auto-download in <span id="smuggleCountdown"></span>s.</p>'
         )
         initial_status = "Auto-download scheduled."
         countdown_script = f"""

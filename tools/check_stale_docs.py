@@ -179,7 +179,10 @@ SEMANTIC_REQUIREMENTS: tuple[SemanticRequirement, ...] = (
     SemanticRequirement(
         Path("README.md"),
         re.compile(r"legacy v0[\s\S]+/api/v1", re.IGNORECASE),
-        "README must describe the current HTTP/WebSocket surface as legacy v0 and note that `/api/v1` is not implemented",
+        (
+            "README must describe the current HTTP/WebSocket surface as legacy v0 "
+            "and note that `/api/v1` is not implemented"
+        ),
     ),
     SemanticRequirement(
         Path("README.md"),
