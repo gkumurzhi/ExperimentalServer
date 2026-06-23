@@ -21,7 +21,13 @@ class MirrorSpec:
 
 
 MIRRORS: tuple[MirrorSpec, ...] = (
-    MirrorSpec("API.md", "docs/api.md"),
+    MirrorSpec(
+        "API.md",
+        "docs/api.md",
+        replacements=(
+            ("(docs/ADR/", "(ADR/"),
+        ),
+    ),
     MirrorSpec("CHANGELOG.md", "docs/changelog.md"),
     MirrorSpec("CONTRIBUTING.md", "docs/contributing.md"),
     MirrorSpec(

@@ -982,7 +982,7 @@ The limiter keys on the direct TCP peer IP from the accepted socket. In
 proxied deployments, `401`/`429` semantics therefore reflect the proxy
 connection unless the proxy enforces per-client throttling first. `Forwarded`,
 `X-Forwarded-For`, and similar headers are not trusted as client identity; see
-[`docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md`](docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md).
+[`docs/ADR/ADR-008-trusted-proxy-client-identity-boundary.md`](ADR/ADR-008-trusted-proxy-client-identity-boundary.md).
 
 ---
 
