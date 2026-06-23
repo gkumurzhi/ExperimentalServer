@@ -516,12 +516,14 @@ async function deleteFile(path, triggerEl = null) {
         return;
     }
 
+    const restoreFocusSelector = `[data-file-action="delete"][data-path="${encodeURIComponent(path)}"]`;
     const confirmed = await showConfirmDialog({
         title: t('deleteBtn'),
         message: t('deleteConfirm'),
         details: path,
         confirmLabel: t('deleteBtn'),
         triggerEl,
+        restoreFocusSelector,
         initialFocus: 'cancel',
     });
     if (!confirmed) return;

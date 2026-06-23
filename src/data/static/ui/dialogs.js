@@ -2,8 +2,10 @@
 let activeDialogId = null;
 let activeDialogKeyHandler = null;
 let activeDialogReturnFocusEl = null;
+let activeDialogReturnFocusSelector = '';
 let activeDialogResolve = null;
 let activeDialogRestoreFocusOnConfirm = false;
+let dialogFocusRestoreSeq = 0;
 
 function getDialogFocusable(modal) {
     return Array.from(
@@ -24,32 +26,50 @@ function canRestoreDialogFocus(target) {
     );
 }
 
-function restoreDialogFocus(target) {
-    if (!canRestoreDialogFocus(target)) {
-        return;
+function resolveDialogFocusTarget(target, selector = '') {
+    if (canRestoreDialogFocus(target)) {
+        return target;
     }
+    if (!selector) {
+        return null;
+    }
+    const resolved = document.querySelector(selector);
+    return canRestoreDialogFocus(resolved) ? resolved : null;
+}
+
+function restoreDialogFocus(target, selector = '') {
+    const restoreSeq = ++dialogFocusRestoreSeq;
 
     const applyFocus = () => {
-        if (!canRestoreDialogFocus(target)) {
-            return;
+        if (restoreSeq !== dialogFocusRestoreSeq) {
+            return true;
         }
-        target.focus({ preventScroll: true });
+
+        const focusTarget = resolveDialogFocusTarget(target, selector);
+        if (!focusTarget) {
+            return true;
+        }
+
+        focusTarget.focus({ preventScroll: true });
+        return document.activeElement === focusTarget;
     };
 
-    applyFocus();
-    if (document.activeElement === target) {
+    if (applyFocus()) {
         return;
     }
 
     // Some Chromium builds asynchronously retarget focus after the dialog subtree
-    // is removed, so retry on the next frame before giving up.
+    // is removed, so retry after the DOM settles and after a short fallback delay.
     const scheduleRetry = typeof requestAnimationFrame === 'function'
         ? requestAnimationFrame
-        : (callback) => setTimeout(callback, 0);
+        : (callback) => setTimeout(callback, 16);
     scheduleRetry(() => {
-        if (document.activeElement !== target) {
-            applyFocus();
+        if (applyFocus()) {
+            return;
         }
+        setTimeout(() => {
+            applyFocus();
+        }, 50);
     });
 }
 
@@ -57,6 +77,7 @@ function finishActiveDialog(result) {
     const modal = getActiveDialogElement();
     const resolve = activeDialogResolve;
     const focusTarget = (!result || activeDialogRestoreFocusOnConfirm) ? activeDialogReturnFocusEl : null;
+    const focusSelector = (!result || activeDialogRestoreFocusOnConfirm) ? activeDialogReturnFocusSelector : '';
 
     if (activeDialogKeyHandler) {
         document.removeEventListener('keydown', activeDialogKeyHandler);
@@ -66,13 +87,14 @@ function finishActiveDialog(result) {
     activeDialogId = null;
     activeDialogResolve = null;
     activeDialogReturnFocusEl = null;
+    activeDialogReturnFocusSelector = '';
     activeDialogRestoreFocusOnConfirm = false;
 
     if (modal) {
         modal.remove();
     }
 
-    restoreDialogFocus(focusTarget);
+    restoreDialogFocus(focusTarget, focusSelector);
 
     if (resolve) {
         resolve(result);
@@ -91,15 +113,18 @@ function openManagedDialog({
     dialogId,
     markup,
     triggerEl = null,
+    restoreFocusSelector = '',
     initialFocusSelector = '',
     restoreFocusOnConfirm = false,
     onAction = null,
 }) {
     closeActiveDialog();
+    dialogFocusRestoreSeq += 1;
 
     const activeElement = document.activeElement;
     activeDialogId = dialogId;
     activeDialogReturnFocusEl = triggerEl || (activeElement instanceof HTMLElement ? activeElement : null);
+    activeDialogReturnFocusSelector = restoreFocusSelector;
     activeDialogRestoreFocusOnConfirm = restoreFocusOnConfirm;
 
     const modal = document.createElement('div');
@@ -174,6 +199,7 @@ function showAppDialog({
     cancelLabel = t('smuggleCancel'),
     confirmClassName = 'btn-info',
     triggerEl = null,
+    restoreFocusSelector = '',
     showCancel = true,
     initialFocus = 'confirm',
     restoreFocusOnConfirm = false,
@@ -181,6 +207,7 @@ function showAppDialog({
     openManagedDialog({
         dialogId: 'appDialog',
         triggerEl,
+        restoreFocusSelector,
         initialFocusSelector: initialFocus === 'cancel' && showCancel
             ? '[data-dialog-action="cancel"]'
             : '[data-dialog-action="confirm"]',
@@ -219,6 +246,7 @@ function showConfirmDialog(options) {
         cancelLabel: options.cancelLabel || t('smuggleCancel'),
         confirmClassName: options.confirmClassName || 'btn-danger',
         triggerEl: options.triggerEl,
+        restoreFocusSelector: options.restoreFocusSelector || '',
         showCancel: true,
         initialFocus: options.initialFocus || 'cancel',
         restoreFocusOnConfirm: Boolean(options.restoreFocusOnConfirm),
@@ -234,6 +262,7 @@ function showNoticeDialog(options) {
         confirmLabel: options.confirmLabel || t('okBtn'),
         confirmClassName: options.confirmClassName || 'btn-info',
         triggerEl: options.triggerEl,
+        restoreFocusSelector: options.restoreFocusSelector || '',
         showCancel: false,
         initialFocus: 'confirm',
         restoreFocusOnConfirm: true,
