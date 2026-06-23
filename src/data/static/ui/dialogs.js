@@ -15,6 +15,44 @@ function getActiveDialogElement() {
     return activeDialogId ? document.getElementById(activeDialogId) : null;
 }
 
+function canRestoreDialogFocus(target) {
+    return Boolean(
+        target
+        && target.isConnected
+        && !target.disabled
+        && typeof target.focus === 'function'
+    );
+}
+
+function restoreDialogFocus(target) {
+    if (!canRestoreDialogFocus(target)) {
+        return;
+    }
+
+    const applyFocus = () => {
+        if (!canRestoreDialogFocus(target)) {
+            return;
+        }
+        target.focus({ preventScroll: true });
+    };
+
+    applyFocus();
+    if (document.activeElement === target) {
+        return;
+    }
+
+    // Some Chromium builds asynchronously retarget focus after the dialog subtree
+    // is removed, so retry on the next frame before giving up.
+    const scheduleRetry = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (callback) => setTimeout(callback, 0);
+    scheduleRetry(() => {
+        if (document.activeElement !== target) {
+            applyFocus();
+        }
+    });
+}
+
 function finishActiveDialog(result) {
     const modal = getActiveDialogElement();
     const resolve = activeDialogResolve;
@@ -34,9 +72,7 @@ function finishActiveDialog(result) {
         modal.remove();
     }
 
-    if (focusTarget && focusTarget.isConnected && !focusTarget.disabled && typeof focusTarget.focus === 'function') {
-        focusTarget.focus();
-    }
+    restoreDialogFocus(focusTarget);
 
     if (resolve) {
         resolve(result);
@@ -93,6 +129,8 @@ function openManagedDialog({
 
     activeDialogKeyHandler = (event) => {
         if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
             finishActiveDialog(false);
             return;
         }
