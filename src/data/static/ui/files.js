@@ -234,12 +234,12 @@ async function browseDirectory(options = {}) {
                     <div class="file-row__actions">
                         <div class="file-row__actions-primary">
                             <button
-                                class="btn-info btn--sm file-row__action-main file-row__action-icon"
+                                class="btn-info btn--sm file-row__action-main"
                                 data-file-action="open-dir"
                                 data-path="${encodedItemPath}"
                                 title="${openLabel}"
                                 aria-label="${openLabel}"
-                            >↗</button>
+                            >${esc(t('open'))}</button>
                         </div>
                     </div>
                 </div>
@@ -258,21 +258,21 @@ async function browseDirectory(options = {}) {
                     <div class="file-row__actions">
                         <div class="file-row__actions-primary">
                             <button
-                                class="btn-fetch btn--sm file-row__action-main file-row__action-icon"
+                                class="btn-fetch btn--sm file-row__action-main"
                                 data-file-action="download"
                                 data-path="${encodedItemPath}"
                                 title="${fetchLabel}"
                                 aria-label="${fetchLabel}"
-                            >↓</button>
+                            >${esc(t('download'))}</button>
                         </div>
                         <div class="file-row__actions-secondary" aria-label="${esc(t('advancedLabel'))}">
                             <button
-                                class="btn-ghost btn--sm file-row__action-muted file-row__action-icon"
+                                class="btn-ghost btn--sm file-row__action-muted file-row__action-compact"
                                 data-file-action="info"
                                 data-path="${encodedItemPath}"
                                 title="${infoLabel}"
                                 aria-label="${infoLabel}"
-                            >i</button>
+                            >${esc(t('fileInfoBtn'))}</button>
                             ${smuggleButton}
                             ${deleteButton}
                         </div>

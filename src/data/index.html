@@ -151,17 +151,28 @@
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabUpload">Загрузка на сервер</h2>
                     </div>
-                    <div class="tool-toolbar">
-                        <div class="segmented-control" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
-                            <button type="button" class="btn-post upload-method-btn active" data-upload-method="POST" role="radio" aria-checked="true" tabindex="0">POST</button>
-                            <button type="button" class="btn-none upload-method-btn" data-upload-method="NONE" role="radio" aria-checked="false" tabindex="-1">NONE</button>
-                            <button type="button" class="btn-put upload-method-btn" data-upload-method="PUT" role="radio" aria-checked="false" tabindex="-1">PUT</button>
-                            <button type="button" class="btn-patch upload-method-btn" data-upload-method="PATCH" role="radio" aria-checked="false" tabindex="-1">PATCH</button>
-                        </div>
-                    </div>
+                    <div class="tool-stack tool-stack--upload">
+                        <div class="tool-card tool-card--workflow">
+                            <div class="tool-workflow__header">
+                                <div class="segmented-control" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
+                                    <button type="button" class="btn-post upload-method-btn active" data-upload-method="POST" role="radio" aria-checked="true" tabindex="0">POST</button>
+                                    <button type="button" class="btn-none upload-method-btn" data-upload-method="NONE" role="radio" aria-checked="false" tabindex="-1">NONE</button>
+                                    <button type="button" class="btn-put upload-method-btn" data-upload-method="PUT" role="radio" aria-checked="false" tabindex="-1">PUT</button>
+                                    <button type="button" class="btn-patch upload-method-btn" data-upload-method="PATCH" role="radio" aria-checked="false" tabindex="-1">PATCH</button>
+                                </div>
+                                <button
+                                    class="btn-info btn--sm"
+                                    id="uploadBtn"
+                                    disabled
+                                    title="Загрузить"
+                                    aria-label="Загрузить"
+                                    data-i18n="uploadAllBtn"
+                                    data-i18n-title="uploadAllBtn"
+                                    data-i18n-aria-label="uploadAllBtn"
+                                    data-testid="upload-btn"
+                                >Загрузить</button>
+                            </div>
 
-                    <div class="tool-grid tool-grid--upload">
-                        <div class="tool-card">
                             <div class="upload-section dropzone" id="dropZone" tabindex="0" role="button" aria-controls="fileInput" aria-describedby="uploadMethodHint uploadSelectionState" aria-label="Выбрать файлы для загрузки" data-i18n-aria-label="uploadDropZoneLabel">
                                 <label class="upload-label" for="fileInput">
                                     <div class="upload-icon">⭳</div>
@@ -173,25 +184,10 @@
                             </div>
 
                             <div class="file-list queue-list" id="fileList" data-testid="file-list"></div>
-                        </div>
-
-                        <div class="tool-card tool-card--output">
-                            <div class="tool-card__actions">
-                                <button
-                                    class="btn-none btn-icon"
-                                    id="uploadBtn"
-                                    disabled
-                                    title="Загрузить"
-                                    aria-label="Загрузить"
-                                    data-i18n-title="uploadAllBtn"
-                                    data-i18n-aria-label="uploadAllBtn"
-                                    data-testid="upload-btn"
-                                >↑</button>
-                            </div>
 
                             <div class="sr-only" id="uploadResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
                             <section
-                                class="tool-result"
+                                class="tool-result tool-result--inline"
                                 data-tool-summary-scope="upload"
                                 data-tool-summary-idle-title-key="uploadResultIdleTitle"
                                 data-tool-summary-idle-body-key="uploadResultIdleBody"
@@ -354,61 +350,67 @@
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabFiles">Скачивание с сервера</h2>
                     </div>
-                    <div class="tool-grid tool-grid--files">
-                        <div class="tool-card">
+                    <div class="tool-stack tool-stack--files">
+                        <div class="tool-card tool-card--workflow">
                             <div class="file-browser__toolbar input-group">
                                 <button class="btn-fetch btn-icon" id="browseRootBtn" aria-label="Перейти в корень" data-i18n-aria-label="browseRootLabel">/</button>
                                 <button class="btn-ping btn-icon" id="browseUpBtn" aria-label="На уровень выше" data-i18n-aria-label="browseUpLabel">..</button>
                                 <label for="browsePathInput" class="sr-only" data-i18n="labelDirPath">Путь к директории</label>
                                 <input type="text" id="browsePathInput" data-i18n-placeholder="dirPathPlaceholder" placeholder="Путь к директории" value="/">
                                 <button
-                                    class="btn-info btn-icon"
+                                    class="btn-info btn--sm"
                                     id="browseBtn"
                                     title="Обзор"
                                     aria-label="Обзор"
+                                    data-i18n="browseBtn"
                                     data-i18n-title="browseBtn"
                                     data-i18n-aria-label="browseBtn"
-                                >→</button>
-                                <button
-                                    class="btn-danger btn-icon"
-                                    id="deleteSelectedUploadsBtn"
-                                    disabled
-                                    title="Удалить выбранные файлы"
-                                    aria-label="Удалить выбранные файлы"
-                                    data-i18n-title="deleteSelectedFilesBtn"
-                                    data-i18n-aria-label="deleteSelectedFilesBtn"
-                                >×</button>
-                                <button
-                                    class="btn-danger btn-icon"
-                                    id="clearUploadsBtn"
-                                    title="Очистить uploads/"
-                                    aria-label="Очистить uploads/"
-                                    data-i18n-title="clearUploadsBtn"
-                                    data-i18n-aria-label="clearUploadsBtn"
-                                >⌫</button>
+                                >Открыть</button>
                             </div>
 
-                            <div class="uploaded-files file-browser__list" id="serverFiles" data-testid="server-files"></div>
-                        </div>
+                            <div class="file-browser__bulk">
+                                <section
+                                    class="tool-result tool-result--inline"
+                                    data-tool-summary-scope="files"
+                                    data-tool-summary-idle-title-key="filesResultIdleTitle"
+                                    data-tool-summary-idle-body-key="filesResultIdleBody"
+                                    aria-labelledby="filesResultTitle"
+                                >
+                                    <div class="tool-result__header">
+                                        <p class="eyebrow" data-i18n="toolResultEyebrow">РЕЗУЛЬТАТ</p>
+                                        <span class="tool-result__badge" data-tool-summary-badge></span>
+                                    </div>
+                                    <h3 class="tool-result__title" id="filesResultTitle" data-tool-summary-title></h3>
+                                    <p class="tool-result__body" data-tool-summary-body></p>
+                                    <div class="tool-result__meta" data-tool-summary-meta></div>
+                                    <div class="tool-result__actions" data-tool-summary-actions hidden></div>
+                                </section>
 
-                        <div class="tool-card tool-card--output">
-                            <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <section
-                                class="tool-result"
-                                data-tool-summary-scope="files"
-                                data-tool-summary-idle-title-key="filesResultIdleTitle"
-                                data-tool-summary-idle-body-key="filesResultIdleBody"
-                                aria-labelledby="filesResultTitle"
-                            >
-                                <div class="tool-result__header">
-                                    <p class="eyebrow" data-i18n="toolResultEyebrow">РЕЗУЛЬТАТ</p>
-                                    <span class="tool-result__badge" data-tool-summary-badge></span>
+                                <div class="file-browser__bulk-actions">
+                                    <button
+                                        class="btn-danger btn--sm"
+                                        id="deleteSelectedUploadsBtn"
+                                        disabled
+                                        title="Удалить выбранные файлы"
+                                        aria-label="Удалить выбранные файлы"
+                                        data-i18n="deleteSelectedFilesBtn"
+                                        data-i18n-title="deleteSelectedFilesBtn"
+                                        data-i18n-aria-label="deleteSelectedFilesBtn"
+                                    >Удалить выбранные файлы</button>
+                                    <button
+                                        class="btn-danger btn--sm"
+                                        id="clearUploadsBtn"
+                                        title="Очистить uploads/"
+                                        aria-label="Очистить uploads/"
+                                        data-i18n="clearUploadsBtn"
+                                        data-i18n-title="clearUploadsBtn"
+                                        data-i18n-aria-label="clearUploadsBtn"
+                                    >Очистить uploads/</button>
                                 </div>
-                                <h3 class="tool-result__title" id="filesResultTitle" data-tool-summary-title></h3>
-                                <p class="tool-result__body" data-tool-summary-body></p>
-                                <div class="tool-result__meta" data-tool-summary-meta></div>
-                                <div class="tool-result__actions" data-tool-summary-actions hidden></div>
-                            </section>
+                            </div>
+
+                            <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                            <div class="uploaded-files file-browser__list" id="serverFiles" data-testid="server-files"></div>
                             <details class="tool-trace" data-tool-trace-scope="files">
                                 <summary class="tool-trace__summary">
                                     <span class="tool-trace__label" data-i18n="toolTraceSummary">Технические детали</span>
