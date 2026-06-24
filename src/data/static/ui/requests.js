@@ -8,6 +8,10 @@ const requestPreviewToggleEl = document.getElementById('requestPreviewToggle');
 const requestPreviewSectionEl = document.getElementById('requestPreviewSection');
 const requestPreviewAreaEl = document.getElementById('requestPreviewArea');
 const requestPreviewCopyBtnEl = document.getElementById('requestPreviewCopyBtn');
+const heroResponsePanelEl = document.getElementById('heroResponsePanel');
+const requestPreviewPaneEl = requestPreviewAreaEl
+    ? requestPreviewAreaEl.closest('.exchange-pane--request')
+    : null;
 const requestRunAllBtnEl = document.getElementById('requestRunAllBtn');
 const requestBatchRerunIssuesBtnEl = document.getElementById('requestBatchRerunIssuesBtn');
 const requestBatchExportBtnEl = document.getElementById('requestBatchExportBtn');
@@ -273,6 +277,30 @@ function setRequestPathValue(path) {
     }
 }
 
+function isVisibleRequestFocusTarget(element) {
+    return Boolean(
+        element &&
+        typeof element.focus === 'function' &&
+        !element.hidden &&
+        !element.disabled &&
+        typeof element.getClientRects === 'function' &&
+        element.getClientRects().length > 0
+    );
+}
+
+function resolveStableRequestTriggerElement(element) {
+    if (isVisibleRequestFocusTarget(element)) {
+        return element;
+    }
+    if (isVisibleRequestFocusTarget(pathInputEl)) {
+        return pathInputEl;
+    }
+    if (isVisibleRequestFocusTarget(responseAreaEl)) {
+        return responseAreaEl;
+    }
+    return null;
+}
+
 function syncRequestControlState() {
     const controlsDisabled = isRequestBusy || isRequestBatchRunning;
     requestMethodButtons.forEach(button => {
@@ -310,6 +338,19 @@ function setResponseAreaState(method, path, phase, status = '') {
     responseAreaEl.dataset.requestPhase = phase || '';
     responseAreaEl.dataset.requestStatus = status ? String(status) : '';
     responseAreaEl.dataset.requestView = requestPreviewMode;
+}
+
+function syncHeroResponsePanelState() {
+    if (!heroResponsePanelEl) {
+        return;
+    }
+
+    const phase = responseViewState.phase === 'idle' ? 'idle' : 'active';
+    heroResponsePanelEl.dataset.panelState = phase;
+    if (responseAreaEl) {
+        responseAreaEl.dataset.panelState = phase;
+        responseAreaEl.setAttribute('aria-busy', String(responseViewState.phase === 'progress'));
+    }
 }
 
 function cloneRequestPreviewState(state) {
@@ -1470,6 +1511,7 @@ function renderResponseView() {
     updateResponseCopyButtonState();
     if (responseViewState.phase === 'idle') {
         responseAreaEl.textContent = t('exchangeResponseEmpty');
+        syncHeroResponsePanelState();
         return;
     }
 
@@ -1480,6 +1522,7 @@ function renderResponseView() {
             ? `${t(messageKey)} ${esc(method)} ${t('requestTo')} ${esc(path)}...`
             : `${t(messageKey)} ${esc(method)}...`;
         responseAreaEl.innerHTML = `<div class="response-header">${actionText}</div>`;
+        syncHeroResponsePanelState();
         return;
     }
 
@@ -1496,6 +1539,7 @@ function renderResponseView() {
             const buttonHtml = buildFetchDownloadButton(model.path, filename);
             responseAreaEl.innerHTML += actionsClass ? `\n\n<div class="${actionsClass}">${buttonHtml}</div>` : `\n\n${buttonHtml}`;
         }
+        syncHeroResponsePanelState();
         return;
     }
 
@@ -1504,12 +1548,16 @@ function renderResponseView() {
             ? buildSummaryResponseErrorView(responseViewState.model)
             : buildRawResponseErrorView(responseViewState.model);
     }
+    syncHeroResponsePanelState();
 }
 
 function renderRequestPreview() {
     if (!requestPreviewSectionEl || !requestPreviewAreaEl) return;
 
     requestPreviewSectionEl.hidden = !showRequestPreview;
+    if (requestPreviewPaneEl) {
+        requestPreviewPaneEl.hidden = requestPreviewState.phase === 'empty';
+    }
     updateRequestCopyButtonState();
     if (!showRequestPreview) {
         return;
@@ -1542,6 +1590,7 @@ function renderRequestPreview() {
 }
 
 setRequestPreviewMode(requestPreviewMode);
+setResponseAreaState('', '', 'idle');
 
 function setRequestPreviewPreparing() {
     requestPreviewState = {
@@ -1749,6 +1798,7 @@ async function resolveRequestPanelSmuggleSourcePath(typedPath) {
 }
 
 async function executeRequestPanelSmuggle(filePath, builderState, triggerEl = null) {
+    const stableTriggerEl = resolveStableRequestTriggerElement(triggerEl);
     const requestPath = buildSmuggleRequestPath(filePath, builderState);
     const url = SERVER_URL + requestPath;
     setRequestPreviewModel(createRequestPreviewModel('SMUGGLE', requestPath, { path: requestPath }));
@@ -1773,7 +1823,7 @@ async function executeRequestPanelSmuggle(filePath, builderState, triggerEl = nu
             renderRequestSuccess('SMUGGLE', requestPath, response, duration, buildSmuggleResponseSummary(result));
             setResponseAreaState('SMUGGLE', requestPath, 'complete', response.status);
             announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('smuggleGenerated')}`);
-            showSmuggleResultDialog(filePath, result, triggerEl, { liveRegionId: 'responseAreaLive' });
+            showSmuggleResultDialog(filePath, result, stableTriggerEl, { liveRegionId: 'responseAreaLive' });
             return;
         }
 
@@ -1785,8 +1835,8 @@ async function executeRequestPanelSmuggle(filePath, builderState, triggerEl = nu
         renderRequestError('SMUGGLE', requestPath, requestError);
         setResponseAreaState('SMUGGLE', requestPath, 'error');
         announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('error')}: ${requestError.message}`);
-        if (triggerEl) {
-            focusElementWithoutScroll(triggerEl);
+        if (stableTriggerEl) {
+            focusElementWithoutScroll(stableTriggerEl);
         }
     } catch (error) {
         setRequestPreviewResult({
@@ -1796,13 +1846,14 @@ async function executeRequestPanelSmuggle(filePath, builderState, triggerEl = nu
         renderRequestError('SMUGGLE', requestPath, error);
         setResponseAreaState('SMUGGLE', requestPath, 'error');
         announceLiveRegion('responseAreaLive', `SMUGGLE ${requestPath} ${t('error')}: ${error.message}`);
-        if (triggerEl) {
-            focusElementWithoutScroll(triggerEl);
+        if (stableTriggerEl) {
+            focusElementWithoutScroll(stableTriggerEl);
         }
     }
 }
 
 async function launchRequestPanelSmuggleBuilder(triggerEl = null) {
+    const stableTriggerEl = resolveStableRequestTriggerElement(triggerEl);
     if (!responseAreaEl) {
         return;
     }
@@ -1847,9 +1898,9 @@ async function launchRequestPanelSmuggleBuilder(triggerEl = null) {
         return;
     }
 
-    showSmuggleDialog(sourcePath, triggerEl, {
+    showSmuggleDialog(sourcePath, stableTriggerEl, {
         onConfirm: (builderState) => {
-            void executeRequestPanelSmuggle(sourcePath, builderState, triggerEl);
+            void executeRequestPanelSmuggle(sourcePath, builderState, stableTriggerEl);
         },
     });
 }

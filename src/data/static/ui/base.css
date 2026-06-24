@@ -53,6 +53,25 @@ label {
     gap: var(--space-5);
 }
 
+.workspace-shell {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.workspace-stage {
+    display: grid;
+    min-width: 0;
+}
+
+.workspace-view__header {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.workspace-view__header h2 {
+    margin: 0;
+}
+
 .topbar {
     display: flex;
     justify-content: space-between;
@@ -98,7 +117,42 @@ label {
 }
 
 .hero-shell {
-    display: block;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+}
+
+.tool-entry-strip {
+    display: grid;
+    gap: var(--space-3);
+}
+
+.tool-entry-strip__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: var(--space-3);
+}
+
+.tool-entry-strip__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.advanced-tools-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: var(--space-4);
+}
+
+.advanced-tools-header__text h2 {
+    margin: 0;
+}
+
+.text-right {
+    text-align: right;
 }
 
 .advanced-tools__header,
@@ -264,12 +318,13 @@ label {
     .tool-grid--opsec {
         grid-template-columns: 1fr;
     }
-
 }
 
 @media (max-width: 900px) {
     .topbar,
+    .tool-entry-strip__header,
     .advanced-tools__header,
+    .advanced-tools-header,
     .tool-toolbar {
         flex-direction: column;
         align-items: stretch;
@@ -299,6 +354,10 @@ label {
         gap: var(--space-3);
     }
 
+    .workspace-shell {
+        gap: var(--space-3);
+    }
+
     .advanced-tools {
         gap: var(--space-2);
     }
@@ -324,6 +383,7 @@ label {
     }
 
     .advanced-tools__header,
+    .tool-entry-strip__header,
     .tool-toolbar,
     .tool-grid {
         gap: var(--space-2);

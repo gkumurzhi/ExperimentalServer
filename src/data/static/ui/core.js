@@ -31,6 +31,7 @@ const translations = {
         themeToggleLabel: "Переключить тему",
         quickRequestMethodsLabel: "Методы запроса",
         primaryWorkflowsLabel: "Основные сценарии",
+        serverModesLabel: "Режимы сервера",
         serverToolsLabel: "Инструменты сервера",
         browseRootLabel: "Перейти в корень",
         browseUpLabel: "На уровень выше",
@@ -41,16 +42,24 @@ const translations = {
         requestPanelTitle: "Запрос",
         requestPanelHint: "Быстрый запрос, быстрый ответ и быстрый переход к загрузке или скачиванию.",
         requestMetaHint: "Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.",
+        heroWorkingPanelEyebrow: "РАБОЧАЯ ПАНЕЛЬ",
+        heroWorkingPanelTitle: "Проверяйте маршруты и методы без лишнего шума",
+        heroWorkingPanelHint: "Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.",
         responsePanelLabel: "Ответ",
         responsePanelTitle: "Ответ",
         responsePanelHint: "Статус, заголовки и полезные данные появляются здесь без переключения вкладок.",
+        heroResponsePanelEyebrow: "ОТВЕТ",
+        heroResponsePanelTitle: "Живой вывод сервера",
+        heroResponsePanelSubtitle: "Статус, заголовки и полезные данные появляются здесь без переключения вкладок.",
         capabilityUploadDesc: "Отправка локальных файлов на сервер.",
         capabilityFilesDesc: "Просмотр, скачивание и удаление файлов с сервера.",
         capabilityOpsecDesc: "Продвинутая загрузка через тело, заголовки или URL.",
         capabilityNotepadDesc: "Шифрованные тексты заметок через HTTP и WebSocket; заголовки остаются метаданными.",
         advancedLabel: "Расширенные инструменты",
+        advancedToolsEyebrow: "РАСШИРЕННЫЕ ИНСТРУМЕНТЫ",
         advancedToolsTitle: "Загрузка на сервер, скачивание с сервера и заметки",
         advancedToolsHint: "Основной сценарий сверху, продвинутые инструменты ниже.",
+        toolEntryHint: "Откройте нужный инструмент только когда он понадобится.",
         uploadHelper: "Отправьте локальные файлы на сервер, выберите метод и сразу проверьте ответ.",
         filesHelper: "Просмотрите файлы на сервере, скачайте нужные и проверьте детали ответа под списком.",
         opsecHelper: "Отдельный сценарий для продвинутой загрузки и выбора транспорта.",
@@ -368,6 +377,7 @@ const translations = {
         themeToggleLabel: "Toggle theme",
         quickRequestMethodsLabel: "Request methods",
         primaryWorkflowsLabel: "Primary workflows",
+        serverModesLabel: "Server modes",
         serverToolsLabel: "Server tools",
         browseRootLabel: "Go to root",
         browseUpLabel: "Go up",
@@ -378,16 +388,24 @@ const translations = {
         requestPanelTitle: "Request",
         requestPanelHint: "Fast requests, quick responses, and direct jumps into uploads or download.",
         requestMetaHint: "Try `/index.html`, `/uploads/`, or any NOTE/INFO-compatible path.",
+        heroWorkingPanelEyebrow: "WORKBENCH",
+        heroWorkingPanelTitle: "Check routes and methods without the extra noise",
+        heroWorkingPanelHint: "Try `/index.html`, `/uploads/`, or any NOTE/INFO-compatible path.",
         responsePanelLabel: "Response",
         responsePanelTitle: "Response",
         responsePanelHint: "Status, headers, and payload appear here without switching tabs.",
+        heroResponsePanelEyebrow: "RESPONSE",
+        heroResponsePanelTitle: "Live server output",
+        heroResponsePanelSubtitle: "Status, headers, and useful payloads appear here without switching tabs.",
         capabilityUploadDesc: "Send local files to the server.",
         capabilityFilesDesc: "Browse, download, and delete files from the server.",
         capabilityOpsecDesc: "Advanced uploads through body, headers, or URL params.",
         capabilityNotepadDesc: "Encrypted note bodies over HTTP and WebSocket; titles remain metadata.",
         advancedLabel: "More actions",
+        advancedToolsEyebrow: "ADVANCED TOOLS",
         advancedToolsTitle: "Upload to server, download from server, and notes",
         advancedToolsHint: "Keep the core workflow upfront; advanced tools live below.",
+        toolEntryHint: "Open deeper tools only when you need them.",
         uploadHelper: "Send local files to the server, choose a method, and inspect the response right away.",
         filesHelper: "Browse server files, download what you need, and inspect response details below the list.",
         opsecHelper: "Dedicated flow for advanced uploads and transport tuning.",
@@ -857,22 +875,62 @@ function isServerMethodSupported(method) {
     return serverSupportedMethods.includes(String(method || '').toUpperCase());
 }
 
+function isToolAvailable(tabName) {
+    switch (String(tabName || '')) {
+        case 'request':
+            return true;
+        case 'upload':
+            return isServerCapabilityEnabled('ordinary_upload');
+        case 'opsec':
+            return isServerCapabilityEnabled('advanced_upload');
+        case 'notepad':
+            return isServerCapabilityEnabled('note_http');
+        case 'files':
+            return true;
+        default:
+            return false;
+    }
+}
+
+function getVisibleToolTabs() {
+    return Array.from(document.querySelectorAll('.tab[role="tab"][data-tab-target]'))
+        .filter(button => !button.hidden);
+}
+
+function getFirstAvailableToolTabName() {
+    const firstButton = getVisibleToolTabs()[0];
+    return firstButton?.dataset.tabTarget || '';
+}
+
+function refreshToolEntrypoints() {
+    document.querySelectorAll('.tab[role="tab"][data-tab-target]').forEach(button => {
+        const tabName = button.dataset.tabTarget || '';
+        const available = isToolAvailable(tabName);
+        button.hidden = !available;
+        button.setAttribute('aria-hidden', String(!available));
+        button.classList.toggle('is-capability-disabled', !available);
+        button.disabled = false;
+    });
+
+    const activeTabButton = document.querySelector('.tab[role="tab"].active[data-tab-target]');
+    if (activeTabButton && !activeTabButton.hidden) {
+        syncCapabilityChips(activeTabButton.dataset.tabTarget || '');
+        return;
+    }
+
+    const fallbackTabName = getFirstAvailableToolTabName();
+    if (fallbackTabName) {
+        switchTab(fallbackTabName, document.getElementById(`tab-${fallbackTabName}`));
+    }
+}
+
 function refreshCapabilityBoundControls() {
     document.querySelectorAll('[data-request-method]').forEach(button => {
         const supported = isServerMethodSupported(button.dataset.requestMethod);
         button.dataset.capabilityAvailable = supported ? 'true' : 'false';
         button.disabled = !supported;
     });
-
-    const opsecTab = document.getElementById('tab-opsec');
-    const notepadTab = document.getElementById('tab-notepad');
-    if (opsecTab) {
-        opsecTab.classList.toggle('is-capability-disabled', !isServerCapabilityEnabled('advanced_upload'));
-    }
-    if (notepadTab) {
-        notepadTab.classList.toggle('is-capability-disabled', !isServerCapabilityEnabled('note_http'));
-        notepadTab.disabled = !isServerCapabilityEnabled('note_http');
-    }
+    refreshToolEntrypoints();
 
     if (typeof refreshUploadCapability === 'function') {
         refreshUploadCapability();
@@ -1008,8 +1066,31 @@ function focusElementWithoutScroll(element) {
     }
 }
 
+function resolveToolTabRequest(tabName, tabButton = null) {
+    const requestedButton = tabButton || document.getElementById(`tab-${tabName}`);
+    if (requestedButton && !requestedButton.hidden) {
+        return {
+            tabName,
+            button: requestedButton,
+        };
+    }
+
+    const fallbackTabName = getFirstAvailableToolTabName();
+    const fallbackButton = fallbackTabName ? document.getElementById(`tab-${fallbackTabName}`) : null;
+    return {
+        tabName: fallbackTabName || tabName,
+        button: fallbackButton,
+    };
+}
+
 function switchTab(tabName, tabButton, options = {}) {
     const { focusTabButton = false } = options;
+    const resolved = resolveToolTabRequest(tabName, tabButton);
+    const resolvedTabName = resolved.tabName;
+    const resolvedTabButton = resolved.button;
+    if (!resolvedTabButton) {
+        return;
+    }
 
     document.querySelectorAll('.tab[role="tab"]').forEach(t => {
         t.classList.remove('active');
@@ -1021,32 +1102,33 @@ function switchTab(tabName, tabButton, options = {}) {
         panel.hidden = true;
     });
 
-    const resolvedTabButton = tabButton || document.getElementById('tab-' + tabName);
-    if (resolvedTabButton) {
-        resolvedTabButton.classList.add('active');
-        resolvedTabButton.setAttribute('aria-selected', 'true');
-        resolvedTabButton.setAttribute('tabindex', '0');
-    }
+    resolvedTabButton.classList.add('active');
+    resolvedTabButton.setAttribute('aria-selected', 'true');
+    resolvedTabButton.setAttribute('tabindex', '0');
 
-    const targetPanel = document.getElementById(tabName + '-tab');
+    const targetPanel = document.getElementById(resolvedTabName + '-tab');
     if (targetPanel) {
         targetPanel.classList.add('active');
         targetPanel.hidden = false;
     }
 
-    syncCapabilityChips(tabName);
+    if (document.body) {
+        document.body.dataset.activeMode = resolvedTabName;
+    }
+
+    syncCapabilityChips(resolvedTabName);
 
     // Update URL hash
-    history.replaceState(null, '', '#' + tabName);
+    history.replaceState(null, '', '#' + resolvedTabName);
 
-    if (focusTabButton && resolvedTabButton) {
+    if (focusTabButton) {
         focusElementWithoutScroll(resolvedTabButton);
     }
 
-    if (tabName === 'files') {
+    if (resolvedTabName === 'files') {
         setTimeout(browseDirectory, 100);
     }
-    if (tabName === 'notepad') {
+    if (resolvedTabName === 'notepad') {
         notepadInit();
     }
 }
@@ -1063,30 +1145,12 @@ function bindCoreControls() {
         themeBtn.addEventListener('click', toggleTheme);
     }
 
-    document.querySelectorAll('.capability-chip[data-tab-target]').forEach(button => {
+    document.querySelectorAll('.tab[role="tab"][data-tab-target]').forEach(button => {
         button.addEventListener('click', (event) => {
             const tabName = button.dataset.tabTarget;
-            if (!tabName) return;
-
-            const tabButton = document.getElementById('tab-' + tabName);
-            const focusTabButton = event.detail === 0;
-            switchTab(tabName, tabButton, { focusTabButton });
-
-            const scrollTarget = button.dataset.scrollTarget;
-            if (scrollTarget) {
-                document.getElementById(scrollTarget)?.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
-                });
-            }
-        });
-    });
-
-    document.querySelectorAll('.tab[role="tab"][data-tab-target]').forEach(button => {
-        button.addEventListener('click', () => {
-            const tabName = button.dataset.tabTarget;
             if (tabName) {
-                switchTab(tabName, button);
+                const focusTabButton = event.detail === 0;
+                switchTab(tabName, button, { focusTabButton });
             }
         });
     });
@@ -1098,7 +1162,15 @@ function activateTabFromHash() {
     const hash = location.hash.replace('#', '');
     if (hash && document.getElementById(hash + '-tab')) {
         const tabBtn = document.getElementById('tab-' + hash);
-        if (tabBtn) switchTab(hash, tabBtn);
+        if (tabBtn) {
+            switchTab(hash, tabBtn);
+            return;
+        }
+    }
+
+    const fallbackTabName = getFirstAvailableToolTabName() || 'request';
+    if (fallbackTabName) {
+        switchTab(fallbackTabName, document.getElementById(`tab-${fallbackTabName}`));
     }
 }
 
@@ -1114,7 +1186,7 @@ window.addEventListener('hashchange', () => {
 const tabList = document.querySelector('[role="tablist"]');
 if (tabList) {
     tabList.addEventListener('keydown', (e) => {
-        const tabs = Array.from(document.querySelectorAll('[role="tab"]'));
+        const tabs = getVisibleToolTabs();
         const currentIndex = tabs.indexOf(document.activeElement);
         if (currentIndex === -1) return;
 

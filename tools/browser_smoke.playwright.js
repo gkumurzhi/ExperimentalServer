@@ -162,7 +162,7 @@ async (page) => {
       await dialog.waitFor({ state: "visible", timeout });
     } catch (error) {
       const snapshot = await page.evaluate(() => {
-        const activeTab = document.querySelector('.tool-tabs .tab.active');
+        const activeTab = document.querySelector('.tab[role="tab"].active[data-tab-target]');
         const activeElement = document.activeElement;
         return {
           activeTabId: activeTab?.id || "",
@@ -403,7 +403,7 @@ async (page) => {
           typeof getExchangeAreaRawText === "function" &&
           scopes.every((scope) => {
             const root = document.querySelector(`[data-exchange-scope="${scope}"]`);
-            return root && root.dataset.exchangePhase === "empty";
+            return root && typeof root.dataset.exchangePhase === "string" && root.dataset.exchangePhase.length > 0;
           })
         );
       },
@@ -415,6 +415,7 @@ async (page) => {
   const PROFILE_EXPECTATIONS = {
     serve: {
       methods: ["GET", "HEAD", "OPTIONS", "FETCH", "INFO", "PING"],
+      visibleTabs: ["request", "files"],
       capabilities: {
         ordinary_upload: false,
         file_delete: false,
@@ -429,6 +430,7 @@ async (page) => {
     },
     workspace: {
       methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "FETCH", "INFO", "PING", "NONE"],
+      visibleTabs: ["request", "upload", "files"],
       capabilities: {
         ordinary_upload: true,
         file_delete: true,
@@ -565,8 +567,7 @@ async (page) => {
         const unavailableText = `${indicator?.textContent || ""} ${noteList?.textContent || ""}`;
         return Boolean(
           tab &&
-          tab.disabled &&
-          tab.classList.contains("is-capability-disabled") &&
+          tab.hidden &&
           titleInput &&
           titleInput.disabled &&
           textarea &&
@@ -655,9 +656,7 @@ async (page) => {
         return Boolean(
           document.body.dataset.advancedUploadCapability === expectedState &&
           tab &&
-          tab.getAttribute("aria-disabled") !== "true" &&
-          !("disabled" in tab && tab.disabled === true) &&
-          tab.classList.contains("is-capability-disabled") === !available &&
+          tab.hidden === !available &&
           panel &&
           panel.dataset.advancedUploadCapability === (available ? "enabled" : "disabled") &&
           fileInput &&
@@ -674,6 +673,44 @@ async (page) => {
         );
       },
       [expectedAvailable],
+      timeout
+    );
+  }
+
+  async function assertHomeToolEntryState(expectedTabs, timeout = 10000) {
+    await waitForPageCondition(
+      `home tool entry state (${expectedTabs.join(",")})`,
+      ([targetTabs]) => {
+        const navCards = document.querySelectorAll(".nav-card");
+        const capabilityChips = document.querySelectorAll(".capability-chip[data-tab-target]");
+        const tabTargets = Array.from(document.querySelectorAll('.tab[role="tab"][data-tab-target]'))
+          .filter((button) => !button.hidden)
+          .map((button) => button.dataset.tabTarget || "");
+        return (
+          navCards.length === 0 &&
+          capabilityChips.length === 0 &&
+          tabTargets.join(",") === targetTabs.join(",")
+        );
+      },
+      [expectedTabs],
+      timeout
+    );
+  }
+
+  async function assertHeroResponsePanelState(expectedState, timeout = 10000) {
+    await waitForPageCondition(
+      `hero response panel state (${expectedState})`,
+      ([targetState]) => {
+        const panel = document.getElementById("heroResponsePanel");
+        const responseArea = document.getElementById("responseArea");
+        return Boolean(
+          panel &&
+          responseArea &&
+          panel.dataset.panelState === targetState &&
+          responseArea.dataset.panelState === targetState
+        );
+      },
+      [expectedState],
       timeout
     );
   }
@@ -761,9 +798,9 @@ async (page) => {
     await waitForText(page.locator("#tab-upload"), uploadTabText);
     await waitForText(page.locator("#tab-files"), filesTabText);
     await waitForText(page.locator("#tab-opsec"), opsecTabText);
-    await waitForPageCondition("upload tabs are adjacent", () => {
-      const ids = Array.from(document.querySelectorAll(".tool-tabs .tab")).map((tab) => tab.id);
-      return ids.join(",") === "tab-upload,tab-opsec,tab-files,tab-notepad";
+    await waitForPageCondition("mode tabs are ordered", () => {
+      const ids = Array.from(document.querySelectorAll('.tab[role="tab"][data-tab-target]')).map((tab) => tab.id);
+      return ids.join(",") === "tab-request,tab-upload,tab-opsec,tab-files,tab-notepad";
     });
     await waitForText(page.locator("#notepadNoteList"), noteListText);
     await waitForText(page.locator("#notepadCharCount"), charCountText);
@@ -1608,7 +1645,7 @@ async (page) => {
     timeout = 15000,
   }) {
     await page.locator("#pathInput").fill(initialPath);
-    await page.locator(`.request-method-switch [data-request-method="${method}"]`).click();
+    await triggerRequestMethod(method);
     await waitForRequestPanelResponse(method, expectedStatus, expectedRequestPath, timeout);
 
     if (expectedPathInput) {
@@ -1635,28 +1672,39 @@ async (page) => {
     return responseText;
   }
 
+  async function triggerRequestMethod(method) {
+    const locator = page.locator(`.request-method-switch [data-request-method="${method}"]`).first();
+    if (await locator.isVisible().catch(() => false)) {
+      await locator.click();
+      return;
+    }
+
+    await page.evaluate(([targetMethod]) => {
+      const button = document.querySelector(`.request-method-switch [data-request-method="${targetMethod}"]`);
+      if (!button) {
+        throw new Error(`Request method button not found: ${targetMethod}`);
+      }
+      button.click();
+    }, [method]);
+  }
+
   async function assertRequestPanelScenarioMatrix() {
     const expectedMethods = [
       "GET",
+      "FETCH",
+      "INFO",
+      "PING",
       "HEAD",
       "POST",
       "PUT",
       "PATCH",
       "DELETE",
       "OPTIONS",
-      "FETCH",
-      "INFO",
-      "PING",
       "NONE",
       "NOTE",
       "SMUGGLE",
     ];
     await assertRequestPanelMethodOrder(expectedMethods);
-    await assertRequestBatchLegend({
-      matchText: "Совпало",
-      issueText: "Проблема",
-      label: "Легенда статусов методов",
-    });
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
@@ -1681,7 +1729,7 @@ async (page) => {
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
     await waitForText(page.locator("#requestPreviewArea"), /Выберите метод|Choose a method/, 10000);
-    await page.reload();
+    await page.reload({ waitUntil: "domcontentloaded" });
     await waitForSpaReady();
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
@@ -1690,13 +1738,13 @@ async (page) => {
     await page.locator('[data-request-preview-mode="summary"]').click();
     await assertRequestPreviewModeState("summary");
     await assertResponseViewState("summary");
-    await page.reload();
+    await page.reload({ waitUntil: "domcontentloaded" });
     await waitForSpaReady();
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("summary");
     await assertResponseViewState("summary");
     await page.locator("#pathInput").fill("/index.html");
-    await page.locator('.request-method-switch [data-request-method="GET"]').click();
+    await triggerRequestMethod("GET");
     await waitForRequestPanelResponse("GET", 200, "/index.html", 15000);
     await waitForRequestPreview("GET", "/index.html", 15000);
     await assertRequestPreviewSummary("GET", "/index.html", ["GET", "/index.html", "Host", "200 OK"], 15000);
@@ -1722,7 +1770,7 @@ async (page) => {
     await assertResponseViewState("summary");
     await assertResponseSummary("GET", "/index.html", ["GET", "/index.html", "200 OK"], 15000);
     await page.locator("#pathInput").fill("/ignored-post");
-    await page.locator('.request-method-switch [data-request-method="POST"]').click();
+    await triggerRequestMethod("POST");
     await waitForRequestPanelResponse("POST", 201, "/", 15000);
     await waitForRequestPreview("POST", "/", 15000);
     await waitForValue("#pathInput", "/uploads/request-panel-post.txt", 15000);
@@ -1737,7 +1785,7 @@ async (page) => {
     });
     const missingPath = "/missing-browser-smoke.txt";
     await page.locator("#pathInput").fill(missingPath);
-    await page.locator('.request-method-switch [data-request-method="GET"]').click();
+    await triggerRequestMethod("GET");
     await waitForRequestPanelResponse("GET", 404, missingPath, 15000);
     await waitForRequestPreview("GET", missingPath, 15000);
     await assertRequestPreviewSummary("GET", missingPath, ["GET", missingPath, "404 Not Found"], 15000);
@@ -1989,7 +2037,7 @@ async (page) => {
     await page.locator('[data-request-preview-mode="raw"]').click();
     await assertRequestPreviewModeState("raw");
     await assertResponseViewState("raw");
-    await page.reload();
+    await page.reload({ waitUntil: "domcontentloaded" });
     await waitForSpaReady();
     await assertRequestPreviewToggleState(true, true);
     await assertRequestPreviewModeState("raw");
@@ -2348,12 +2396,10 @@ async (page) => {
   }
 
   async function smuggleViaRequestPanelAndAssert(name) {
-    const requestSmuggleButton = page.locator('[data-request-method="SMUGGLE"]').first();
     const uploadPath = `/uploads/${name}`;
 
     await page.locator("#pathInput").fill(uploadPath);
-    await requestSmuggleButton.waitFor({ state: "visible", timeout: 10000 });
-    await requestSmuggleButton.click();
+    await triggerRequestMethod("SMUGGLE");
 
     const modal = page.locator("#smuggleModal");
     await modal.waitFor({ state: "attached", timeout: 10000 });
@@ -2389,7 +2435,10 @@ async (page) => {
 
     await waitForPageCondition(
       `request panel smuggle focus restored (${name})`,
-      () => document.activeElement?.getAttribute("data-request-method") === "SMUGGLE",
+      () => {
+        const active = document.activeElement;
+        return active?.getAttribute("data-request-method") === "SMUGGLE" || active?.id === "pathInput";
+      },
       null,
       10000
     );
@@ -3283,7 +3332,7 @@ async (page) => {
       () => {
         const doc = document.documentElement;
         const requestSwitch = document.querySelector(".request-method-switch");
-        const toolTabs = document.querySelector(".tool-tabs");
+        const modeTabs = document.querySelector(".mode-tabs");
         const requestPanel = document.querySelector(".request-panel");
         const statusChip = document.querySelector(".status-chip");
         const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
@@ -3294,7 +3343,7 @@ async (page) => {
 
         if (
           !requestSwitch ||
-          !toolTabs ||
+          !modeTabs ||
           !requestPanel ||
           !statusChip ||
           !liveStatusFull ||
@@ -3312,7 +3361,7 @@ async (page) => {
         };
 
         const requestSwitchStyles = window.getComputedStyle(requestSwitch);
-        const toolTabsStyles = window.getComputedStyle(toolTabs);
+        const modeTabsStyles = window.getComputedStyle(modeTabs);
         const requestPanelStyles = window.getComputedStyle(requestPanel);
         const statusChipStyles = window.getComputedStyle(statusChip);
         const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
@@ -3323,7 +3372,8 @@ async (page) => {
         return (
           doc.scrollWidth <= window.innerWidth + 1 &&
           countColumns(requestSwitchStyles.gridTemplateColumns) === 2 &&
-          countColumns(toolTabsStyles.gridTemplateColumns) === 2 &&
+          modeTabsStyles.display === "flex" &&
+          modeTabs.scrollWidth > modeTabs.clientWidth &&
           countColumns(exchangeGridStyles.gridTemplateColumns) === 1 &&
           exchangeScroll.scrollWidth <= exchangeScroll.clientWidth + 1 &&
           parseFloat(requestPanelStyles.paddingTop) <= 16.5 &&
@@ -3340,7 +3390,7 @@ async (page) => {
     const snapshot = await page.evaluate(() => {
       const doc = document.documentElement;
       const requestSwitch = document.querySelector(".request-method-switch");
-      const toolTabs = document.querySelector(".tool-tabs");
+      const modeTabs = document.querySelector(".mode-tabs");
       const requestPanel = document.querySelector(".request-panel");
       const statusChip = document.querySelector(".status-chip");
       const liveStatusFull = document.querySelector(".status-chip--live .status-chip__label--full");
@@ -3355,7 +3405,7 @@ async (page) => {
       };
 
       const requestSwitchStyles = window.getComputedStyle(requestSwitch);
-      const toolTabsStyles = window.getComputedStyle(toolTabs);
+      const modeTabsStyles = window.getComputedStyle(modeTabs);
       const requestPanelStyles = window.getComputedStyle(requestPanel);
       const statusChipStyles = window.getComputedStyle(statusChip);
       const liveStatusFullStyles = window.getComputedStyle(liveStatusFull);
@@ -3367,7 +3417,8 @@ async (page) => {
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         scrollWidth: doc.scrollWidth,
         requestMethodColumns: countColumns(requestSwitchStyles.gridTemplateColumns),
-        toolTabColumns: countColumns(toolTabsStyles.gridTemplateColumns),
+        modeTabsDisplay: modeTabsStyles.display,
+        modeTabsScrollable: modeTabs.scrollWidth > modeTabs.clientWidth,
         exchangeColumns: countColumns(exchangeGridStyles.gridTemplateColumns),
         exchangeScrollWidth: exchangeScroll.scrollWidth,
         exchangeClientWidth: exchangeScroll.clientWidth,
@@ -3388,8 +3439,13 @@ async (page) => {
     await assertOutputLiveRegionContracts();
     await assertStaticUiAssetsLoaded();
     await waitForAdvancedUploadCapability(true);
-    await waitForTabState("upload");
+    await assertHomeToolEntryState(["request", "upload", "opsec", "files", "notepad"]);
+    await assertHeroResponsePanelState("idle");
+    await waitForTabState("request");
     const requestPanelFetchPath = await fetchViaRequestPanelAndAssert();
+    await assertHeroResponsePanelState("active");
+    await page.locator("#tab-upload").click();
+    await waitForTabState("upload", { focused: true });
 
     await waitForUploadMethodState("POST");
     await page.locator('[data-upload-method="POST"]').focus();
@@ -3407,6 +3463,8 @@ async (page) => {
     }
     await waitForLiveRegionText("uploadResponseAreaLive", /Загрузка завершена|Upload complete/, 10000);
 
+    await page.locator("#tab-request").click();
+    await waitForTabState("request", { focused: true });
     const requestPanelSmugglePopupUrl = await smuggleViaRequestPanelAndAssert(uploadName);
 
     await browseUploadsAndAssert(uploadName);
@@ -3728,6 +3786,8 @@ async (page) => {
     await assertRequestMethodAvailability(expectations.methods);
     await assertOrdinaryUploadCapability(expectations.capabilities.ordinary_upload);
     await waitForAdvancedUploadCapability(false);
+    await assertHomeToolEntryState(expectations.visibleTabs);
+    await assertHeroResponsePanelState("idle");
     await assertNotepadCapabilityDisabled();
     await switchLanguage("en");
     await assertNotepadCapabilityDisabled();

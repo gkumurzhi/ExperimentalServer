@@ -44,159 +44,113 @@
         </header>
 
         <main class="page-content">
-            <section class="hero-shell">
-                <div class="panel request-panel">
-                    <div class="panel__header">
-                        <h2 data-i18n="requestPanelTitle">Запрос</h2>
-                    </div>
+            <section class="workspace-shell">
+                <div class="tabs mode-tabs" role="tablist" aria-label="Режимы сервера" data-i18n-aria-label="serverModesLabel">
+                    <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="request-tab" tabindex="0" id="tab-request" data-tool-entry="request" data-tab-target="request" data-i18n="tabRequests">Запросы</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="upload-tab" tabindex="-1" id="tab-upload" data-tool-entry="upload" data-tab-target="upload" data-required-capability="ordinary_upload" data-i18n="tabUpload">Загрузка на сервер</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" tabindex="-1" id="tab-opsec" data-tool-entry="opsec" data-tab-target="opsec" data-required-capability="advanced_upload" data-i18n="tabOpsec">Продвинутая загрузка на сервер</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="files-tab" tabindex="-1" id="tab-files" data-tool-entry="files" data-tab-target="files" data-i18n="tabFiles">Скачивание с сервера</button>
+                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="notepad-tab" tabindex="-1" id="tab-notepad" data-tool-entry="notepad" data-tab-target="notepad" data-required-capability="note_http" data-i18n="tabNotepad">Блокнот</button>
+                </div>
 
-                    <div class="request-composer">
-                        <div class="field-stack">
-                            <label for="pathInput" class="sr-only" data-i18n="labelFilePath">Путь к файлу</label>
-                            <input type="text" id="pathInput" data-i18n-placeholder="pathPlaceholder" placeholder="/index.html или /uploads/" value="/index.html">
-                        </div>
+                <div class="workspace-stage">
+                    <section id="request-tab" class="tab-content active workspace-view workspace-view--request" role="tabpanel" aria-labelledby="tab-request">
+                        <div class="hero-shell">
+                            <div class="panel request-panel">
+                                <div class="panel__header">
+                                    <p class="eyebrow" data-i18n="heroWorkingPanelEyebrow">РАБОЧАЯ ПАНЕЛЬ</p>
+                                    <h2 data-i18n="heroWorkingPanelTitle">Проверяйте маршруты и методы без лишнего шума</h2>
+                                </div>
 
-                        <div class="request-method-switch demo-buttons" aria-label="Быстрые методы запроса" data-i18n-aria-label="quickRequestMethodsLabel">
-                            <button type="button" class="btn-get" data-request-method="GET" data-i18n-title="methodGet">GET</button>
-                            <button type="button" class="btn-head" data-request-method="HEAD" data-i18n-title="methodHead">HEAD</button>
-                            <button type="button" class="btn-post" data-request-method="POST" data-i18n-title="methodPost">POST</button>
-                            <button type="button" class="btn-put" data-request-method="PUT" data-i18n-title="methodPut">PUT</button>
-                            <button type="button" class="btn-patch" data-request-method="PATCH" data-i18n-title="methodPatch">PATCH</button>
-                            <button type="button" class="btn-delete" data-request-method="DELETE" data-i18n-title="methodDelete">DELETE</button>
-                            <button type="button" class="btn-options" data-request-method="OPTIONS" data-i18n-title="methodOptions">OPTIONS</button>
-                            <button type="button" class="btn-fetch" data-request-method="FETCH" data-i18n-title="methodFetch">FETCH</button>
-                            <button type="button" class="btn-info" data-request-method="INFO" data-i18n-title="methodInfo">INFO</button>
-                            <button type="button" class="btn-ping" data-request-method="PING" data-i18n-title="methodPing">PING</button>
-                            <button type="button" class="btn-none" data-request-method="NONE" data-i18n-title="methodNone">NONE</button>
-                            <button type="button" class="btn-note" data-request-method="NOTE" data-i18n-title="methodNote">NOTE</button>
-                            <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
-                        </div>
+                                <div class="request-composer">
+                                    <div class="field-stack">
+                                        <label for="pathInput" class="field-label" data-i18n="labelFilePath">Путь к файлу</label>
+                                        <input type="text" id="pathInput" data-i18n-placeholder="pathPlaceholder" placeholder="/index.html или /uploads/" value="/index.html">
+                                    </div>
 
-                        <div class="request-detail-toolbar">
-                            <div class="segmented-control request-preview-mode" role="radiogroup" aria-label="Режим показа исходящего запроса" data-i18n-aria-label="requestPreviewModeLabel">
-                                <button type="button" class="request-preview-mode-btn" data-request-preview-mode="summary" role="radio" aria-checked="false" tabindex="-1" data-i18n="requestPreviewModeSummary">Сводка</button>
-                                <button type="button" class="request-preview-mode-btn active" data-request-preview-mode="raw" role="radio" aria-checked="true" tabindex="0" data-i18n="requestPreviewModeRaw">Raw HTTP</button>
-                            </div>
-                        </div>
+                                    <div class="request-method-switch demo-buttons" aria-label="Быстрые методы запроса" data-i18n-aria-label="quickRequestMethodsLabel">
+                                        <button type="button" class="btn-get" data-request-method="GET" data-i18n-title="methodGet">GET</button>
+                                        <button type="button" class="btn-fetch" data-request-method="FETCH" data-i18n-title="methodFetch">FETCH</button>
+                                        <button type="button" class="btn-info" data-request-method="INFO" data-i18n-title="methodInfo">INFO</button>
+                                        <button type="button" class="btn-ping" data-request-method="PING" data-i18n-title="methodPing">PING</button>
 
-                        <div class="request-batch-toolbar">
-                            <div class="request-batch-actions">
-                                <button type="button" class="btn-info btn--sm request-run-all-btn" id="requestRunAllBtn" data-i18n="requestRunAllBtn">Прогнать все</button>
-                                <button
-                                    type="button"
-                                    class="btn-info btn--sm request-batch-rerun-issues-btn"
-                                    id="requestBatchRerunIssuesBtn"
-                                    data-i18n="requestBatchRerunIssuesBtn"
-                                    data-i18n-title="requestBatchRerunIssuesLabel"
-                                    data-i18n-aria-label="requestBatchRerunIssuesLabel"
-                                    disabled
-                                >
-                                    Повторить проблемы
-                                </button>
-                                <button
-                                    type="button"
-                                    class="btn-info btn--sm request-batch-export-btn"
-                                    id="requestBatchExportBtn"
-                                    data-i18n="requestBatchExportBtn"
-                                    data-i18n-title="requestBatchExportLabel"
-                                    data-i18n-aria-label="requestBatchExportLabel"
-                                    disabled
-                                >
-                                    Экспорт JSON
-                                </button>
-                                <button
-                                    type="button"
-                                    class="btn-ghost btn--sm request-batch-clear-btn"
-                                    id="requestBatchClearBtn"
-                                    data-i18n="requestBatchClearBtn"
-                                    data-i18n-title="requestBatchClearLabel"
-                                    data-i18n-aria-label="requestBatchClearLabel"
-                                    disabled
-                                >
-                                    Очистить
-                                </button>
-                            </div>
-                            <label class="checkbox-row request-batch-filter" for="requestBatchIssuesOnlyToggle">
-                                <input type="checkbox" id="requestBatchIssuesOnlyToggle">
-                                <span data-i18n="requestBatchIssuesOnlyLabel">Только проблемы</span>
-                            </label>
-                            <div class="request-batch-legend" id="requestBatchLegend" aria-label="Легенда статусов методов" data-i18n-aria-label="requestBatchLegendLabel">
-                                <span class="request-batch-legend__item">
-                                    <span class="request-batch-legend__dot request-batch-legend__dot--match" aria-hidden="true"></span>
-                                    <span data-i18n="requestBatchLegendMatch">Совпало</span>
-                                </span>
-                                <span class="request-batch-legend__item">
-                                    <span class="request-batch-legend__dot request-batch-legend__dot--issue" aria-hidden="true"></span>
-                                    <span data-i18n="requestBatchLegendIssue">Проблема</span>
-                                </span>
-                            </div>
-                            <p class="request-batch-status" id="requestBatchStatus" aria-live="polite" aria-atomic="true"></p>
-                        </div>
-                        <div class="sr-only" id="requestBatchLive" role="status" aria-live="polite" aria-atomic="true"></div>
-
-                        <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
-
-                        <div class="request-preview-section exchange-inspector exchange-inspector--main" id="requestPreviewSection" data-exchange-scope="requests">
-                            <div class="exchange-inspector__scroll">
-                                <div class="exchange-inspector__grid">
-                                    <section class="exchange-pane exchange-pane--request" aria-labelledby="requestPreviewTitle">
-                                        <div class="exchange-pane__header">
-                                            <h3 class="request-preview-title" id="requestPreviewTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
-                                            <div class="request-copy-actions">
-                                                <button
-                                                    type="button"
-                                                    class="btn-info btn--sm request-copy-btn"
-                                                    id="requestPreviewCopyBtn"
-                                                    data-i18n="copyRaw"
-                                                    data-i18n-title="copyRawRequestLabel"
-                                                    data-i18n-aria-label="copyRawRequestLabel"
-                                                    disabled
-                                                >
-                                                    Копировать raw
-                                                </button>
-                                            </div>
+                                        <div hidden>
+                                            <button type="button" class="btn-head" data-request-method="HEAD" data-i18n-title="methodHead">HEAD</button>
+                                            <button type="button" class="btn-post" data-request-method="POST" data-i18n-title="methodPost">POST</button>
+                                            <button type="button" class="btn-put" data-request-method="PUT" data-i18n-title="methodPut">PUT</button>
+                                            <button type="button" class="btn-patch" data-request-method="PATCH" data-i18n-title="methodPatch">PATCH</button>
+                                            <button type="button" class="btn-delete" data-request-method="DELETE" data-i18n-title="methodDelete">DELETE</button>
+                                            <button type="button" class="btn-options" data-request-method="OPTIONS" data-i18n-title="methodOptions">OPTIONS</button>
+                                            <button type="button" class="btn-none" data-request-method="NONE" data-i18n-title="methodNone">NONE</button>
+                                            <button type="button" class="btn-note" data-request-method="NOTE" data-i18n-title="methodNote">NOTE</button>
+                                            <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
                                         </div>
-                                        <div class="sr-only" id="requestPreviewCopyLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                                        <div class="response-area request-preview-area exchange-pane__body" id="requestPreviewArea" data-testid="request-preview-area" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="requestPreviewTitle"></div>
-                                    </section>
+                                    </div>
 
-                                    <section class="exchange-pane exchange-pane--response" aria-labelledby="responsePaneTitle">
-                                        <div class="exchange-pane__header">
-                                            <h3 class="request-preview-title" id="responsePaneTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
-                                            <div class="request-copy-actions">
-                                                <button
-                                                    type="button"
-                                                    class="btn-info btn--sm request-copy-btn"
-                                                    id="responseCopyBtn"
-                                                    data-i18n="copyRaw"
-                                                    data-i18n-title="copyRawResponseLabel"
-                                                    data-i18n-aria-label="copyRawResponseLabel"
-                                                    disabled
-                                                >
-                                                    Копировать raw
-                                                </button>
-                                            </div>
+                                    <p class="inline-hint inline-hint--subtle" data-i18n="heroWorkingPanelHint">Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.</p>
+
+                                    <div class="request-detail-toolbar">
+                                        <div class="segmented-control request-preview-mode" role="radiogroup" aria-label="Режим показа исходящего запроса" data-i18n-aria-label="requestPreviewModeLabel">
+                                            <button type="button" class="request-preview-mode-btn" data-request-preview-mode="summary" role="radio" aria-checked="false" tabindex="-1" data-i18n="requestPreviewModeSummary">Сводка</button>
+                                            <button type="button" class="request-preview-mode-btn active" data-request-preview-mode="raw" role="radio" aria-checked="true" tabindex="0" data-i18n="requestPreviewModeRaw">Raw HTTP</button>
                                         </div>
+                                    </div>
 
-                                        <div class="sr-only" id="responseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                                        <div class="response-area response-area--hero exchange-pane__body" id="responseArea" data-testid="response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="responsePaneTitle"></div>
-                                    </section>
+                                    <div class="request-batch-toolbar">
+                                        <div class="request-batch-actions">
+                                            <button type="button" class="btn-info btn--sm request-run-all-btn" id="requestRunAllBtn" data-i18n="requestRunAllBtn">Прогнать все</button>
+                                            <button type="button" class="btn-info btn--sm request-batch-rerun-issues-btn" id="requestBatchRerunIssuesBtn" data-i18n="requestBatchRerunIssuesBtn" data-i18n-title="requestBatchRerunIssuesLabel" data-i18n-aria-label="requestBatchRerunIssuesLabel" disabled>Повторить проблемы</button>
+                                            <button type="button" class="btn-info btn--sm request-batch-export-btn" id="requestBatchExportBtn" data-i18n="requestBatchExportBtn" data-i18n-title="requestBatchExportLabel" data-i18n-aria-label="requestBatchExportLabel" disabled>Экспорт JSON</button>
+                                            <button type="button" class="btn-ghost btn--sm request-batch-clear-btn" id="requestBatchClearBtn" data-i18n="requestBatchClearBtn" data-i18n-title="requestBatchClearLabel" data-i18n-aria-label="requestBatchClearLabel" disabled>Очистить</button>
+                                        </div>
+                                        <label class="checkbox-row request-batch-filter" for="requestBatchIssuesOnlyToggle">
+                                            <input type="checkbox" id="requestBatchIssuesOnlyToggle">
+                                            <span data-i18n="requestBatchIssuesOnlyLabel">Только проблемы</span>
+                                        </label>
+                                        <p class="request-batch-status" id="requestBatchStatus" aria-live="polite" aria-atomic="true"></p>
+                                    </div>
+                                    <div class="sr-only" id="requestBatchLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                    <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
+                                </div>
+                            </div>
+
+                            <div class="panel response-panel" id="heroResponsePanel" data-panel-state="idle">
+                                <div class="panel__header">
+                                    <p class="eyebrow" data-i18n="heroResponsePanelEyebrow">ОТВЕТ</p>
+                                    <h2 data-i18n="heroResponsePanelTitle">Живой вывод сервера</h2>
+                                    <p class="inline-hint" data-i18n="heroResponsePanelSubtitle">Статус, заголовки и полезные данные появляются здесь без переключения вкладок.</p>
+                                </div>
+
+                                <div class="exchange-inspector exchange-inspector--hero" id="requestPreviewSection" data-exchange-scope="requests">
+                                    <div class="exchange-inspector__grid">
+                                        <section class="exchange-pane exchange-pane--request" aria-labelledby="requestPreviewTitle" hidden>
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="requestPreviewTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" id="requestPreviewCopyBtn" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" disabled>Копировать raw</button>
+                                            </div>
+                                            <div class="sr-only" id="requestPreviewCopyLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                            <div class="response-area request-preview-area exchange-pane__body" id="requestPreviewArea" data-testid="request-preview-area" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="requestPreviewTitle"></div>
+                                        </section>
+
+                                        <section class="exchange-pane exchange-pane--response" aria-labelledby="responsePaneTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="responsePaneTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" id="responseCopyBtn" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" disabled>Копировать raw</button>
+                                            </div>
+                                            <div class="sr-only" id="responseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                            <div class="response-area response-area--hero exchange-pane__body" id="responseArea" data-testid="response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="responsePaneTitle"></div>
+                                        </section>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                    </section>
+
+                    <section id="upload-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-upload" hidden>
+                    <div class="workspace-view__header">
+                        <h2 data-i18n="tabUpload">Загрузка на сервер</h2>
+                        <p class="inline-hint" data-i18n="uploadHelper">Отправьте локальные файлы на сервер, выберите метод и сразу проверьте ответ.</p>
                     </div>
-                </div>
-            </section>
-
-            <section class="advanced-tools" id="advancedTools">
-                <div class="tabs tool-tabs" role="tablist" aria-label="Инструменты сервера" data-i18n-aria-label="serverToolsLabel">
-                    <button type="button" class="tab active" role="tab" aria-selected="true" aria-controls="upload-tab" tabindex="0" id="tab-upload" data-tab-target="upload" data-i18n="tabUpload">Загрузка на сервер</button>
-                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="opsec-tab" tabindex="-1" id="tab-opsec" data-tab-target="opsec" data-i18n="tabOpsec">Продвинутая загрузка на сервер</button>
-                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="files-tab" tabindex="-1" id="tab-files" data-tab-target="files" data-i18n="tabFiles">Скачивание с сервера</button>
-                    <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="notepad-tab" tabindex="-1" id="tab-notepad" data-tab-target="notepad" data-i18n="tabNotepad">Блокнот</button>
-                </div>
-
-                <div id="upload-tab" class="tab-content active tool-pane" role="tabpanel" aria-labelledby="tab-upload">
                     <div class="tool-toolbar">
                         <div class="segmented-control" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
                             <button type="button" class="btn-post upload-method-btn active" data-upload-method="POST" role="radio" aria-checked="true" tabindex="0">POST</button>
@@ -258,9 +212,13 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                    </section>
 
-                <div id="opsec-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-opsec" hidden>
+                    <section id="opsec-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-opsec" hidden>
+                    <div class="workspace-view__header">
+                        <h2 data-i18n="tabOpsec">Продвинутая загрузка на сервер</h2>
+                        <p class="inline-hint" data-i18n="opsecHelper">Отдельный сценарий для продвинутой загрузки и выбора транспорта.</p>
+                    </div>
                     <div class="tool-grid tool-grid--opsec">
                         <div class="tool-card">
                             <div class="input-group">
@@ -347,9 +305,13 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                    </section>
 
-                <div id="files-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
+                    <section id="files-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
+                    <div class="workspace-view__header">
+                        <h2 data-i18n="tabFiles">Скачивание с сервера</h2>
+                        <p class="inline-hint" data-i18n="filesHelper">Просмотрите файлы на сервере, скачайте нужные и проверьте детали ответа под списком.</p>
+                    </div>
                     <div class="tool-grid tool-grid--files">
                         <div class="tool-card">
                             <div class="file-browser__toolbar input-group">
@@ -411,9 +373,13 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                    </section>
 
-                <div id="notepad-tab" class="tab-content tool-pane" role="tabpanel" aria-labelledby="tab-notepad" hidden>
+                    <section id="notepad-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-notepad" hidden>
+                    <div class="workspace-view__header">
+                        <h2 data-i18n="tabNotepad">Блокнот</h2>
+                        <p class="inline-hint" data-i18n="capabilityNotepadDesc">Шифрованные тексты заметок через HTTP и WebSocket; заголовки остаются метаданными.</p>
+                    </div>
                     <div class="tool-card note-shell">
                         <div class="notepad-toolbar">
                             <div class="notepad-title-field">
@@ -489,6 +455,7 @@
                             </div>
                         </div>
                     </div>
+                    </section>
                 </div>
             </section>
         </main>

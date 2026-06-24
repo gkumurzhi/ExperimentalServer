@@ -10,10 +10,38 @@
 
 .panel,
 .tool-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 100%), var(--bg-muted);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 100%), var(--bg-muted);
     border: 1px solid var(--border-subtle);
     box-shadow: var(--shadow-soft), var(--shadow-line);
     padding: var(--space-5);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.capability-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    padding: 0 var(--space-4);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    line-height: 1.2;
+    text-align: center;
+}
+
+.capability-chip.active {
+    border-color: var(--accent-secondary);
+    color: var(--accent-secondary);
+    background: color-mix(in srgb, var(--accent-secondary) 10%, var(--bg-elevated));
+}
+
+.capability-chip:hover,
+.capability-chip:focus-visible {
+    border-color: var(--accent-secondary);
+    color: var(--text-primary);
 }
 
 .status-chip {
@@ -235,6 +263,22 @@ button:disabled {
     align-items: stretch;
 }
 
+.mode-tabs {
+    padding: 6px;
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 84%, transparent);
+    border-radius: var(--radius-md);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 100%),
+        color-mix(in srgb, var(--bg-muted) 72%, transparent);
+}
+
+.mode-tabs .tab {
+    flex: 1 1 160px;
+    min-height: 48px;
+    background: color-mix(in srgb, var(--bg-elevated) 76%, transparent);
+    color: var(--text-secondary);
+}
+
 .tab {
     display: inline-flex;
     align-items: center;
@@ -251,6 +295,15 @@ button:disabled {
 
 .tab-content.active {
     display: block;
+}
+
+.workspace-view.tab-content.active {
+    display: grid;
+    gap: var(--space-4);
+}
+
+.workspace-view--request.tab-content.active {
+    gap: 0;
 }
 
 input[type="text"],
@@ -358,6 +411,19 @@ input[type="radio"] {
     max-height: 420px;
 }
 
+.response-panel[data-panel-state="idle"] {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 100%), color-mix(in srgb, var(--bg-muted) 82%, var(--bg-strong));
+}
+
+.response-panel[data-panel-state="idle"] .response-area--hero {
+    min-height: 108px;
+    max-height: 140px;
+    font-family: var(--font-ui);
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    background: color-mix(in srgb, var(--response-bg) 72%, var(--bg-elevated));
+}
+
 .tool-card--output {
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -390,6 +456,11 @@ input[type="radio"] {
 
     .response-area--hero {
         min-height: 280px;
+    }
+
+    .response-panel[data-panel-state="idle"] .response-area--hero {
+        min-height: 96px;
+        max-height: 132px;
     }
 
     .tool-tabs {
@@ -601,14 +672,35 @@ input[type="radio"] {
 
 [data-theme="light"] .upload-method-btn.active,
 [data-theme="light"] .tab.active,
-[data-theme="light"] .lang-btn.active {
+[data-theme="light"] .lang-btn.active,
+[data-theme="light"] .capability-chip.active {
     border-color: color-mix(in srgb, var(--accent-secondary) 36%, var(--border-strong));
     background: color-mix(in srgb, var(--accent-secondary) 8%, white);
+}
+
+[data-theme="light"] .capability-chip {
+    background: color-mix(in srgb, var(--bg-elevated) 44%, white);
+    border-color: color-mix(in srgb, var(--border-subtle) 92%, var(--border-strong));
+}
+
+[data-theme="light"] .mode-tabs {
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.55)),
+        color-mix(in srgb, var(--bg-elevated) 26%, white);
+    border-color: color-mix(in srgb, var(--border-subtle) 90%, var(--border-strong));
+}
+
+[data-theme="light"] .mode-tabs .tab {
+    background: color-mix(in srgb, var(--bg-elevated) 42%, white);
 }
 
 [data-theme="light"] .response-area {
     background: color-mix(in srgb, var(--response-bg) 62%, white);
     border-color: color-mix(in srgb, var(--border-subtle) 90%, var(--border-strong));
+}
+
+[data-theme="light"] .response-panel[data-panel-state="idle"] .response-area--hero {
+    background: color-mix(in srgb, var(--response-bg) 44%, white);
 }
 
 .response-header {
@@ -659,8 +751,37 @@ input[type="radio"] {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .mode-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 8px;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        scroll-snap-type: x proximity;
+    }
+
+    .mode-tabs .tab {
+        flex: 0 0 150px;
+        width: auto;
+        min-width: 150px;
+        min-height: 52px;
+        scroll-snap-align: start;
+    }
+
+    .tool-entry-strip__chips {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .tab {
         width: 100%;
+    }
+
+    .capability-chip {
+        width: 100%;
+        min-height: 48px;
+        padding: 0 var(--space-3);
     }
 
     .tool-tabs {
@@ -669,6 +790,17 @@ input[type="radio"] {
         border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, transparent);
         border-radius: var(--radius-md);
         background: color-mix(in srgb, var(--bg-elevated) 34%, transparent);
+    }
+
+    .mode-tabs {
+        padding: 4px;
+    }
+
+    .mode-tabs .tab {
+        min-height: 56px;
+        padding: 0 12px;
+        font-size: 0.95rem;
+        line-height: 1.15;
     }
 
     .tool-tabs .tab {
@@ -796,6 +928,11 @@ input[type="radio"] {
     .response-area--hero {
         min-height: 220px;
         max-height: 38vh;
+    }
+
+    .response-panel[data-panel-state="idle"] .response-area--hero {
+        min-height: 92px;
+        max-height: 120px;
     }
 }
 
@@ -1195,6 +1332,11 @@ input[type="radio"] {
     .tabs {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mode-tabs {
+        display: flex;
+        flex-wrap: nowrap;
     }
 
     .tab {
