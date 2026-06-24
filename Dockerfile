@@ -4,7 +4,7 @@
 # docker buildx imagetools inspect python:3.12-slim --format '{{json .Manifest.Digest}}'
 
 # -------- build stage --------
-FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194edf40da6521286 AS build
+FROM python:3.14-slim@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033 AS build
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -27,7 +27,7 @@ RUN PIP_CONSTRAINT=/build/constraints/ci.txt \
     python -m build --wheel --no-isolation --outdir /build/dist
 
 # -------- runtime stage --------
-FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194edf40da6521286 AS runtime
+FROM python:3.14-slim@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033 AS runtime
 
 ARG APP_USER=exphttp
 ARG APP_UID=10001
