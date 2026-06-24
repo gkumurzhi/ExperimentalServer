@@ -13,6 +13,8 @@ const opsecMethodInput = document.getElementById('opsecMethodInput');
 const opsecIncludeNameCheckbox = document.getElementById('opsecIncludeName');
 const opsecSendKeyCheckbox = document.getElementById('opsecSendKey');
 const opsecKeyBase64Checkbox = document.getElementById('opsecKeyBase64');
+const opsecSettingsDetails = document.getElementById('opsecSettingsDetails');
+const opsecEncryptionPanel = document.getElementById('opsecEncryptionPanel');
 const opsecTransportInputs = Array.from(document.querySelectorAll('input[name="opsecTransport"]'));
 
 function getOpsecCapability() {
@@ -27,6 +29,55 @@ function getOpsecCapabilityMessageKey(capability) {
         return 'opsecCapabilityChecking';
     }
     return capability.checkFailed ? 'opsecCapabilityCheckFailed' : 'opsecUnavailableServer';
+}
+
+function syncOpsecSettingsDisclosure() {
+    if (!opsecSettingsDetails) {
+        return;
+    }
+
+    const hasAdvancedSelection = Boolean(
+        (opsecIncludeNameCheckbox && opsecIncludeNameCheckbox.checked)
+        || (opsecEncryptCheckbox && opsecEncryptCheckbox.checked)
+        || (opsecSendKeyCheckbox && opsecSendKeyCheckbox.checked)
+        || (opsecKeyBase64Checkbox && opsecKeyBase64Checkbox.checked)
+    );
+
+    if (hasAdvancedSelection) {
+        opsecSettingsDetails.open = true;
+    }
+}
+
+function syncOpsecEncryptionState() {
+    const capability = getOpsecCapability();
+    const enabled = capability.available === true;
+    const useEncryption = Boolean(opsecEncryptCheckbox && opsecEncryptCheckbox.checked);
+    const sendKey = Boolean(opsecSendKeyCheckbox && opsecSendKeyCheckbox.checked);
+
+    if (!useEncryption) {
+        if (opsecSendKeyCheckbox) {
+            opsecSendKeyCheckbox.checked = false;
+        }
+        if (opsecKeyBase64Checkbox) {
+            opsecKeyBase64Checkbox.checked = false;
+        }
+    } else if (!sendKey && opsecKeyBase64Checkbox) {
+        opsecKeyBase64Checkbox.checked = false;
+    }
+
+    if (opsecEncryptionPanel) {
+        opsecEncryptionPanel.hidden = !useEncryption;
+    }
+
+    if (opsecPasswordInput) {
+        opsecPasswordInput.disabled = !enabled || !useEncryption;
+    }
+
+    if (opsecKeyBase64Checkbox) {
+        opsecKeyBase64Checkbox.disabled = !enabled || !useEncryption || !sendKey;
+    }
+
+    syncOpsecSettingsDisclosure();
 }
 
 function refreshOpsecCapability() {
@@ -67,8 +118,6 @@ function refreshOpsecCapability() {
     if (opsecIncludeNameCheckbox) opsecIncludeNameCheckbox.disabled = !enabled;
     if (opsecEncryptCheckbox) opsecEncryptCheckbox.disabled = !enabled;
     if (opsecSendKeyCheckbox) opsecSendKeyCheckbox.disabled = !enabled;
-    if (opsecPasswordInput) opsecPasswordInput.disabled = !enabled || !opsecEncryptCheckbox.checked;
-    if (opsecKeyBase64Checkbox) opsecKeyBase64Checkbox.disabled = !enabled || !opsecSendKeyCheckbox.checked;
     opsecTransportInputs.forEach(input => {
         input.disabled = !enabled;
     });
@@ -82,6 +131,8 @@ function refreshOpsecCapability() {
     if (opsecUploadBtn) {
         opsecUploadBtn.disabled = !enabled || !opsecFile;
     }
+
+    syncOpsecEncryptionState();
 
     if (!enabled) {
         hideOpsecTransportWarning();
@@ -163,9 +214,6 @@ opsecEncryptCheckbox.addEventListener('change', () => {
 // Toggle base64 key checkbox when send key checkbox changes
 opsecSendKeyCheckbox.addEventListener('change', () => {
     refreshOpsecCapability();
-    if (!opsecSendKeyCheckbox.checked) {
-        opsecKeyBase64Checkbox.checked = false;
-    }
 });
 
 // XOR encryption function - uses UTF-8 encoding for password (matches Python)

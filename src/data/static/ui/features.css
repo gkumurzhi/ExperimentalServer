@@ -579,6 +579,81 @@
     width: fit-content;
 }
 
+.tool-stack--opsec {
+    gap: var(--space-3);
+}
+
+.tool-workflow__header--opsec {
+    align-items: flex-end;
+}
+
+.opsec-method-stack {
+    flex: 1 1 280px;
+    min-width: min(280px, 100%);
+}
+
+.opsec-method-stack .input-group {
+    flex-wrap: nowrap;
+    align-items: stretch;
+}
+
+.opsec-method-stack .input-group > input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.opsec-settings-details {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-elevated) 44%, transparent);
+}
+
+.opsec-settings-details__summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-secondary);
+    cursor: pointer;
+    list-style: none;
+}
+
+.opsec-settings-details__summary::-webkit-details-marker {
+    display: none;
+}
+
+.opsec-settings-details__summary::before {
+    content: '▸';
+    color: var(--text-muted);
+    transition: transform 0.16s ease;
+}
+
+.opsec-settings-details[open] .opsec-settings-details__summary::before {
+    transform: rotate(90deg);
+}
+
+.opsec-settings-details__label {
+    font-weight: 600;
+}
+
+.opsec-settings-details__body {
+    display: grid;
+    gap: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+}
+
+.opsec-encryption-panel {
+    display: grid;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--accent-opsec) 24%, var(--border-subtle));
+    background: color-mix(in srgb, var(--accent-opsec) 8%, var(--bg-elevated));
+}
+
 .tool-result--inline {
     gap: var(--space-2);
     padding: var(--space-3);
@@ -1775,6 +1850,10 @@
     .tool-workflow__header,
     .file-browser__bulk {
         flex-direction: column;
+        align-items: stretch;
+    }
+
+    .tool-workflow__header--opsec {
         align-items: stretch;
     }
 

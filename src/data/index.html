@@ -236,19 +236,34 @@
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabOpsec">Продвинутая загрузка на сервер</h2>
                     </div>
-                    <div class="tool-grid tool-grid--opsec">
-                        <div class="tool-card">
-                            <div class="input-group">
-                                <label for="opsecMethodInput" class="sr-only" data-i18n="httpMethodLabel">HTTP-метод</label>
-                                <input type="text" id="opsecMethodInput" data-i18n-placeholder="opsecMethodPlaceholder" placeholder="Метод (CHECKDATA)" value="">
+                    <div class="tool-stack tool-stack--opsec">
+                        <div class="tool-card tool-card--workflow">
+                            <div class="tool-workflow__header tool-workflow__header--opsec">
+                                <div class="field-stack opsec-method-stack">
+                                    <label for="opsecMethodInput" class="field-label" data-i18n="httpMethodLabel">HTTP-метод</label>
+                                    <div class="input-group">
+                                        <input type="text" id="opsecMethodInput" data-i18n-placeholder="opsecMethodPlaceholder" placeholder="Метод (CHECKDATA)" value="">
+                                        <button
+                                            class="btn-info btn-icon"
+                                            id="opsecRandomMethodBtn"
+                                            title="Случайно"
+                                            aria-label="Случайно"
+                                            data-i18n-title="randomLabel"
+                                            data-i18n-aria-label="randomLabel"
+                                        >↻</button>
+                                    </div>
+                                </div>
                                 <button
-                                    class="btn-info btn-icon"
-                                    id="opsecRandomMethodBtn"
-                                    title="Случайно"
-                                    aria-label="Случайно"
-                                    data-i18n-title="randomLabel"
-                                    data-i18n-aria-label="randomLabel"
-                                >↻</button>
+                                    class="btn-opsec btn--sm"
+                                    id="opsecUploadBtn"
+                                    disabled
+                                    title="Загрузить"
+                                    aria-label="Загрузить"
+                                    data-i18n="opsecUploadBtn"
+                                    data-i18n-title="opsecUploadBtn"
+                                    data-i18n-aria-label="opsecUploadBtn"
+                                    data-testid="opsec-upload-btn"
+                                >Загрузить</button>
                             </div>
 
                             <div class="control-cluster">
@@ -273,35 +288,27 @@
                                 <input type="file" id="opsecFileInput">
                             </div>
 
-                            <div class="settings-stack">
-                                <label class="checkbox-row"><input type="checkbox" id="opsecIncludeName"> <span data-i18n="opsecIncludeName">Имя</span></label>
-                                <div class="checkbox-with-input">
-                                    <label class="checkbox-row"><input type="checkbox" id="opsecEncrypt"> <span data-i18n="opsecEncryptXor">XOR</span></label>
-                                    <label for="opsecPassword" class="sr-only">XOR Password</label>
-                                    <input type="password" id="opsecPassword" data-i18n-placeholder="opsecPasswordPlaceholder" placeholder="Пароль XOR" disabled>
+                            <details class="opsec-settings-details" id="opsecSettingsDetails">
+                                <summary class="opsec-settings-details__summary">
+                                    <span class="opsec-settings-details__label" data-i18n="opsecAdvancedOptions">Доп. параметры</span>
+                                </summary>
+                                <div class="opsec-settings-details__body settings-stack">
+                                    <label class="checkbox-row"><input type="checkbox" id="opsecIncludeName"> <span data-i18n="opsecIncludeName">Имя</span></label>
+                                    <div class="checkbox-with-input">
+                                        <label class="checkbox-row"><input type="checkbox" id="opsecEncrypt"> <span data-i18n="opsecEncryptXor">XOR</span></label>
+                                        <div class="opsec-encryption-panel" id="opsecEncryptionPanel" hidden>
+                                            <label for="opsecPassword" class="sr-only">XOR Password</label>
+                                            <input type="password" id="opsecPassword" data-i18n-placeholder="opsecPasswordPlaceholder" placeholder="Пароль XOR" disabled>
+                                            <label class="checkbox-row checkbox-row--nested"><input type="checkbox" id="opsecSendKey"> <span data-i18n="opsecSendKey">Ключ</span></label>
+                                            <label class="checkbox-row checkbox-row--nested checkbox-row--deeper"><input type="checkbox" id="opsecKeyBase64" disabled> <span data-i18n="opsecKeyBase64">Base64</span></label>
+                                        </div>
+                                    </div>
                                 </div>
-                                <label class="checkbox-row checkbox-row--nested"><input type="checkbox" id="opsecSendKey"> <span data-i18n="opsecSendKey">Ключ</span></label>
-                                <label class="checkbox-row checkbox-row--nested checkbox-row--deeper"><input type="checkbox" id="opsecKeyBase64" disabled> <span data-i18n="opsecKeyBase64">Base64</span></label>
-                            </div>
-                        </div>
-
-                        <div class="tool-card tool-card--output">
-                            <div class="tool-card__actions">
-                                <button
-                                    class="btn-opsec btn-icon"
-                                    id="opsecUploadBtn"
-                                    disabled
-                                    title="Загрузить"
-                                    aria-label="Загрузить"
-                                    data-i18n-title="opsecUploadBtn"
-                                    data-i18n-aria-label="opsecUploadBtn"
-                                    data-testid="opsec-upload-btn"
-                                >↑</button>
-                            </div>
+                            </details>
 
                             <div class="sr-only" id="opsecResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
                             <section
-                                class="tool-result"
+                                class="tool-result tool-result--inline"
                                 data-tool-summary-scope="opsec"
                                 data-tool-summary-idle-title-key="opsecResultIdleTitle"
                                 data-tool-summary-idle-body-key="opsecResultIdleBody"
