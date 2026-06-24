@@ -13,6 +13,7 @@ const requestPreviewPaneEl = requestPreviewAreaEl
     ? requestPreviewAreaEl.closest('.exchange-pane--request')
     : null;
 const requestRunAllBtnEl = document.getElementById('requestRunAllBtn');
+const requestBatchDetailsEl = document.getElementById('requestBatchDetails');
 const requestBatchRerunIssuesBtnEl = document.getElementById('requestBatchRerunIssuesBtn');
 const requestBatchExportBtnEl = document.getElementById('requestBatchExportBtn');
 const requestBatchClearBtnEl = document.getElementById('requestBatchClearBtn');
@@ -324,6 +325,12 @@ function syncRequestControlState() {
 function setRequestButtonsBusy(isBusy) {
     isRequestBusy = isBusy;
     syncRequestControlState();
+}
+
+function openRequestBatchDetails() {
+    if (requestBatchDetailsEl) {
+        requestBatchDetailsEl.open = true;
+    }
 }
 
 function setRequestBatchBusy(isBusy) {
@@ -996,6 +1003,10 @@ function clearRequestBatchRun(options = {}) {
         showRequestBatchIssuesOnly = false;
     }
 
+    if (requestBatchDetailsEl) {
+        requestBatchDetailsEl.open = false;
+    }
+
     renderRequestBatchSummary();
 
     if (announce) {
@@ -1067,6 +1078,7 @@ async function rerunRequestBatchRow(button) {
         return;
     }
 
+    openRequestBatchDetails();
     setRequestPathValue(path);
     let result;
     try {
@@ -1096,6 +1108,7 @@ async function rerunRequestBatchIssues() {
         return;
     }
 
+    openRequestBatchDetails();
     setRequestBatchBusy(true);
     announceLiveRegion('requestBatchLive', `${t('requestBatchRerunIssuesStarted')}: ${issueResults.length}`);
 
@@ -1161,10 +1174,6 @@ function renderRequestBatchSummary() {
 
     requestBatchSummaryEl.hidden = false;
     requestBatchSummaryEl.innerHTML = `
-        <div class="request-batch-summary__header">
-            <p class="request-batch-summary__title">${esc(t('requestBatchSummaryTitle'))}</p>
-            <p class="request-batch-summary__progress">${esc(getRequestBatchStatusText(requestBatchRunState, counts))}</p>
-        </div>
         <div class="request-batch-summary__counts">
             ${buildRequestBatchCounter(t('requestBatchTotal'), String(requestBatchRunState.total))}
             ${buildRequestBatchCounter(t('requestBatchMatches'), String(counts.match), 'success')}
@@ -2081,6 +2090,7 @@ async function runAllRequestMethods() {
     }
 
     clearRequestBatchExportState();
+    openRequestBatchDetails();
     requestBatchRunState = {
         phase: 'running',
         completed: 0,

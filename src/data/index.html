@@ -84,30 +84,35 @@
                                         <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
                                     </div>
 
-                                    <p class="inline-hint inline-hint--subtle" data-i18n="heroWorkingPanelHint">Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.</p>
-
                                     <div class="request-detail-toolbar">
                                         <div class="segmented-control request-preview-mode" role="radiogroup" aria-label="Режим показа исходящего запроса" data-i18n-aria-label="requestPreviewModeLabel">
                                             <button type="button" class="request-preview-mode-btn" data-request-preview-mode="summary" role="radio" aria-checked="false" tabindex="-1" data-i18n="requestPreviewModeSummary">Сводка</button>
                                             <button type="button" class="request-preview-mode-btn active" data-request-preview-mode="raw" role="radio" aria-checked="true" tabindex="0" data-i18n="requestPreviewModeRaw">Raw HTTP</button>
                                         </div>
+                                        <button type="button" class="btn-info btn--sm request-run-all-btn" id="requestRunAllBtn" data-i18n="requestRunAllBtn">Прогнать все</button>
                                     </div>
 
-                                    <div class="request-batch-toolbar">
-                                        <div class="request-batch-actions">
-                                            <button type="button" class="btn-info btn--sm request-run-all-btn" id="requestRunAllBtn" data-i18n="requestRunAllBtn">Прогнать все</button>
-                                            <button type="button" class="btn-info btn--sm request-batch-rerun-issues-btn" id="requestBatchRerunIssuesBtn" data-i18n="requestBatchRerunIssuesBtn" data-i18n-title="requestBatchRerunIssuesLabel" data-i18n-aria-label="requestBatchRerunIssuesLabel" disabled>Повторить проблемы</button>
-                                            <button type="button" class="btn-info btn--sm request-batch-export-btn" id="requestBatchExportBtn" data-i18n="requestBatchExportBtn" data-i18n-title="requestBatchExportLabel" data-i18n-aria-label="requestBatchExportLabel" disabled>Экспорт JSON</button>
-                                            <button type="button" class="btn-ghost btn--sm request-batch-clear-btn" id="requestBatchClearBtn" data-i18n="requestBatchClearBtn" data-i18n-title="requestBatchClearLabel" data-i18n-aria-label="requestBatchClearLabel" disabled>Очистить</button>
+                                    <details class="request-batch-details" id="requestBatchDetails">
+                                        <summary class="request-batch-details__summary">
+                                            <span class="request-batch-details__label" data-i18n="requestBatchDetailsSummary">Прогон всех методов</span>
+                                            <span class="request-batch-details__status" id="requestBatchStatus" aria-live="polite" aria-atomic="true"></span>
+                                        </summary>
+                                        <div class="request-batch-details__body">
+                                            <div class="request-batch-toolbar">
+                                                <div class="request-batch-actions">
+                                                    <button type="button" class="btn-info btn--sm request-batch-rerun-issues-btn" id="requestBatchRerunIssuesBtn" data-i18n="requestBatchRerunIssuesBtn" data-i18n-title="requestBatchRerunIssuesLabel" data-i18n-aria-label="requestBatchRerunIssuesLabel" disabled>Повторить проблемы</button>
+                                                    <button type="button" class="btn-info btn--sm request-batch-export-btn" id="requestBatchExportBtn" data-i18n="requestBatchExportBtn" data-i18n-title="requestBatchExportLabel" data-i18n-aria-label="requestBatchExportLabel" disabled>Экспорт JSON</button>
+                                                    <button type="button" class="btn-ghost btn--sm request-batch-clear-btn" id="requestBatchClearBtn" data-i18n="requestBatchClearBtn" data-i18n-title="requestBatchClearLabel" data-i18n-aria-label="requestBatchClearLabel" disabled>Очистить</button>
+                                                </div>
+                                                <label class="checkbox-row request-batch-filter" for="requestBatchIssuesOnlyToggle">
+                                                    <input type="checkbox" id="requestBatchIssuesOnlyToggle">
+                                                    <span data-i18n="requestBatchIssuesOnlyLabel">Только проблемы</span>
+                                                </label>
+                                            </div>
+                                            <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
                                         </div>
-                                        <label class="checkbox-row request-batch-filter" for="requestBatchIssuesOnlyToggle">
-                                            <input type="checkbox" id="requestBatchIssuesOnlyToggle">
-                                            <span data-i18n="requestBatchIssuesOnlyLabel">Только проблемы</span>
-                                        </label>
-                                        <p class="request-batch-status" id="requestBatchStatus" aria-live="polite" aria-atomic="true"></p>
-                                    </div>
+                                    </details>
                                     <div class="sr-only" id="requestBatchLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                                    <div class="request-batch-summary" id="requestBatchSummary" hidden></div>
                                 </div>
                             </div>
 
@@ -115,7 +120,6 @@
                                 <div class="panel__header">
                                     <p class="eyebrow" data-i18n="heroResponsePanelEyebrow">ОТВЕТ</p>
                                     <h2 data-i18n="heroResponsePanelTitle">Живой вывод сервера</h2>
-                                    <p class="inline-hint" data-i18n="heroResponsePanelSubtitle">Статус, заголовки и полезные данные появляются здесь без переключения вкладок.</p>
                                 </div>
 
                                 <div class="exchange-inspector exchange-inspector--hero" id="requestPreviewSection" data-exchange-scope="requests">

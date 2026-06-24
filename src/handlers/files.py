@@ -5,6 +5,7 @@ File operation handlers: GET, HEAD, POST, PUT, PATCH, DELETE, FETCH, NONE.
 import json
 import logging
 import mimetypes
+import re
 import shutil
 from collections.abc import Callable
 from datetime import datetime
@@ -44,6 +45,10 @@ SMUGGLE_ARTIFACT_CONTENT_SECURITY_POLICY = (
     "object-src 'none'; "
     "frame-ancestors 'none'; "
     "form-action 'none'"
+)
+
+STATIC_APP_ASSET_RE = re.compile(
+    r'(?P<prefix>\b(?:src|href)=["\'])(?P<url>/static/[^"\']+)(?P<suffix>["\'])'
 )
 
 
@@ -87,6 +92,68 @@ class FileHandlersMixin(BaseHandler):
 
         return file_path
 
+    def _build_ui_asset_version(self, asset_url: str) -> str | None:
+        """Return a stable cache-busting token for a bundled static asset URL."""
+        asset_path = asset_url.split("?", 1)[0].split("#", 1)[0].lstrip("/")
+        file_path = get_package_resource(asset_path)
+        if file_path is None or not file_path.exists():
+            return None
+
+        st = file_path.stat()
+        return f"{st.st_mtime_ns:x}-{st.st_size:x}"
+
+    def _version_ui_asset_url(self, asset_url: str) -> str:
+        """Append or replace the version token for a bundled static asset URL."""
+        base_url, fragment_sep, fragment = asset_url.partition("#")
+        asset_path, query_sep, query = base_url.partition("?")
+        query_parts = [part for part in query.split("&") if part and not part.startswith("v=")]
+        version = self._build_ui_asset_version(asset_path)
+        if version is None:
+            return asset_url
+
+        query_parts.append(f"v={version}")
+        versioned_url = asset_path
+        if query_parts:
+            versioned_url = f"{versioned_url}?{'&'.join(query_parts)}"
+        if fragment_sep:
+            versioned_url = f"{versioned_url}#{fragment}"
+        return versioned_url
+
+    def _render_app_shell(self, file_path: Path) -> str:
+        """Render the bundled UI shell with versioned local static asset URLs."""
+        source = file_path.read_text(encoding="utf-8")
+        return STATIC_APP_ASSET_RE.sub(
+            lambda match: (
+                f"{match.group('prefix')}"
+                f"{self._version_ui_asset_url(match.group('url'))}"
+                f"{match.group('suffix')}"
+            ),
+            source,
+        )
+
+    def _cache_control_header(
+        self,
+        url_path: str,
+        request: HTTPRequest,
+        *,
+        is_user_upload: bool,
+    ) -> str:
+        """Return the appropriate Cache-Control policy for the response."""
+        if is_user_upload or url_path.startswith("uploads/") or url_path == "uploads":
+            return "no-cache"
+        if url_path.startswith("static/") and request.query_params.get("v"):
+            return "public, max-age=31536000, immutable"
+        return "public, max-age=0, must-revalidate"
+
+    def _serve_app_shell(self, file_path: Path) -> HTTPResponse:
+        """Serve the bundled SPA shell with aggressive cache-busting."""
+        response = HTTPResponse(200)
+        response.set_body(self._render_app_shell(file_path), "text/html; charset=utf-8")
+        response.set_header("Cache-Control", "no-store")
+        response.set_header("Pragma", "no-cache")
+        response.set_header("Content-Security-Policy", HTML_CONTENT_SECURITY_POLICY)
+        return response
+
     def _serve_file(self, file_path: Path, request: HTTPRequest) -> HTTPResponse:
         """Build a 200 response for *file_path* with ETag, cache, and CSP headers."""
         url_path = request.path.lstrip("/")
@@ -99,13 +166,22 @@ class FileHandlersMixin(BaseHandler):
         file_path_str = str(file_path)
         with self._smuggle_lock:
             is_smuggle = file_path_str in self._temp_smuggle_files
+        is_app_shell = url_path in ("", "index.html") and not is_user_upload and not is_smuggle
+        if is_app_shell:
+            return self._serve_app_shell(file_path)
+
+        cache_control = self._cache_control_header(
+            url_path,
+            request,
+            is_user_upload=is_user_upload,
+        )
 
         if_none_match = request.headers.get("if-none-match", "")
         if if_none_match and if_none_match == etag:
             response = HTTPResponse(304)
             response.set_header("ETag", etag)
             response.set_header("Last-Modified", last_modified)
-            response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
+            response.set_header("Cache-Control", cache_control)
             if is_smuggle:
                 response.stream_cleanup = self._cleanup_smuggle_stream(file_path, file_path_str)
             return response
@@ -117,10 +193,7 @@ class FileHandlersMixin(BaseHandler):
         # Cache headers
         response.set_header("ETag", etag)
         response.set_header("Last-Modified", last_modified)
-        if is_user_upload or url_path.startswith("uploads/") or url_path == "uploads":
-            response.set_header("Cache-Control", "no-cache")
-        else:
-            response.set_header("Cache-Control", "public, max-age=0, must-revalidate")
+        response.set_header("Cache-Control", cache_control)
 
         # Smuggle files use a cleanup callback so they can stream and still be one-shot.
         force_download = (

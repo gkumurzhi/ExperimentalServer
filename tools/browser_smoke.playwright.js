@@ -389,12 +389,14 @@ async (page) => {
       return Promise.all(urls.map(async (url) => {
         const response = await fetch(url, { cache: "no-store" });
         const body = await response.text();
+        const assetPath = url.split("?")[0].split("#")[0];
         return {
           url,
+          assetPath,
           ok: response.ok,
           status: response.status,
           bodyLength: body.length,
-          containsInspectorApi: url === "/static/ui/inspector.js" && body.includes("function setExchangeInspector"),
+          containsInspectorApi: assetPath === "/static/ui/inspector.js" && body.includes("function setExchangeInspector"),
         };
       }));
     });
@@ -403,7 +405,7 @@ async (page) => {
     if (failed.length > 0) {
       throw new Error(`Static UI asset request failed: ${JSON.stringify(failed)}`);
     }
-    const inspectorAsset = assets.find((asset) => asset.url === "/static/ui/inspector.js");
+    const inspectorAsset = assets.find((asset) => asset.assetPath === "/static/ui/inspector.js");
     if (!inspectorAsset || !inspectorAsset.containsInspectorApi) {
       throw new Error("Inspector asset does not contain setExchangeInspector");
     }

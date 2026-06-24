@@ -121,6 +121,18 @@ class TestHandleGet:
         content = resp.body or (resp.stream_path.read_bytes() if resp.stream_path else b"")
         assert b"Experimental HTTP Server" in content
 
+    def test_get_index_disables_shell_caching_and_versions_local_assets(self, server):
+        req = make_request("GET", "/")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.stream_path is None
+        assert resp.headers["Cache-Control"] == "no-store"
+        assert resp.headers["Pragma"] == "no-cache"
+        assert b"/static/ui/core.js?v=" in resp.body
+        assert b"/static/ui/features.css?v=" in resp.body
+        assert b"/static/crypto-js.min.js?v=" in resp.body
+
     def test_get_existing_file(self, server, upload_dir):
         (upload_dir / "readme.txt").write_text("content here")
         req = make_request("GET", "/readme.txt")
@@ -1209,6 +1221,14 @@ class TestCacheHeaders:
         assert resp.status_code == 200
         assert "ETag" in resp.headers
         assert "Last-Modified" in resp.headers
+
+    def test_versioned_static_assets_use_immutable_cache(self, server):
+        req = make_request("GET", "/static/ui/app.js?v=test-build")
+        resp = server.handle_get(req)
+
+        assert resp.status_code == 200
+        assert resp.stream_path is not None
+        assert resp.headers["Cache-Control"] == "public, max-age=31536000, immutable"
 
 
 # ── Metrics tests ─────────────────────────────────────────────────
