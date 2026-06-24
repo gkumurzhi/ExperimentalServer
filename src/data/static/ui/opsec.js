@@ -134,6 +134,7 @@ function setOpsecFile(file) {
             },
             response: {
                 phase: 'ready',
+                summaryText: `${t('opsecFileSelected')}: ${opsecFile.name}`,
                 startLine: `${t('opsecFileSelected')}: ${opsecFile.name}`,
                 body: createExchangeTextBody(`${opsecFile.name} (${formatSize(opsecFile.size)})`),
             },
@@ -339,6 +340,7 @@ async function opsecUpload() {
             },
             response: {
                 phase: 'error',
+                summaryText: t('opsecPasswordRequired'),
                 startLine: t('opsecPasswordRequired'),
                 body: createExchangeTextBody(t('opsecPasswordRequired')),
             },
@@ -355,6 +357,7 @@ async function opsecUpload() {
         },
         response: {
             phase: 'sending',
+            summaryText: `${t('opsecUploading')} ${method} [${transport}]`,
             startLine: `${t('opsecUploading')} ${method} [${transport}]`,
             body: createExchangeTextBody(`${t('opsecUploading')} ${method}${useEncryption ? ' (' + t('opsecXorEncryption') + ')' : ''} [${transport}]...`),
         },
@@ -439,6 +442,7 @@ async function opsecUpload() {
                 },
                 response: {
                     phase: 'sending',
+                    summaryText: `${t('opsecUploading')} ${method} [${transport}]`,
                     startLine: `${t('opsecUploading')} ${method} [${transport}]`,
                     body: createExchangeTextBody(t('statusPending')),
                 },
@@ -472,6 +476,7 @@ async function opsecUpload() {
                 },
                 response: {
                     phase: 'sending',
+                    summaryText: `${t('opsecUploading')} ${method} [${transport}]`,
                     startLine: `${t('opsecUploading')} ${method} [${transport}]`,
                     body: createExchangeTextBody(t('statusPending')),
                 },
@@ -498,6 +503,7 @@ async function opsecUpload() {
                 },
                 response: {
                     phase: 'sending',
+                    summaryText: `${t('opsecUploading')} ${method} [${transport}]`,
                     startLine: `${t('opsecUploading')} ${method} [${transport}]`,
                     body: createExchangeTextBody(t('statusPending')),
                 },
@@ -539,6 +545,7 @@ ${t('opsecEncryption')}: ${useEncryption ? (sendKeyToServer ? t('opsecXorDecrypt
                     method,
                     path: randomPath,
                     phase: 'complete',
+                    summaryText: `${t('opsecSuccess')}: ${result.id}`,
                     status: response.status,
                     statusText: response.statusText || t('opsecUploaded'),
                     headers: response.headers,
@@ -564,6 +571,7 @@ ${t('opsecEncryption')}: ${useEncryption ? (sendKeyToServer ? t('opsecXorDecrypt
                     method,
                     path: randomPath,
                     phase: 'error',
+                    summaryText: result.error || 'Unknown error',
                     status: response.status,
                     statusText: response.statusText || t('error'),
                     headers: response.headers,
@@ -582,6 +590,7 @@ ${t('opsecEncryption')}: ${useEncryption ? (sendKeyToServer ? t('opsecXorDecrypt
             },
             response: {
                 phase: 'error',
+                summaryText: error.message,
                 startLine: t('error'),
                 body: createExchangeTextBody(error.message),
             },

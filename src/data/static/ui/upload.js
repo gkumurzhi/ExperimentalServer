@@ -108,6 +108,41 @@ function refreshUploadSelectionLocale() {
     }
 }
 
+function syncUploadWorkspaceSelectionState() {
+    if (filesToUpload.length === 0) {
+        setExchangeInspector('upload', {
+            phase: 'empty',
+            request: {
+                phase: 'empty',
+                emptyText: t('exchangeRequestEmpty'),
+            },
+            response: {
+                phase: 'empty',
+                emptyText: t('exchangeResponseEmpty'),
+            },
+        });
+        if (typeof setToolSummaryActions === 'function') {
+            setToolSummaryActions('upload', '');
+        }
+        return;
+    }
+
+    const summaryText = getUploadSelectionText();
+    setExchangeInspector('upload', {
+        phase: 'ready',
+        request: {
+            phase: 'empty',
+            emptyText: t('exchangeRequestEmpty'),
+        },
+        response: {
+            phase: 'ready',
+            summaryText,
+            startLine: summaryText,
+            body: createExchangeTextBody(summaryText),
+        },
+    });
+}
+
 uploadMethodButtons.forEach(button => {
     button.addEventListener('click', () => {
         const method = button.dataset.uploadMethod;
@@ -223,6 +258,7 @@ function handleFiles(files) {
     renderFileList();
     uploadBtn.disabled = !isOrdinaryUploadEnabled() || filesToUpload.length === 0;
     refreshUploadSelectionLocale();
+    syncUploadWorkspaceSelectionState();
 }
 
 function formatSize(bytes) {
@@ -281,6 +317,7 @@ function removeFile(index) {
     renderFileList();
     uploadBtn.disabled = !isOrdinaryUploadEnabled() || filesToUpload.length === 0;
     refreshUploadSelectionLocale();
+    syncUploadWorkspaceSelectionState();
 }
 
 function buildUploadRequestExchange(fileData, arrayBuffer, encodedFileName) {
@@ -308,6 +345,9 @@ async function uploadAllFiles() {
     }
 
     announceLiveRegion('uploadResponseAreaLive', t('uploadStarting'));
+    if (typeof setToolSummaryActions === 'function') {
+        setToolSummaryActions('upload', '');
+    }
     setExchangeInspector('upload', {
         phase: 'sending',
         request: {
@@ -316,6 +356,7 @@ async function uploadAllFiles() {
         },
         response: {
             phase: 'sending',
+            summaryText: t('uploadStarting'),
             startLine: t('uploadStarting'),
             body: createExchangeTextBody(t('uploadStarting')),
         },
@@ -345,6 +386,7 @@ async function uploadAllFiles() {
                 request: lastRequestExchange,
                 response: {
                     phase: 'sending',
+                    summaryText: `${t('statusUploading')} ${fileData.name}`,
                     startLine: `${t('statusUploading')} ${fileData.name}`,
                     body: createExchangeTextBody(`${t('statusUploading')} ${fileData.name}`),
                 },
@@ -416,15 +458,20 @@ async function uploadAllFiles() {
         },
         response: {
             phase: failCount === 0 ? 'complete' : 'error',
+            summaryText: `${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}`,
             startLine: t('uploadComplete'),
             status: failCount === 0 ? 201 : 400,
             statusText: failCount === 0 ? 'Created' : t('error'),
             body: createExchangeTextBody(`${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}\n\n${resultText}`),
         },
     });
-    if (successCount > 0) {
-        const uploadResponseArea = document.getElementById('uploadResponseArea');
-        uploadResponseArea.innerHTML += `<div class="upload-response-actions"><button class="btn-info btn--sm" data-upload-response-action="view-files">${t('viewInFiles')}</button></div>`;
+    if (typeof setToolSummaryActions === 'function') {
+        setToolSummaryActions(
+            'upload',
+            successCount > 0
+                ? `<button class="btn-info btn--sm" type="button" data-upload-response-action="view-files" data-i18n="viewInFiles">${esc(t('viewInFiles'))}</button>`
+                : ''
+        );
     }
     announceLiveRegion('uploadResponseAreaLive', `${t('uploadComplete')}: ${successCount} ${t('successCount')}, ${failCount} ${t('errorCount')}`);
 

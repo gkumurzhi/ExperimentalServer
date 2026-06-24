@@ -442,6 +442,175 @@ function buildExchangeSummary(message = {}, side = 'request') {
     `;
 }
 
+function getToolPhaseKey(phase) {
+    switch (String(phase || 'empty')) {
+        case 'ready':
+            return 'toolPhaseReady';
+        case 'sending':
+            return 'toolPhasePending';
+        case 'complete':
+            return 'toolPhaseSuccess';
+        case 'error':
+            return 'toolPhaseError';
+        default:
+            return 'toolPhaseIdle';
+    }
+}
+
+function getToolPhaseLabel(phase) {
+    return t(getToolPhaseKey(phase));
+}
+
+function getToolSummaryRoot(scope) {
+    return document.querySelector(`[data-tool-summary-scope="${scope}"]`);
+}
+
+function getToolTraceRoot(scope) {
+    return document.querySelector(`[data-tool-trace-scope="${scope}"]`);
+}
+
+function extractToolSummaryText(message = {}) {
+    if (!message || message.phase === 'empty') {
+        return '';
+    }
+
+    if (message.summaryText) {
+        return String(message.summaryText).trim();
+    }
+
+    if (message.body) {
+        const bodyText = formatExchangeBody(message.body, { raw: false });
+        const firstUsefulLine = String(bodyText || '')
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .find(line => (
+                line
+                && line !== t('requestPreviewNoBody')
+                && line !== t('headersNA')
+                && line !== '{'
+                && line !== '['
+            ));
+        if (firstUsefulLine) {
+            return firstUsefulLine;
+        }
+    }
+
+    if (message.startLine) {
+        const firstLine = String(redactExchangeText(message.startLine))
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .find(Boolean);
+        if (firstLine) {
+            return firstLine.replace(/^HTTP\/1\.1\s+/i, '').trim();
+        }
+    }
+
+    const method = message.method || message.type || '';
+    const path = redactExchangePath(message.path || '');
+    return `${method}${path ? ` ${path}` : ''}`.trim();
+}
+
+function buildToolSummaryMeta(state = {}) {
+    const request = state.request || {};
+    const response = state.response || {};
+    const items = [];
+
+    if (request.method || request.type) {
+        items.push({
+            label: t('requestPreviewFieldMethod'),
+            value: request.method || request.type || '',
+        });
+    }
+
+    if (request.path) {
+        items.push({
+            label: t('requestPreviewFieldPath'),
+            value: redactExchangePath(request.path),
+        });
+    }
+
+    if (response.status) {
+        items.push({
+            label: t('responseSummaryFieldStatus'),
+            value: typeof formatHttpStatusLabel === 'function'
+                ? formatHttpStatusLabel(response.status, response.statusText || '')
+                : `${response.status}${response.statusText ? ` ${response.statusText}` : ''}`.trim(),
+            tone: response.status >= 400 ? 'danger' : 'success',
+        });
+    } else if ((response.phase || state.phase) === 'error') {
+        items.push({
+            label: t('responseSummaryFieldStatus'),
+            value: t('toolPhaseError'),
+            tone: 'danger',
+        });
+    }
+
+    return items;
+}
+
+function renderToolSummary(scope, state = {}) {
+    const root = getToolSummaryRoot(scope);
+    if (!root) {
+        return;
+    }
+
+    const phase = state.phase || state.response?.phase || state.request?.phase || 'empty';
+    const titleEl = root.querySelector('[data-tool-summary-title]');
+    const bodyEl = root.querySelector('[data-tool-summary-body]');
+    const badgeEl = root.querySelector('[data-tool-summary-badge]');
+    const metaEl = root.querySelector('[data-tool-summary-meta]');
+    const idleTitleKey = root.dataset.toolSummaryIdleTitleKey || '';
+    const idleBodyKey = root.dataset.toolSummaryIdleBodyKey || '';
+    const responseText = extractToolSummaryText(state.response || {});
+    const requestText = extractToolSummaryText(state.request || {});
+
+    const title = phase === 'empty'
+        ? t(idleTitleKey)
+        : getToolPhaseLabel(phase);
+    const body = phase === 'empty'
+        ? t(idleBodyKey)
+        : (responseText || requestText || '');
+
+    root.dataset.phase = phase;
+    if (titleEl) {
+        titleEl.textContent = title;
+    }
+    if (bodyEl) {
+        bodyEl.textContent = body;
+    }
+    if (badgeEl) {
+        badgeEl.hidden = phase === 'empty';
+        badgeEl.textContent = phase === 'empty' ? '' : getToolPhaseLabel(phase);
+        badgeEl.dataset.phase = phase;
+    }
+    if (metaEl) {
+        const items = buildToolSummaryMeta(state);
+        metaEl.innerHTML = items.map(item => `
+            <div class="tool-result__meta-item">
+                <span class="tool-result__meta-label">${esc(item.label)}</span>
+                <span class="tool-result__meta-value${item.tone ? ` tool-result__meta-value--${item.tone}` : ''}">${esc(item.value)}</span>
+            </div>
+        `).join('');
+        metaEl.hidden = items.length === 0;
+    }
+}
+
+function renderToolTrace(scope, state = {}) {
+    const root = getToolTraceRoot(scope);
+    if (!root) {
+        return;
+    }
+
+    const phase = state.phase || state.response?.phase || state.request?.phase || 'empty';
+    const phaseEl = root.querySelector('[data-tool-trace-phase]');
+    root.dataset.phase = phase;
+    if (phaseEl) {
+        phaseEl.hidden = phase === 'empty';
+        phaseEl.textContent = phase === 'empty' ? '' : getToolPhaseLabel(phase);
+        phaseEl.dataset.phase = phase;
+    }
+}
+
 function renderExchangePane(area, message = {}, side = 'request') {
     if (!area) {
         return;
@@ -475,6 +644,8 @@ function renderExchangeInspector(scope) {
     renderExchangePane(root.querySelector('[data-exchange-pane="request"]'), state.request, 'request');
     renderExchangePane(root.querySelector('[data-exchange-pane="response"]'), state.response, 'response');
     root.dataset.exchangePhase = state.phase || state.response?.phase || state.request?.phase || 'ready';
+    renderToolSummary(scope, state);
+    renderToolTrace(scope, state);
 }
 
 function renderAllExchangeInspectors() {
@@ -499,6 +670,18 @@ function setExchangeInspector(scope, state = {}) {
 
 function getExchangeAreaRawText(areaId) {
     return exchangeAreaRawText.get(areaId) || document.getElementById(areaId)?.innerText || '';
+}
+
+function setToolSummaryActions(scope, markup = '') {
+    const root = getToolSummaryRoot(scope);
+    const actions = root?.querySelector('[data-tool-summary-actions]');
+    if (!actions) {
+        return;
+    }
+
+    const nextMarkup = String(markup || '').trim();
+    actions.innerHTML = nextMarkup;
+    actions.hidden = nextMarkup.length === 0;
 }
 
 async function copyExchangeAreaRaw(areaId, liveRegionId, messageKey) {

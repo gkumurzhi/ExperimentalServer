@@ -70,21 +70,18 @@
 
                                     <div class="request-method-switch demo-buttons" aria-label="Быстрые методы запроса" data-i18n-aria-label="quickRequestMethodsLabel">
                                         <button type="button" class="btn-get" data-request-method="GET" data-i18n-title="methodGet">GET</button>
+                                        <button type="button" class="btn-head" data-request-method="HEAD" data-i18n-title="methodHead">HEAD</button>
+                                        <button type="button" class="btn-options" data-request-method="OPTIONS" data-i18n-title="methodOptions">OPTIONS</button>
                                         <button type="button" class="btn-fetch" data-request-method="FETCH" data-i18n-title="methodFetch">FETCH</button>
                                         <button type="button" class="btn-info" data-request-method="INFO" data-i18n-title="methodInfo">INFO</button>
                                         <button type="button" class="btn-ping" data-request-method="PING" data-i18n-title="methodPing">PING</button>
-
-                                        <div hidden>
-                                            <button type="button" class="btn-head" data-request-method="HEAD" data-i18n-title="methodHead">HEAD</button>
-                                            <button type="button" class="btn-post" data-request-method="POST" data-i18n-title="methodPost">POST</button>
-                                            <button type="button" class="btn-put" data-request-method="PUT" data-i18n-title="methodPut">PUT</button>
-                                            <button type="button" class="btn-patch" data-request-method="PATCH" data-i18n-title="methodPatch">PATCH</button>
-                                            <button type="button" class="btn-delete" data-request-method="DELETE" data-i18n-title="methodDelete">DELETE</button>
-                                            <button type="button" class="btn-options" data-request-method="OPTIONS" data-i18n-title="methodOptions">OPTIONS</button>
-                                            <button type="button" class="btn-none" data-request-method="NONE" data-i18n-title="methodNone">NONE</button>
-                                            <button type="button" class="btn-note" data-request-method="NOTE" data-i18n-title="methodNote">NOTE</button>
-                                            <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
-                                        </div>
+                                        <button type="button" class="btn-post" data-request-method="POST" data-i18n-title="methodPost">POST</button>
+                                        <button type="button" class="btn-put" data-request-method="PUT" data-i18n-title="methodPut">PUT</button>
+                                        <button type="button" class="btn-patch" data-request-method="PATCH" data-i18n-title="methodPatch">PATCH</button>
+                                        <button type="button" class="btn-delete" data-request-method="DELETE" data-i18n-title="methodDelete">DELETE</button>
+                                        <button type="button" class="btn-none" data-request-method="NONE" data-i18n-title="methodNone">NONE</button>
+                                        <button type="button" class="btn-note" data-request-method="NOTE" data-i18n-title="methodNote">NOTE</button>
+                                        <button type="button" class="btn-smuggle" data-request-method="SMUGGLE" data-i18n-title="methodSmuggle">SMUGGLE</button>
                                     </div>
 
                                     <p class="inline-hint inline-hint--subtle" data-i18n="heroWorkingPanelHint">Попробуйте `/index.html`, `/uploads/` или любой NOTE/INFO-совместимый путь.</p>
@@ -149,7 +146,6 @@
                     <section id="upload-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-upload" hidden>
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabUpload">Загрузка на сервер</h2>
-                        <p class="inline-hint" data-i18n="uploadHelper">Отправьте локальные файлы на сервер, выберите метод и сразу проверьте ответ.</p>
                     </div>
                     <div class="tool-toolbar">
                         <div class="segmented-control" role="radiogroup" aria-label="Метод загрузки" data-i18n-aria-label="uploadMethodLabel">
@@ -190,26 +186,48 @@
                             </div>
 
                             <div class="sr-only" id="uploadResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="upload">
-                                <div class="exchange-inspector__scroll">
-                                    <div class="exchange-inspector__grid">
-                                        <section class="exchange-pane" aria-labelledby="uploadRequestTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="uploadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="uploadRequestArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="uploadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="uploadRequestTitle"></div>
-                                        </section>
-                                        <section class="exchange-pane" aria-labelledby="uploadResponseTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="uploadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="uploadResponseArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="uploadResponseArea" data-testid="upload-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="uploadResponseTitle"></div>
-                                        </section>
+                            <section
+                                class="tool-result"
+                                data-tool-summary-scope="upload"
+                                data-tool-summary-idle-title-key="uploadResultIdleTitle"
+                                data-tool-summary-idle-body-key="uploadResultIdleBody"
+                                aria-labelledby="uploadResultTitle"
+                            >
+                                <div class="tool-result__header">
+                                    <p class="eyebrow" data-i18n="toolResultEyebrow">РЕЗУЛЬТАТ</p>
+                                    <span class="tool-result__badge" data-tool-summary-badge></span>
+                                </div>
+                                <h3 class="tool-result__title" id="uploadResultTitle" data-tool-summary-title></h3>
+                                <p class="tool-result__body" data-tool-summary-body></p>
+                                <div class="tool-result__meta" data-tool-summary-meta></div>
+                                <div class="tool-result__actions" data-tool-summary-actions hidden></div>
+                            </section>
+                            <details class="tool-trace" data-tool-trace-scope="upload">
+                                <summary class="tool-trace__summary">
+                                    <span class="tool-trace__label" data-i18n="toolTraceSummary">Технические детали</span>
+                                    <span class="tool-trace__phase" data-tool-trace-phase></span>
+                                </summary>
+                                <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="upload">
+                                    <div class="exchange-inspector__scroll">
+                                        <div class="exchange-inspector__grid">
+                                            <section class="exchange-pane" aria-labelledby="uploadRequestTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="uploadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="uploadRequestArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="uploadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="uploadRequestTitle"></div>
+                                            </section>
+                                            <section class="exchange-pane" aria-labelledby="uploadResponseTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="uploadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="uploadResponseArea" data-exchange-copy-live="uploadResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="uploadResponseArea" data-testid="upload-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="uploadResponseTitle"></div>
+                                            </section>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </details>
                         </div>
                     </div>
                     </section>
@@ -217,7 +235,6 @@
                     <section id="opsec-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-opsec" hidden>
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabOpsec">Продвинутая загрузка на сервер</h2>
-                        <p class="inline-hint" data-i18n="opsecHelper">Отдельный сценарий для продвинутой загрузки и выбора транспорта.</p>
                     </div>
                     <div class="tool-grid tool-grid--opsec">
                         <div class="tool-card">
@@ -283,26 +300,48 @@
                             </div>
 
                             <div class="sr-only" id="opsecResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="opsec">
-                                <div class="exchange-inspector__scroll">
-                                    <div class="exchange-inspector__grid">
-                                        <section class="exchange-pane" aria-labelledby="opsecRequestTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="opsecRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="opsecRequestArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="opsecRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="opsecRequestTitle"></div>
-                                        </section>
-                                        <section class="exchange-pane" aria-labelledby="opsecResponseTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="opsecResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="opsecResponseArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="opsecResponseArea" data-testid="opsec-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="opsecResponseTitle"></div>
-                                        </section>
+                            <section
+                                class="tool-result"
+                                data-tool-summary-scope="opsec"
+                                data-tool-summary-idle-title-key="opsecResultIdleTitle"
+                                data-tool-summary-idle-body-key="opsecResultIdleBody"
+                                aria-labelledby="opsecResultTitle"
+                            >
+                                <div class="tool-result__header">
+                                    <p class="eyebrow" data-i18n="toolResultEyebrow">РЕЗУЛЬТАТ</p>
+                                    <span class="tool-result__badge" data-tool-summary-badge></span>
+                                </div>
+                                <h3 class="tool-result__title" id="opsecResultTitle" data-tool-summary-title></h3>
+                                <p class="tool-result__body" data-tool-summary-body></p>
+                                <div class="tool-result__meta" data-tool-summary-meta></div>
+                                <div class="tool-result__actions" data-tool-summary-actions hidden></div>
+                            </section>
+                            <details class="tool-trace" data-tool-trace-scope="opsec">
+                                <summary class="tool-trace__summary">
+                                    <span class="tool-trace__label" data-i18n="toolTraceSummary">Технические детали</span>
+                                    <span class="tool-trace__phase" data-tool-trace-phase></span>
+                                </summary>
+                                <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="opsec">
+                                    <div class="exchange-inspector__scroll">
+                                        <div class="exchange-inspector__grid">
+                                            <section class="exchange-pane" aria-labelledby="opsecRequestTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="opsecRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="opsecRequestArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="opsecRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="opsecRequestTitle"></div>
+                                            </section>
+                                            <section class="exchange-pane" aria-labelledby="opsecResponseTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="opsecResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="opsecResponseArea" data-exchange-copy-live="opsecResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="opsecResponseArea" data-testid="opsec-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="opsecResponseTitle"></div>
+                                            </section>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </details>
                         </div>
                     </div>
                     </section>
@@ -310,7 +349,6 @@
                     <section id="files-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-files" hidden>
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabFiles">Скачивание с сервера</h2>
-                        <p class="inline-hint" data-i18n="filesHelper">Просмотрите файлы на сервере, скачайте нужные и проверьте детали ответа под списком.</p>
                     </div>
                     <div class="tool-grid tool-grid--files">
                         <div class="tool-card">
@@ -351,26 +389,48 @@
 
                         <div class="tool-card tool-card--output">
                             <div class="sr-only" id="filesResponseAreaLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                            <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="files">
-                                <div class="exchange-inspector__scroll">
-                                    <div class="exchange-inspector__grid">
-                                        <section class="exchange-pane" aria-labelledby="filesRequestTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="filesRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="filesRequestArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="filesRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="filesRequestTitle"></div>
-                                        </section>
-                                        <section class="exchange-pane" aria-labelledby="filesResponseTitle">
-                                            <div class="exchange-pane__header">
-                                                <h3 class="request-preview-title" id="filesResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
-                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="filesResponseArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                            </div>
-                                            <div class="response-area exchange-pane__body" id="filesResponseArea" data-testid="files-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="filesResponseTitle"></div>
-                                        </section>
+                            <section
+                                class="tool-result"
+                                data-tool-summary-scope="files"
+                                data-tool-summary-idle-title-key="filesResultIdleTitle"
+                                data-tool-summary-idle-body-key="filesResultIdleBody"
+                                aria-labelledby="filesResultTitle"
+                            >
+                                <div class="tool-result__header">
+                                    <p class="eyebrow" data-i18n="toolResultEyebrow">РЕЗУЛЬТАТ</p>
+                                    <span class="tool-result__badge" data-tool-summary-badge></span>
+                                </div>
+                                <h3 class="tool-result__title" id="filesResultTitle" data-tool-summary-title></h3>
+                                <p class="tool-result__body" data-tool-summary-body></p>
+                                <div class="tool-result__meta" data-tool-summary-meta></div>
+                                <div class="tool-result__actions" data-tool-summary-actions hidden></div>
+                            </section>
+                            <details class="tool-trace" data-tool-trace-scope="files">
+                                <summary class="tool-trace__summary">
+                                    <span class="tool-trace__label" data-i18n="toolTraceSummary">Технические детали</span>
+                                    <span class="tool-trace__phase" data-tool-trace-phase></span>
+                                </summary>
+                                <div class="exchange-inspector exchange-inspector--tool" data-exchange-scope="files">
+                                    <div class="exchange-inspector__scroll">
+                                        <div class="exchange-inspector__grid">
+                                            <section class="exchange-pane" aria-labelledby="filesRequestTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="filesRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="filesRequestArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="filesRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="filesRequestTitle"></div>
+                                            </section>
+                                            <section class="exchange-pane" aria-labelledby="filesResponseTitle">
+                                                <div class="exchange-pane__header">
+                                                    <h3 class="request-preview-title" id="filesResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                    <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="filesResponseArea" data-exchange-copy-live="filesResponseAreaLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                                </div>
+                                                <div class="response-area exchange-pane__body" id="filesResponseArea" data-testid="files-response-area" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="filesResponseTitle"></div>
+                                            </section>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </details>
                         </div>
                     </div>
                     </section>
@@ -378,7 +438,6 @@
                     <section id="notepad-tab" class="tab-content workspace-view tool-pane" role="tabpanel" aria-labelledby="tab-notepad" hidden>
                     <div class="workspace-view__header">
                         <h2 data-i18n="tabNotepad">Блокнот</h2>
-                        <p class="inline-hint" data-i18n="capabilityNotepadDesc">Шифрованные тексты заметок через HTTP и WebSocket; заголовки остаются метаданными.</p>
                     </div>
                     <div class="tool-card note-shell">
                         <div class="notepad-toolbar">
@@ -433,27 +492,33 @@
                             </div>
                         </div>
 
-                        <div class="exchange-inspector exchange-inspector--tool exchange-inspector--notepad" data-exchange-scope="notepad">
-                            <div class="exchange-inspector__scroll">
-                                <div class="exchange-inspector__grid">
-                                    <section class="exchange-pane" aria-labelledby="notepadRequestTitle">
-                                        <div class="exchange-pane__header">
-                                            <h3 class="request-preview-title" id="notepadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
-                                            <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="notepadRequestArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                        </div>
-                                        <div class="sr-only" id="notepadTraceLive" role="status" aria-live="polite" aria-atomic="true"></div>
-                                        <div class="response-area exchange-pane__body" id="notepadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="notepadRequestTitle"></div>
-                                    </section>
-                                    <section class="exchange-pane" aria-labelledby="notepadResponseTitle">
-                                        <div class="exchange-pane__header">
-                                            <h3 class="request-preview-title" id="notepadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
-                                            <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="notepadResponseArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
-                                        </div>
-                                        <div class="response-area exchange-pane__body" id="notepadResponseArea" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="notepadResponseTitle"></div>
-                                    </section>
+                        <details class="tool-trace tool-trace--notepad" data-tool-trace-scope="notepad">
+                            <summary class="tool-trace__summary">
+                                <span class="tool-trace__label" data-i18n="toolTraceSummary">Технические детали</span>
+                                <span class="tool-trace__phase" data-tool-trace-phase></span>
+                            </summary>
+                            <div class="exchange-inspector exchange-inspector--tool exchange-inspector--notepad" data-exchange-scope="notepad">
+                                <div class="exchange-inspector__scroll">
+                                    <div class="exchange-inspector__grid">
+                                        <section class="exchange-pane" aria-labelledby="notepadRequestTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="notepadRequestTitle" data-i18n="exchangeRequestTitle">Исходящий запрос</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawRequestLabel" data-i18n-aria-label="copyRawRequestLabel" data-exchange-copy-area="notepadRequestArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="sr-only" id="notepadTraceLive" role="status" aria-live="polite" aria-atomic="true"></div>
+                                            <div class="response-area exchange-pane__body" id="notepadRequestArea" data-exchange-pane="request" tabindex="0" role="region" aria-labelledby="notepadRequestTitle"></div>
+                                        </section>
+                                        <section class="exchange-pane" aria-labelledby="notepadResponseTitle">
+                                            <div class="exchange-pane__header">
+                                                <h3 class="request-preview-title" id="notepadResponseTitle" data-i18n="exchangeResponseTitle">Входящий ответ</h3>
+                                                <button class="btn-info btn--sm request-copy-btn" type="button" data-i18n="copyRaw" data-i18n-title="copyRawResponseLabel" data-i18n-aria-label="copyRawResponseLabel" data-exchange-copy-area="notepadResponseArea" data-exchange-copy-live="notepadTraceLive" data-exchange-copy-message="exchangeCopied">Копировать raw</button>
+                                            </div>
+                                            <div class="response-area exchange-pane__body" id="notepadResponseArea" data-exchange-pane="response" tabindex="0" role="region" aria-labelledby="notepadResponseTitle"></div>
+                                        </section>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        </details>
                     </div>
                     </section>
                 </div>

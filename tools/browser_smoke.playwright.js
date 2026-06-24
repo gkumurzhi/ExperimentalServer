@@ -114,12 +114,26 @@ async (page) => {
         if (!element) {
           return false;
         }
+        const trace = element.closest("details.tool-trace");
+        if (trace && !trace.open) {
+          trace.open = true;
+        }
         const content = element.innerText;
         return matcher ? matcher.test(content) : content.includes(targetText);
       },
       [selector, expected, flags, isRegex],
       timeout
     );
+  }
+
+  async function expandTraceForSelector(selector) {
+    await page.evaluate((targetSelector) => {
+      const element = document.querySelector(targetSelector);
+      const trace = element?.closest("details.tool-trace");
+      if (trace && !trace.open) {
+        trace.open = true;
+      }
+    }, selector);
   }
 
   async function waitForLiveRegionText(regionId, textOrPattern, timeout = 10000) {
@@ -1691,15 +1705,15 @@ async (page) => {
   async function assertRequestPanelScenarioMatrix() {
     const expectedMethods = [
       "GET",
+      "HEAD",
+      "OPTIONS",
       "FETCH",
       "INFO",
       "PING",
-      "HEAD",
       "POST",
       "PUT",
       "PATCH",
       "DELETE",
-      "OPTIONS",
       "NONE",
       "NOTE",
       "SMUGGLE",
@@ -1972,7 +1986,7 @@ async (page) => {
       checked: true,
       filter: "issues",
       visibleCount: 0,
-      emptyText: "Расхождений и ошибок нет.",
+      emptyText: "Все методы отработали без ошибок.",
       timeout: 15000,
     });
     await page.locator("#requestBatchIssuesOnlyToggle").uncheck();
@@ -3371,7 +3385,7 @@ async (page) => {
 
         return (
           doc.scrollWidth <= window.innerWidth + 1 &&
-          countColumns(requestSwitchStyles.gridTemplateColumns) === 2 &&
+          countColumns(requestSwitchStyles.gridTemplateColumns) === 3 &&
           modeTabsStyles.display === "flex" &&
           modeTabs.scrollWidth > modeTabs.clientWidth &&
           countColumns(exchangeGridStyles.gridTemplateColumns) === 1 &&
@@ -3457,6 +3471,7 @@ async (page) => {
     const uploadName = uploadFilePath.split(/[\\/]/).pop();
     await uploadViaDom(uploadName);
 
+    await expandTraceForSelector("#uploadResponseArea");
     const uploadSummary = (await page.locator("#uploadResponseArea").innerText()).trim();
     if (!uploadSummary.includes(uploadName)) {
       throw new Error(`Upload response did not mention ${uploadName}`);

@@ -146,7 +146,17 @@ function updateSelectedUploadsButton() {
     }
 }
 
-async function browseDirectory() {
+function formatFilesBrowseSummary(path, info) {
+    if (info?.is_directory && Array.isArray(info.contents)) {
+        return t('filesBrowseSummary')
+            .replace('{0}', path)
+            .replace('{1}', String(info.contents.length));
+    }
+
+    return `${t('methodInfo')}: ${path}`;
+}
+
+async function browseDirectory(options = {}) {
     const path = document.getElementById('browsePathInput').value || '/';
     const serverFiles = document.getElementById('serverFiles');
     selectedUploadPaths.clear();
@@ -164,6 +174,7 @@ async function browseDirectory() {
         },
         response: {
             phase: 'sending',
+            summaryText: `${t('loadingInfo')} ${path}`,
             startLine: `${t('loadingInfo')} ${path}`,
             body: createExchangeTextBody(`${t('loadingInfo')} ${path}...`),
         },
@@ -274,6 +285,7 @@ async function browseDirectory() {
         }
 
         const uploadsOnlyNote = info.access_scope === 'uploads' ? '\n--- ' + t('uploadsOnlyMode') + ' ---\n' : '';
+        const browseSummary = options.summaryText || formatFilesBrowseSummary(path, info);
         setExchangeInspector('files', {
             phase: 'complete',
             request: {
@@ -288,6 +300,7 @@ async function browseDirectory() {
                 method: 'INFO',
                 path,
                 phase: 'complete',
+                summaryText: browseSummary,
                 startLine: `INFO ${path}\n200 OK${info.access_scope === 'uploads' ? ' [uploads/]' : ''}`,
                 status: 200,
                 statusText: 'OK',
@@ -313,6 +326,7 @@ async function browseDirectory() {
                 method: 'INFO',
                 path,
                 phase: 'error',
+                summaryText: `${t('error')}: ${error.message}`,
                 startLine: `INFO ${path}\n${t('error')}`,
                 body: createExchangeTextBody(error.message),
             },
@@ -352,6 +366,7 @@ async function clearUploads(triggerEl = null) {
         },
         response: {
             phase: 'sending',
+            summaryText: t('clearUploadsRunning'),
             startLine: t('clearUploadsRunning'),
             body: createExchangeTextBody(t('clearUploadsRunning')),
         },
@@ -388,6 +403,7 @@ async function clearUploads(triggerEl = null) {
                     method: 'DELETE',
                     path: '/uploads?clear=1',
                     phase: 'complete',
+                    summaryText: summary,
                     startLine: 'DELETE /uploads?clear=1\n200 OK',
                     status: 200,
                     statusText: 'OK',
@@ -447,6 +463,7 @@ async function deleteSelectedUploadFiles(triggerEl = null) {
         },
         response: {
             phase: 'sending',
+            summaryText: t('statusPending'),
             startLine: t('statusPending'),
             body: createExchangeTextBody(t('statusPending')),
         },
@@ -492,6 +509,7 @@ async function deleteSelectedUploadFiles(triggerEl = null) {
             method: 'DELETE',
             path: t('deleteSelectedFilesBtn'),
             phase: errors.length ? 'error' : 'complete',
+            summaryText: errors.length ? (errors[0] || summary) : summary,
             startLine: `DELETE ${t('deleteSelectedFilesBtn')}\n${errors.length ? t('error') : '200 OK'}`,
             status: errors.length ? 400 : 200,
             statusText: errors.length ? t('error') : 'OK',
@@ -539,7 +557,7 @@ async function deleteFile(path, triggerEl = null) {
         }
 
         if (response.ok && result && result.success) {
-            await browseDirectory();
+            await browseDirectory({ summaryText: `${t('deleteSuccess')}: ${path}` });
             focusFilesBrowserAnchor();
             return;
         }
@@ -1014,6 +1032,7 @@ async function executeSmuggle(filePath, builderState, triggerEl = null, options 
             },
             response: {
                 phase: 'sending',
+                summaryText: `SMUGGLE ${filePath}`,
                 startLine: `SMUGGLE ${requestPath}`,
                 body: createExchangeTextBody(t('statusPending')),
             },
@@ -1040,6 +1059,7 @@ async function executeSmuggle(filePath, builderState, triggerEl = null, options 
                     method: 'SMUGGLE',
                     path: filePath,
                     phase: 'complete',
+                    summaryText: `${t('smuggleGenerated')}: ${result.downloadName || result.file || filePath}`,
                     startLine: `SMUGGLE ${requestPath}\n${t('smuggleGenerated')}`,
                     status: 200,
                     statusText: 'OK',
@@ -1065,6 +1085,7 @@ async function executeSmuggle(filePath, builderState, triggerEl = null, options 
                     method: 'SMUGGLE',
                     path: filePath,
                     phase: 'error',
+                    summaryText: text || t('error'),
                     startLine: `SMUGGLE ${requestPath}\n${t('error')}`,
                     status: response.status,
                     statusText: response.statusText || t('error'),
@@ -1092,6 +1113,7 @@ async function executeSmuggle(filePath, builderState, triggerEl = null, options 
                 method: 'SMUGGLE',
                 path: filePath,
                 phase: 'error',
+                summaryText: error.message,
                 startLine: `SMUGGLE ${requestPath}\n${t('error')}`,
                 body: createExchangeTextBody(error.message),
             },
